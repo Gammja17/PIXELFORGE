@@ -5,6 +5,7 @@
 //  입구는 항상 가까운 쪽, 출구는 먼 쪽 → 플레이어는 화면 위로 전진한다 (하데스식).
 
 import { Geometry, Mesh, Material, fbm, rng } from '../engine/index.js';
+import { MIDBOSS_KINDS } from './midbosses.js';
 
 export const ZONES = {
   desert: {
@@ -53,6 +54,25 @@ export class Rooms {
   }
 
   get last() { return RUN_ZONES.length - 1; }
+
+  // ---- 난이도 ----
+  // 플레이어 전력 지수 (시작 = 1): 레벨, 무기 수/레벨/진화, 화력 배율
+  power() {
+    const g = this.game, ws = g.weapons?.list || [];
+    const wp = ws.reduce((s, w) => s + (w.level || 1) + (w.evo ? 4 : 0), 0);
+    return Math.max(1, (1 + ((g.level || 1) - 1) * 0.05 + Math.max(0, wp - 1) * 0.08) * (g.player?.stats?.dmgMul || 1));
+  }
+  // 깊이 × 전력 → 적 체력/피해/물량 배율. 늦은 방에서 강해진 만큼 적도 따라온다 (떼거리는 덜 단단해지고 더 많아진다)
+  scale() {
+    const d = Math.max(0, this.depth), pw = this.power();
+    return {
+      pw,
+      hp: (1 + d * 0.45) * Math.pow(pw, 0.65),
+      swarmHp: (1 + d * 0.35) * Math.pow(pw, 0.3),
+      dmg: 1 + d * 0.12 + (pw - 1) * 0.05,
+      dens: Math.min(2.4, 0.9 + d * 0.06 + (pw - 1) * 0.15),
+    };
+  }
 
   newRun() { this.depth = -1; this.path = []; this.seed = (Math.random() * 1e9) | 0; }
 
@@ -206,7 +226,8 @@ export class Rooms {
     this.waveT = 1.2;
     // 물량전: 제한 시간 동안 버티며 쓸어버리기
     this.duration = boss ? 0 : (reward === 'elite' ? 60 : 34 + depth * 5);
-    this.roomT = 0; this.acc = 0; this.marks = new Set(); this.bossOn = false; this.guardOn = false;
+    this.roomT = 0; this.acc = 0; this.marks = new Set(); this.bossOn = false; this.guardOn = false; this.waitMid = false;
+    this.midAt = ['part', 'system', 'supply', 'xp', 'elite'].includes(reward) ? this.planMids() : [];
     if (reward === 'guardian') { this.duration = 0; this.waveT = 1.5; }
     if (reward === 'workshop' || reward === 'start') { this.phase = 'clear'; this.waves = []; }
     if (reward === 'workshop') this.spawnPrize();
@@ -223,39 +244,63 @@ export class Rooms {
 
   // 적 흐름: 초당 예산만큼 무리를 방 가장자리에 소환
   stream(dt, mul) {
-    const en = this.game.enemies, d = this.depth;
-    if (en.list.length > 380) return;
-    this.acc += dt * (3.6 + d * 1.2) * mul;
+    const en = this.game.enemies, d = this.depth, K = en.k;
+    if (en.list.length > 400) return;
+    this.acc += dt * (3.8 + d * 1.4) * mul * K.dens;
     const R = Math.random;
     while (this.acc > 0) {
       const r = R();
       const pt = this.spawnSpot(9);
       if (!pt) { this.acc = 0; break; }
-      if (d >= 3 && r < 0.05) { en.queue('brute', pt[0], pt[1], false, 0); this.acc -= 7; }
-      else if (d >= 2 && r < 0.16) { en.queue('tank', pt[0], pt[1], false, 0); this.acc -= 3; }
-      else if (d >= 2 && r < 0.3) { const n = 2 + ((R() * 2) | 0); en.pack('bomber', pt[0], pt[1], n, 1.2); this.acc -= n * 1.2; }
-      else if (r < 0.48) { const n = 3 + ((R() * 3) | 0); en.pack('drone', pt[0], pt[1], n, 1.4); this.acc -= n; }
-      else { const n = 8 + ((R() * 6) | 0) + d; en.pack('mite', pt[0], pt[1], n, 2); this.acc -= n * 0.4; }
+      if (d >= 3 && r < 0.06) { en.queue('brute', pt[0], pt[1], false, 0); this.acc -= 7; }
+      else if (d >= 3 && r < 0.12) { const n = d >= 6 ? 2 : 1; en.pack('spinner', pt[0], pt[1], n, 1.2); this.acc -= n * 3.5; }
+      else if (d >= 1 && r < 0.22) { const n = d >= 5 ? 2 : 1; en.pack('tank', pt[0], pt[1], n, 1.4); this.acc -= n * 3; }
+      else if (d >= 1 && r < 0.36) { const n = 2 + ((R() * (2 + d * 0.3)) | 0); en.pack('bomber', pt[0], pt[1], n, 1.2); this.acc -= n * 1.2; }
+      else if (r < 0.54) { const n = 3 + ((R() * 3) | 0) + (d >> 1); en.pack('drone', pt[0], pt[1], n, 1.4); this.acc -= n; }
+      else { const n = 8 + ((R() * 6) | 0) + d * 1.5; en.pack('mite', pt[0], pt[1], n | 0, 2); this.acc -= n * 0.4; }
     }
   }
   surge() {
     const g = this.game, en = g.enemies, p = g.player, d = this.depth;
     g.ui.banner('대규모 접근!', true);
     g.sfx.play('alarm');
-    const packs = 10, n = 5 + Math.floor(d * 0.8);
+    const packs = 10 + Math.min(6, d), n = Math.round((5 + d * 1.1) * Math.min(1.6, en.k.dens));
     for (let i = 0; i < packs; i++) {
       const a = (i / packs) * Math.PI * 2 + Math.random() * 0.3;
       const x = Math.max(-this.hx + 1, Math.min(this.hx - 1, p.x + Math.cos(a) * 9)), z = Math.max(-this.hz + 1, Math.min(this.hz - 1, p.z + Math.sin(a) * 9));
-      en.pack(d >= 2 && i % 3 === 0 ? 'bomber' : 'mite', x, z, n, 1.4, i * 0.05);
+      // 깊은 방: 포위망 사이사이에 포격 기체
+      if (d >= 3 && i % 4 === 2) en.pack(d >= 5 && i % 8 === 2 ? 'spinner' : 'tank', x, z, 1, 0.5, i * 0.05);
+      else en.pack(d >= 2 && i % 3 === 0 ? 'bomber' : 'mite', x, z, n, 1.4, i * 0.05);
     }
   }
   spawnElite() {
     const en = this.game.enemies, d = this.depth;
     const pt = this.spawnSpot(8);
     if (!pt) return;
-    const type = d >= 3 && Math.random() < 0.5 ? 'brute' : d >= 1 && Math.random() < 0.6 ? 'tank' : 'drone';
+    const r = Math.random();
+    const type = d >= 4 && r < 0.25 ? 'spinner' : d >= 3 && r < 0.6 ? 'brute' : d >= 1 && r < 0.8 ? 'tank' : 'drone';
     en.queue(type, pt[0], pt[1], true, 0);
-    this.game.ui.toast('정예 기체 출현! 처치하면 부품 획득');
+  }
+  // 중간 보스: 방 중반에 강하. 깊을수록 확률 ↑, 깊은 방은 둘
+  planMids() {
+    const d = this.depth, r = this.reward, R = rng(this.seed + d * 913);
+    const out = [];
+    if (r === 'elite') out.push(0.3, 0.65);
+    else if (d >= 6) out.push(0.35, 0.7);
+    else if (d >= 3) out.push(0.45);
+    else if (d >= 1 && R() < 0.6) out.push(0.5);
+    if (d >= 4 && r !== 'elite' && R() < 0.35 && out.length < 2) out.push(0.75);
+    return out;
+  }
+  spawnMid() {
+    const en = this.game.enemies, p = this.game.player;
+    const kinds = this.depth >= 3 ? MIDBOSS_KINDS : ['warden', 'hive', 'mortar'];
+    const pool = kinds.filter((k) => !en.mids.some((m) => m.kind === k)), kind = pool[(Math.random() * pool.length) | 0] || kinds[0];
+    // 플레이어 반대편 쪽, 적당히 떨어진 곳
+    let x = -Math.sign(p.x || 1) * this.hx * 0.45, z = -Math.sign(p.z || 1) * this.hz * 0.45;
+    const pt = this.spawnSpot(8);
+    if (Math.hypot(x - p.x, z - p.z) < 7 && pt) [x, z] = pt;
+    en.spawnMid(kind, x, z);
   }
 
   spawnPrize() {
@@ -318,7 +363,7 @@ export class Rooms {
       } else if (this.reward === 'boss') {
         this.waveT -= dt;
         if (this.waves.length && this.waveT <= 0) { this.waves.shift(); en.spawnBoss(0, -2); this.bossOn = true; }
-        if (en.boss) this.stream(dt, 0.45);
+        if (en.boss) this.stream(dt, 0.35);
         if (this.bossOn && !en.boss && !this.waves.length) {
           this.bossOn = false;
           en.detonateAll();
@@ -327,14 +372,17 @@ export class Rooms {
         }
       } else {
         this.roomT += dt;
-        const k = this.roomT / this.duration;
-        this.stream(dt, 0.55 + 0.9 * k);
+        const k = Math.min(1, this.roomT / this.duration), d = this.depth, midOn = en.mids.length > 0;
+        this.stream(dt, (0.6 + 0.95 * k) * (midOn ? 0.5 : 1)); // 중간 보스가 있으면 물량은 절반 (탄막에 집중)
         // 대규모 접근: 사방에서 벌레 떼가 원형으로 몰려온다
-        for (const m of [0.38, 0.78]) if (k >= m && !this.marks.has(m)) { this.marks.add(m); this.surge(); }
+        for (const m of d >= 4 ? [0.3, 0.58, 0.85] : [0.38, 0.78]) if (k >= m && !this.marks.has(m)) { this.marks.add(m); this.surge(); }
         // 정예 기체 (처치하면 부품 상자)
-        const eliteAt = this.reward === 'elite' ? [0.15, 0.35, 0.55, 0.75] : [0.5];
+        const eliteAt = this.reward === 'elite' ? [0.15, 0.35, 0.55, 0.75] : d >= 6 ? [0.2, 0.5, 0.8] : d >= 3 ? [0.3, 0.65] : [0.5];
         for (const m of eliteAt) if (k >= m && !this.marks.has('e' + m)) { this.marks.add('e' + m); this.spawnElite(); }
-        if (k >= 1) {
+        for (const m of this.midAt) if (k >= m && !this.marks.has('m' + m)) { this.marks.add('m' + m); this.spawnMid(); }
+        // 시간이 끝나도 중간 보스가 남아 있으면 쓰러뜨릴 때까지 계속
+        if (k >= 1 && midOn) { if (!this.waitMid) { this.waitMid = true; g.ui.banner('중간 보스를 격파하라!', true); } }
+        else if (k >= 1) {
           this.phase = 'reward';
           en.detonateAll();
           g.ui.banner('구역 제압!');
