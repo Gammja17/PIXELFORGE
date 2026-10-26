@@ -367,6 +367,8 @@
     .tab b { font-size: 10px; }
     #tabbody { padding: 0 2px; gap: 4px; }
     #tabdesc b { font-size: 12px; } #tabdesc span { font-size: 11px; }
+    /* 부품이 많아도 높이는 한 줄: 5칸씩 보이고 옆으로 밀어서 넘긴다 */
+    .opts, .opts.four { grid-auto-flow: column; grid-template-columns: none; grid-auto-columns: calc((100% - 16px) / 5); overflow-x: auto; scrollbar-width: thin; }
     .opt img { width: 32px; height: 32px; }
     .opt .sw { width: 20px; height: 20px; margin: 6px 0; }
     .opt b { font-size: 10px; }

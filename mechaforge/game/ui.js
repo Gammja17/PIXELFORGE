@@ -263,10 +263,10 @@ function start() {
     if (onHover) { b.addEventListener('pointerenter', (e) => { if (e.pointerType === 'mouse') onHover(true); }); b.addEventListener('pointerleave', () => onHover(false)); }
     return b;
   };
-  // 부위 탭
+  // 부위 탭 (부품이 많아져서 머리/프레임도 5열)
   const TABS = [
-    { key: 'head', label: '머리', table: HEADS, ids: Object.keys(HEADS), four: true },
-    { key: 'frame', label: '프레임', table: FRAMES, ids: Object.keys(FRAMES), four: true },
+    { key: 'head', label: '머리', table: HEADS, ids: Object.keys(HEADS) },
+    { key: 'frame', label: '프레임', table: FRAMES, ids: Object.keys(FRAMES) },
     { key: 'legs', label: '다리', table: LEGS, ids: Object.keys(LEGS) },
     { key: 'weapon', label: '주무장', table: WEAPONS, ids: HANGAR_WEAPONS },
     { key: 'paint', label: '도색', table: PAINTS, ids: HANGAR_PAINTS },
@@ -419,6 +419,9 @@ function start() {
       if (locked) { el.classList.add('locked'); if (M.scrap < M.price(T.key, id)) el.classList.add('cant'); el.title = `${T.table[id].name}: 고철 ${M.price(T.key, id)}으로 해금`; }
       box.appendChild(el);
     }
+    // 폰 가로(한 줄 스크롤)일 때 고른 부품이 보이게 가운데로
+    const on = box.querySelector('[aria-pressed="true"]');
+    if (on && box.scrollWidth > box.clientWidth) { const r = on.getBoundingClientRect(), bb = box.getBoundingClientRect(); box.scrollLeft += r.left - bb.left - (bb.width - r.width) / 2; }
     showDesc(sel[T.key]);
     renderStats(null);
     const b = game.best;

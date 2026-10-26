@@ -5,11 +5,11 @@ const KEY = 'mf-meta';
 
 // 해금 가격 (0 = 처음부터 열림)
 export const PRICES = {
-  legs: { walker: 0, reverse: 60, treads: 120, quad: 150, hover: 220 },
-  frame: { standard: 0, light: 80, heavy: 120, sniper: 160 },
-  head: { vfin: 0, mono: 50, visor: 90, horned: 130 },
+  legs: { walker: 0, reverse: 60, treads: 120, quad: 150, hover: 220, wheels: 140, stomper: 180, spider: 200, tankbase: 240, jet: 260 },
+  frame: { standard: 0, light: 80, heavy: 120, sniper: 160, egg: 100, ninja: 140, tank: 180, fighter: 200, fortress: 240 },
+  head: { vfin: 0, mono: 50, visor: 90, horned: 130, dome: 70, periscope: 80, canopy: 110, samurai: 150, skull: 170 },
   weapon: { saber: 0, mg: 0, shotgun: 90, laser: 150, missile: 180 },
-  paint: { rx: 0, crimson: 0, olive: 30, midnight: 40, sakura: 50 },
+  paint: { rx: 0, crimson: 0, olive: 30, midnight: 40, sakura: 50, desert: 40, ace: 60, stealth: 70, toxic: 60, gold: 120 },
 };
 
 // 연구 (영구 강화): 레벨마다 가격 상승
