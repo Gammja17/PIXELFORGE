@@ -6,6 +6,7 @@
 
 import { Geometry, Mesh, Material, fbm, rng } from '../engine/index.js';
 import { MIDBOSS_KINDS } from './midbosses.js';
+import { pickGuardian } from './guardians.js';
 
 export const ZONES = {
   desert: {
@@ -35,6 +36,11 @@ export const REWARDS = {
   start:    { name: '출격', icon: 'part', desc: '' },
 };
 
+// 역할 기체 스폰 표: [종류, 등장 깊이, 물량 비용, 마리 수, 이 깊이부터 +1]
+const TROOPS = [
+  ['charger', 1, 3, 1, 5], ['splitter', 2, 2.5, 2, 6], ['shield', 2, 3, 1, 4], ['sniper', 2, 3.5, 1, 6],
+  ['miner', 2, 3, 1, 9], ['assassin', 3, 3.5, 1, 6], ['medic', 3, 4, 1, 9],
+];
 const DOOR_HALF = 2.2;
 const SIDE = { W: [-1, 0], S: [0, -1], E: [1, 0], N: [0, 1] }; // 방향 → (x, z) 부호
 
@@ -252,6 +258,12 @@ export class Rooms {
       const r = R();
       const pt = this.spawnSpot(9);
       if (!pt) { this.acc = 0; break; }
+      // 역할 기체 (troops.js): 깊을수록 비중 ↑ (방 1: 10%, 방 7: 30%)
+      if (d >= 1 && R() < Math.min(0.3, 0.06 + d * 0.035)) {
+        const pool = TROOPS.filter((q) => d >= q[1]), q = pool[(R() * pool.length) | 0], n = q[3] + (d >= q[4] ? 1 : 0);
+        en.pack(q[0], pt[0], pt[1], n, 1.2); this.acc -= n * q[2];
+        continue;
+      }
       if (d >= 3 && r < 0.06) { en.queue('brute', pt[0], pt[1], false, 0); this.acc -= 7; }
       else if (d >= 3 && r < 0.12) { const n = d >= 6 ? 2 : 1; en.pack('spinner', pt[0], pt[1], n, 1.2); this.acc -= n * 3.5; }
       else if (d >= 1 && r < 0.22) { const n = d >= 5 ? 2 : 1; en.pack('tank', pt[0], pt[1], n, 1.4); this.acc -= n * 3; }
@@ -270,6 +282,7 @@ export class Rooms {
       const x = Math.max(-this.hx + 1, Math.min(this.hx - 1, p.x + Math.cos(a) * 9)), z = Math.max(-this.hz + 1, Math.min(this.hz - 1, p.z + Math.sin(a) * 9));
       // 깊은 방: 포위망 사이사이에 포격 기체
       if (d >= 3 && i % 4 === 2) en.pack(d >= 5 && i % 8 === 2 ? 'spinner' : 'tank', x, z, 1, 0.5, i * 0.05);
+      else if (d >= 4 && i % 4 === 0) en.pack('shield', x, z, 1, 0.5, i * 0.05); // 방패 기체가 포위망 앞을 막는다
       else en.pack(d >= 2 && i % 3 === 0 ? 'bomber' : 'mite', x, z, n, 1.4, i * 0.05);
     }
   }
@@ -278,7 +291,9 @@ export class Rooms {
     const pt = this.spawnSpot(8);
     if (!pt) return;
     const r = Math.random();
-    const type = d >= 4 && r < 0.25 ? 'spinner' : d >= 3 && r < 0.6 ? 'brute' : d >= 1 && r < 0.8 ? 'tank' : 'drone';
+    const troop = ['charger', 'shield', 'splitter', 'sniper', 'assassin'].slice(0, d >= 3 ? 5 : d >= 2 ? 3 : 1);
+    const type = d >= 1 && Math.random() < 0.3 ? troop[(Math.random() * troop.length) | 0]
+      : d >= 4 && r < 0.25 ? 'spinner' : d >= 3 && r < 0.6 ? 'brute' : d >= 1 && r < 0.8 ? 'tank' : 'drone';
     en.queue(type, pt[0], pt[1], true, 0);
   }
   // 중간 보스: 방 중반에 강하. 깊을수록 확률 ↑, 깊은 방은 둘
@@ -351,7 +366,7 @@ export class Rooms {
     if (this.phase === 'fight') {
       if (this.reward === 'guardian') {
         this.waveT -= dt;
-        if (!this.guardOn && this.waveT <= 0) { this.guardOn = true; en.spawnGuardian(this.zone === 'desert' ? 'worm' : 'crane'); }
+        if (!this.guardOn && this.waveT <= 0) { this.guardOn = true; en.spawnGuardian(pickGuardian(this)); }
         if (en.guardian && !en.guardian.dead) this.stream(dt, 0.25);
         if (this.guardOn && en.guardian?.done) {
           this.guardOn = false; en.guardian = null;
