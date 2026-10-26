@@ -6,6 +6,8 @@
 //  레이저 랜서 (lancer): 경고선 → 레이저 휩쓸기, 조준 부채꼴, (2페이즈) 회전 십자 레이저
 //  하이브 캐리어 (hive): 꽃잎 고리 + 자폭 드론 사출 + 흔들리는 조준 연사
 //  박격 포대 (mortar): 바닥 표식 포격 → 착탄 지점 고리탄, 십자 연사
+//  분광 수정체 (prism): 멈췄다 터지는 탄 (꽃), 휘어 도는 은하 나선, 멈췄다 다시 조준하는 굴절탄
+//  추적 돌격기 (reaper): 경고선 → 돌진하며 탄을 깔고 (돌진이 끝나면 양옆으로 퍼짐), 초승달 휩쓸기, 조여 오는 고리
 
 import { Geometry, Mesh, Material } from '../engine/index.js';
 
@@ -76,10 +78,44 @@ export const MIDBOSS_TYPES = {
       return { g, glow };
     },
   },
+  prism: {
+    name: '분광 수정체', hp: 1, speed: 0, r: 1.3, dmg: 14, xp: 30, mass: 45, fly: 1.2, cap: 3, boom: 2, part: true,
+    model() {
+      const g = new Geometry(), glow = new Geometry();
+      add(g, Geometry.cylinder(1.1, 0.7, 0.35, 6, DARK), [0, -0.9, 0]);
+      add(g, Geometry.cylinder(0.75, 1.1, 0.25, 6, STEEL), [0, -0.55, 0]);
+      add(glow, Geometry.cone(0.75, 1.5, 4, [0.7, 0.5, 1]), [0, 0.2, 0]);                      // 수정 몸통 (위)
+      add(glow, Geometry.cone(0.75, 1.0, 4, [0.45, 0.8, 1]), [0, 0.2, 0], [Math.PI, 0, 0]);   // (아래)
+      for (let i = 0; i < 3; i++) {
+        const a = (i / 3) * TAU;
+        add(g, Geometry.box(0.25, 0.25, 0.9, DARK), [Math.sin(a) * 1.1, -0.2, Math.cos(a) * 1.1], [0, a, 0]);
+        add(glow, Geometry.cone(0.22, 0.9, 4, [1, 0.45, 0.9]), [Math.sin(a) * 1.55, -0.4, Math.cos(a) * 1.55], [0, a, 0.3]);
+      }
+      return { g, glow };
+    },
+  },
+  reaper: {
+    name: '추적 돌격기', hp: 1, speed: 0, r: 1.25, dmg: 18, xp: 30, mass: 40, fly: 0, cap: 3, boom: 2, part: true,
+    model() {
+      const g = new Geometry(), glow = new Geometry();
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) add(g, Geometry.box(0.3, 0.7, 0.4, DARK), [sx * 0.75, 0, sz * 0.6], [sz * 0.3, 0, -sx * 0.3]);
+      add(g, Geometry.box(1.5, 0.6, 1.9, RED), [0, 0.6, -0.1]);
+      add(g, Geometry.prism(1.3, 0.5, 1.6, [0.45, 0.14, 0.16]), [0, 1.2, -0.2]);
+      add(g, Geometry.box(0.9, 0.45, 0.7, DARK), [0, 0.75, 0.95]);
+      for (const s of [-1, 1]) {
+        add(g, Geometry.box(0.25, 0.25, 1.0, STEEL), [s * 0.95, 1.1, 0.3]);                       // 팔
+        add(g, Geometry.box(0.08, 0.3, 2.2, [0.85, 0.85, 0.9]), [s * 1.25, 0.9, 0.9], [0, -s * 0.35, 0]); // 낫날
+        add(glow, Geometry.box(0.04, 0.06, 2.0, [1, 0.25, 0.3]), [s * 1.2, 1.22, 0.9], [0, -s * 0.35, 0]);
+      }
+      add(glow, Geometry.box(0.6, 0.08, 0.06, [1, 0.2, 0.25]), [0, 0.98, 1.31]);
+      for (const s of [-1, 1]) add(glow, Geometry.cylinder(0.14, 0.18, 0.1, 6, [1, 0.5, 0.2]), [s * 0.45, 0.7, -1.16], [Math.PI / 2, 0, 0]);
+      return { g, glow };
+    },
+  },
 };
 
 export const MIDBOSS_KINDS = Object.keys(MIDBOSS_TYPES);
-const HP = { warden: 1, lancer: 0.85, hive: 1.05, mortar: 0.95 };
+const HP = { warden: 1, lancer: 0.85, hive: 1.05, mortar: 0.95, prism: 0.9, reaper: 0.9 };
 
 // ---- 경고선 / 바닥 표식 / 레이저: 매 프레임 그리는 즉시 모드 풀 (titan 도 같이 씀) ----
 export class Hazards {
@@ -92,8 +128,8 @@ export class Hazards {
       rg.quad(p(a0, 0.82), p(a1, 0.82), p(a1, 1), p(a0, 1), [1, 1, 1], null, [0, 1, 0]);
     }
     const mk = (geo) => { const m = scene.add(new Mesh(geo, new Material({ color: [1, 0.2, 0.3], emissive: 1, outline: false, castShadow: false, opacity: 0.6 }))); m.visible = false; return m; };
-    this.lines = Array.from({ length: 24 }, () => mk(lg));
-    this.rings = Array.from({ length: 16 }, () => mk(rg));
+    this.lines = Array.from({ length: 48 }, () => mk(lg));
+    this.rings = Array.from({ length: 40 }, () => mk(rg));
     this.nl = this.nr = 0;
   }
   // 선: (x,z) 에서 yaw 방향으로 len 만큼. h>0.2 면 레이저 기둥처럼 보인다
@@ -194,7 +230,7 @@ export class MidBoss {
     if (d < e.r + p.r && !(p.stats.flying && !e.T.fly)) p.hurt(e.T.dmg * en.k.dmg, dx, dz);
     this.place();
   }
-  place() { const e = this.e; e.yaw = this.yaw; if (this.kind === 'lancer' && this.state !== 'drop') e.y = e.T.fly + Math.sin(this.t * 3) * 0.15; }
+  place() { const e = this.e; e.yaw = this.yaw; if ((this.kind === 'lancer' || this.kind === 'prism') && this.state !== 'drop') e.y = e.T.fly + Math.sin(this.t * 3) * 0.15; }
 
   // ---- 나선 포대 ----
   warden(dt, { toP, P2 }) {
@@ -337,6 +373,99 @@ export class MidBoss {
       if (live && this.st > pre + this.n * 0.16 && this.n < 10) { const off = (Math.floor(this.n / 5) % 2) * Math.PI / 4 + this.yaw; en.ring(e.x, e.z, P2 ? 8 : 4, 6.5, 11, 'shell', off, 1.2); this.n++; }
       if (this.st > pre + 1.9) this.toWalk();
     } else this.toWalk();
+  }
+
+  // ---- 분광 수정체 ----
+  prism(dt, { toP, P2 }) {
+    const e = this.e, g = this.game, en = g.enemies;
+    this.keep = 8; this.sp = this.state === 'walk' ? 2.2 : 0.3;
+    this.yaw += dt * (this.state === 'galaxy' ? 2 : 0.8);
+    if (this.state === 'walk') { if (this.st > (P2 ? 0.9 : 1.4)) this.next(['bloom', 'galaxy', 'refract']); return; }
+    const pre = 0.7, live = this.st > pre;
+    this.charge(!live);
+    if (this.state === 'bloom') {
+      // 꽃: 느린 구슬이 퍼져 나가다 멈춤 → 차례로 고리가 되어 터진다 (2페이즈 2송이)
+      if (live && this.n < (P2 ? 2 : 1) && this.st > pre + this.n * 0.9) {
+        const c = P2 ? 8 : 6, off = R() * TAU;
+        for (let i = 0; i < c; i++) en.burst(e.x, e.z, off + (i / c) * TAU, 4.5, 10, 0.8, 1.3 + i * 0.07, P2 ? 8 : 7, 3.8, { y: 1.2 });
+        this.n++; e.flash = 0.06; g.sfx.play('beam', { vol: 0.4 });
+      }
+      if (this.st > pre + (P2 ? 3.2 : 2.4)) this.toWalk();
+    } else if (this.state === 'galaxy') {
+      // 은하: 팔마다 반대로 휘는 탄 → 나선 두 겹이 엇갈리며 소용돌이
+      if (live && (this.acc = (this.acc || 0) + dt) > 0.13) {
+        this.acc = 0;
+        const arms = P2 ? 5 : 4;
+        for (let k = 0; k < arms; k++) en.curve(e.x, e.z, this.yaw + (k / arms) * TAU, 4.6, 10, (k % 2 ? 1 : -1) * 0.9, 1.6, 'orb', 1.2);
+      }
+      if (this.st > pre + 2.8) this.toWalk();
+    } else if (this.state === 'refract') {
+      // 굴절: 느린 구슬 셋 → 멈춰서 그 자리에서 플레이어 쪽으로 다시 조준한 부채꼴
+      if (live && this.st > pre + this.n * 0.5 && this.n < (P2 ? 4 : 3)) {
+        for (const s of [-0.5, 0, 0.5]) en.burst(e.x, e.z, toP + s, 3.5, 10, 0.55, 0.95, P2 ? 5 : 3, 7, { y: 1.2, aim: true, step: 0.2 });
+        this.n++;
+      }
+      if (this.st > pre + 2.6) this.toWalk();
+    }
+  }
+
+  // ---- 추적 돌격기 ----
+  reaper(dt, { toP, P2, d }) {
+    const e = this.e, g = this.game, en = g.enemies, H = en.hazards, fx = g.fx, p = g.player;
+    this.keep = 6; this.sp = this.state === 'walk' ? 3 : 0;
+    if (this.state === 'walk') { this.yaw += angDiff(toP, this.yaw) * Math.min(1, dt * 4); if (this.st > (P2 ? 0.8 : 1.3)) this.next(['dash', 'scythe', 'cage', 'dash']); return; }
+    if (this.state === 'dash') {
+      // 경고선 → 돌진. 지나간 자리에 멈춘 탄을 깔고, 0.8초 뒤 차례로 양옆으로 퍼진다 (2페이즈 3연속)
+      const pre = this.n ? 0.4 : 0.65;
+      if (this.st < pre) {
+        if (this.st < pre * 0.6) { this.da = toP; this.dl = Math.min(18, d + 5); }
+        this.yaw = this.da; this.charge(true); this.drops = 0;
+        H.line(e.x, e.z, this.da, this.dl, 1.5, [1, 0.25, 0.3], 0.2 + 0.45 * (this.st / pre));
+      } else {
+        this.charge(false);
+        if (!this.drops) { this.ox = e.x; this.oz = e.z; this.lx = e.x; this.lz = e.z; g.sfx.play('dash'); }
+        e.x += Math.sin(this.da) * 24 * dt; e.z += Math.cos(this.da) * 24 * dt;
+        g.rooms.clamp(e, e.r * 0.8);
+        if (R() < 0.7) fx.dust(e.x, e.z, 1);
+        if ((this.acc = (this.acc || 0) + dt) > 0.05) {
+          this.acc = 0; this.drops++;
+          const side = this.drops % 2 ? 1 : -1;
+          en.lay(e.x, e.z, this.da + side * Math.PI / 2, 0.8, 4.2, 10, 'shell');
+          if (P2) en.lay(e.x, e.z, this.da - side * Math.PI / 2, 0.8, 4.2, 10, 'orb');
+        }
+        const moved = Math.hypot(e.x - this.lx, e.z - this.lz); this.lx = e.x; this.lz = e.z;
+        if (Math.hypot(e.x - this.ox, e.z - this.oz) >= this.dl || (this.drops > 2 && moved < 24 * dt * 0.3)) {
+          fx.addTrauma(0.2); fx.dust(e.x, e.z, 5);
+          if (++this.n < (P2 ? 3 : 1)) this.st = 0; else this.toWalk();
+        }
+      }
+    } else if (this.state === 'scythe') {
+      // 초승달: 0.6초 동안 각도를 쓸며 점점 빠른 탄 → 휘어진 벽이 다가온다. 좌우 번갈아 2번 (2페이즈 3번, 뒤로도)
+      const pre = 0.5, swings = P2 ? 3 : 2, u = this.st - pre, i = Math.floor(u / 0.9), k = (u - i * 0.9) / 0.6;
+      this.charge(this.st < pre);
+      if (u > 0 && i < swings && k <= 1) {
+        if (this.n <= i) { this.n = i + 1; this.base = toP; this.dir = (i % 2 ? -1 : 1) * (this.dir0 ??= R() < 0.5 ? 1 : -1); g.sfx.play('swing'); }
+        if ((this.acc = (this.acc || 0) + dt) > 0.025) {
+          this.acc = 0;
+          const a = this.base + this.dir * (k - 0.5) * 2.4, v = 4 + k * 5;
+          this.yaw = a;
+          en.shoot(e.x, e.z, a, v, 11, 'shell', 1);
+          if (P2) en.shoot(e.x, e.z, a + Math.PI, v, 11, 'shell', 1);
+        }
+      }
+      if (u > swings * 0.9) { this.dir0 = undefined; this.toWalk(); }
+    } else if (this.state === 'cage') {
+      // 조여 오는 고리: 플레이어 둘레에 표식 0.8초 → 틈 하나 남기고 안쪽으로 (2페이즈 한 번 더)
+      const pre = 0.8;
+      if (!this.n) { this.n = 1; this.cx = p.x; this.cz = p.z; }
+      if (this.st < pre) { H.ring(this.cx, this.cz, 7, [1, 0.3, 0.4], 0.3 + 0.4 * Math.sin(this.st * 30)); this.charge(true); }
+      else if (this.n === 1) { this.n = 2; this.charge(false); en.converge(this.cx, this.cz, 7, 28, 3.2, 10, 3); this.cx = p.x; this.cz = p.z; }
+      if (P2 && this.n === 2) {
+        if (this.st < pre + 0.8) H.ring(this.cx, this.cz, 7, [1, 0.3, 0.4], 0.3 + 0.4 * Math.sin(this.st * 30));
+        else { this.n = 3; en.converge(this.cx, this.cz, 7, 28, 3.6, 10, 3); }
+      }
+      if (this.st > pre + (P2 ? 2.2 : 1.6)) this.toWalk();
+    }
   }
 }
 

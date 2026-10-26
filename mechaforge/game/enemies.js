@@ -7,6 +7,7 @@ import { Geometry, InstancedMesh, Material, Mesh, m4 } from '../engine/index.js'
 import { buildMech, animateMech } from './parts.js';
 import { GUARDIAN_PARTS, Guardian } from './guardians.js';
 import { MIDBOSS_TYPES, MidBoss, Hazards, laserHits } from './midbosses.js';
+import { TROOP_TYPES } from './troops.js';
 
 const TAU = Math.PI * 2;
 const add = (g, part, position = [0, 0, 0], rotation = [0, 0, 0]) => g.merge(part, { position, rotation });
@@ -99,15 +100,20 @@ export const ENEMY_TYPES = {
   },
 };
 
-Object.assign(ENEMY_TYPES, GUARDIAN_PARTS, MIDBOSS_TYPES);
+Object.assign(ENEMY_TYPES, TROOP_TYPES, GUARDIAN_PARTS, MIDBOSS_TYPES);
 
-// 정예 특성: 방 2 이후 정예에 붙는다 (깊은 방은 2개). 색으로 구분
+// 정예 특성: 방 2 이후 정예에 붙는다 (깊은 방은 2개). 몸 색 + 발밑 회전 고리(aura) 색으로 구분
 export const AFFIXES = {
-  swift:    { name: '질풍', tint: [0.7, 1.35, 1.6] },    // 빠름
-  armored:  { name: '중장갑', tint: [0.75, 0.85, 1.25] }, // 체력 ↑, 넉백 저항
-  volatile: { name: '폭주', tint: [1.7, 0.55, 0.4] },    // 죽으면 폭발 + 고리탄
-  gunner:   { name: '탄막', tint: [1.5, 0.6, 1.6] },     // 주기적으로 고리탄
+  swift:    { name: '질풍', tint: [0.7, 1.35, 1.6], aura: [0.7, 1, 1] },       // 빠름
+  armored:  { name: '중장갑', tint: [0.75, 0.85, 1.25], aura: [0.45, 0.55, 1] }, // 체력 ↑, 넉백 저항
+  volatile: { name: '폭주', tint: [1.7, 0.55, 0.4], aura: [1, 0.35, 0.15] },    // 죽으면 폭발 + 고리탄
+  gunner:   { name: '탄막', tint: [1.5, 0.6, 1.6], aura: [1, 0.3, 0.85] },     // 주기적으로 고리탄
+  shielded: { name: '보호막', tint: [0.8, 1.2, 1.7], aura: [0.35, 0.8, 1] },    // 체력 50% 보호막 (안 맞으면 다시 찬다)
+  regen:    { name: '재생', tint: [0.7, 1.5, 0.8], aura: [0.3, 1, 0.4] },      // 2초 안 맞으면 초당 5% 회복
+  blink:    { name: '점멸', tint: [1.3, 0.8, 1.7], aura: [0.7, 0.4, 1] },      // 표식 뒤 플레이어 옆으로 순간이동
+  brood:    { name: '번식', tint: [1.4, 1.3, 0.5], aura: [1, 0.85, 0.2] },     // 죽으면 벌레 떼가 쏟아진다
 };
+const NO_BLINK = new Set(['assassin', 'mine', 'splitling']);
 
 // 공간 격자: 근처 적만 빠르게 찾기
 class Grid {
@@ -157,12 +163,22 @@ export class Enemies {
     }
     this.warn = game.scene.add(new Mesh(ring, new Material({ color: [1, 0.2, 0.25], emissive: 1, outline: false, castShadow: false, opacity: 0.6 })));
     this.warn.visible = false;
+    // 정예 특성 표시: 발밑에서 도는 점선 고리 (특성마다 하나) + 보호막 거품
+    const dash = new Geometry();
+    for (let i = 0; i < 16; i += 2) {
+      const a0 = (i / 16) * TAU, a1 = ((i + 1.3) / 16) * TAU, p = (a, r) => [Math.cos(a) * r, 0, Math.sin(a) * r];
+      dash.quad(p(a0, 0.84), p(a1, 0.84), p(a1, 1), p(a0, 1), [1, 1, 1], null, [0, 1, 0]);
+    }
+    this.aura = game.scene.add(new InstancedMesh(dash, new Material({ emissive: 1, outline: false, castShadow: false, opacity: 0.8 }), 96));
+    this.bubble = game.scene.add(new InstancedMesh(Geometry.icosphere(1, 1, [1, 1, 1]), new Material({ emissive: 1, outline: false, castShadow: false, opacity: 0.3 }), 48));
+    this.tracks = [];  // 움직임을 나중에 바꾸는 적 탄 (휘는 탄, 멈췄다 터지는 탄)
+    this.strikes = []; // 바닥 표식 포격
   }
 
   get alive() { return this.list.length + (this.boss ? 1 : 0); }
 
   // ---- 스폰 ----
-  spawn(type, x, z, { elite = false, force = false } = {}) {
+  spawn(type, x, z, { elite = false, force = false, affix = null } = {}) {
     const T = ENEMY_TYPES[type];
     const count = this.list.reduce((n, e) => n + (e.type === type), 0);
     if (!force && (count >= T.cap || this.list.length >= 440)) return null;
@@ -174,12 +190,14 @@ export class Enemies {
     };
     // 깊은 방: 정찰 드론 일부가 총을 든다
     if (type === 'drone' && depth >= 3 && Math.random() < 0.08 + (depth - 3) * 0.03 && this.list.reduce((n, o) => n + !!o.gun, 0) < 14) e.gun = true;
-    if (elite && depth >= 2 && !T.part) {
-      const keys = Object.keys(AFFIXES).sort(() => Math.random() - 0.5).slice(0, depth >= 6 ? 2 : 1);
+    if (elite && (depth >= 2 || affix) && !T.part) {
+      const keys = affix || Object.keys(AFFIXES).filter((k) => !(k === 'blink' && NO_BLINK.has(type))).sort(() => Math.random() - 0.5).slice(0, depth >= 6 ? 2 : 1);
       e.affix = {}; for (const k of keys) e.affix[k] = true;
+      e.affixes = keys;
       e.tint = AFFIXES[keys[0]].tint;
       if (e.affix.swift) e.speed *= 1.6;
       if (e.affix.armored) { e.hp = e.maxHp *= 1.7; e.mass = T.mass * 4; }
+      if (e.affix.shielded) e.shield = e.shieldMax = e.maxHp * 0.5;
       this.game.ui.toast(`정예 기체 출현 [${keys.map((k) => AFFIXES[k].name).join('·')}]! 처치하면 부품 획득`);
     } else if (elite) this.game.ui.toast('정예 기체 출현! 처치하면 부품 획득');
     this.list.push(e);
@@ -190,6 +208,69 @@ export class Enemies {
   shoot(x, z, a, sp, dmg, kind = 'orb', y = 1) { this.game.shots.enemyShot(x, y, z, Math.sin(a) * sp, Math.cos(a) * sp, dmg * this.k.dmg, kind); }
   ring(x, z, n, sp, dmg, kind = 'orb', off = 0, y = 1) { for (let i = 0; i < n; i++) this.shoot(x, z, off + (i / n) * TAU, sp, dmg, kind, y); }
   fan(x, z, a, n, step, sp, dmg, kind = 'shell', y = 1) { for (let i = 0; i < n; i++) this.shoot(x, z, a + (i - (n - 1) / 2) * step, sp, dmg, kind, y); }
+
+  // ---- 움직임이 바뀌는 탄: fn(s, t, dt) 가 true 를 돌려주면 추적 끝 ----
+  //  탄이 플레이어에 맞아 사라졌으면 (목록에 없음) 더 건드리지 않는다
+  track(x, z, a, sp, dmg, kind, y, fn) {
+    const L = this.game.shots.enemyList, n = L.length;
+    this.shoot(x, z, a, sp, dmg, kind, y);
+    if (L.length > n && this.tracks.length < 260) this.tracks.push({ s: L[L.length - 1], t: 0, fn });
+  }
+  // 깔리는 탄: 제자리에 멈춰 있다가 wait 초 뒤 a 방향으로 출발
+  lay(x, z, a, wait, sp, dmg, kind = 'shell', y = 1) {
+    this.track(x, z, 0, 0, dmg, kind, y, (s, t) => { if (t < wait) return false; s.vx = Math.sin(a) * sp; s.vz = Math.cos(a) * sp; return true; });
+  }
+  // 휘는 탄: dur 초 동안 초당 w 라디안씩 진행 방향이 돈다
+  curve(x, z, a, sp, dmg, w, dur, kind = 'orb', y = 1) {
+    this.track(x, z, a, sp, dmg, kind, y, (s, t, dt) => { const c = Math.cos(w * dt), si = Math.sin(w * dt); [s.vx, s.vz] = [s.vx * c + s.vz * si, -s.vx * si + s.vz * c]; return t > dur; });
+  }
+  // 멈췄다 터지는 탄: go 초 날아가 멈춤 → pop 초에 n 갈래 고리로 터진다 (aim 이면 플레이어 쪽 부채꼴)
+  burst(x, z, a, sp, dmg, go, pop, n, sp2, { kind = 'orb', y = 1, aim = false, step = 0.22 } = {}) {
+    this.track(x, z, a, sp, dmg, kind, y, (s, t) => {
+      if (t > go && !s.stop) { s.stop = true; s.vx = s.vz = 0; s.life = Math.max(s.life, pop - t + 0.2); }
+      if (t < pop) return false;
+      if (!this.game.shots.enemyList.includes(s)) return true;
+      s.life = 0;
+      const p = this.game.player;
+      if (aim) this.fan(s.x, s.z, Math.atan2(p.x - s.x, p.z - s.z), n, step, sp2, dmg, 'shell', s.y);
+      else this.ring(s.x, s.z, n, sp2, dmg, 'orb', Math.random(), s.y);
+      this.game.fx.hitSpark([s.x, s.y, s.z], [1, 0.5, 0.9], 3);
+      return true;
+    });
+  }
+  // 조여 오는 고리: (cx,cz) 둘레 반지름 r 에서 안쪽으로. gap 개 칸을 비워 빠져나갈 틈을 준다
+  converge(cx, cz, r, n, sp, dmg, gap = 2, off = Math.random() * TAU, kind = 'orb') {
+    const skip = (Math.random() * n) | 0;
+    for (let i = 0; i < n; i++) {
+      if (((i - skip + n) % n) < gap) continue;
+      const a = off + (i / n) * TAU;
+      this.shoot(cx + Math.sin(a) * r, cz + Math.cos(a) * r, a + Math.PI, sp, dmg, kind, 0.9);
+    }
+  }
+  // 바닥 표식 포격: 표식이 차오르면 착탄 (반지름 r) + n 갈래 고리
+  strike(x, z, r, life, dmg, n = 0) { if (this.strikes.length < 40) this.strikes.push({ x, z, r, life, dmg, n, t: 0 }); }
+  updateStrikes(dt) {
+    const g = this.game, p = g.player, fx = g.fx, H = this.hazards;
+    for (let i = this.strikes.length - 1; i >= 0; i--) {
+      const m = this.strikes[i];
+      m.t += dt;
+      const k = Math.min(1, m.t / m.life);
+      H.ring(m.x, m.z, m.r * (0.3 + 0.7 * k), [1, 0.45, 0.2], 0.4 + 0.4 * Math.sin(m.t * (k > 0.7 ? 50 : 18)));
+      H.ring(m.x, m.z, m.r, [1, 0.25, 0.2], 0.25);
+      if (k < 1) continue;
+      this.strikes.splice(i, 1);
+      fx.explosion(m.x, 0.4, m.z, m.r * 0.8, { color: [1, 0.55, 0.3] }); g.sfx.play('boom', { vol: 0.7 }); fx.addTrauma(0.12);
+      if (Math.hypot(p.x - m.x, p.z - m.z) < m.r + p.r * 0.5) p.hurt(m.dmg * this.k.dmg, p.x - m.x, p.z - m.z);
+      if (m.n) this.ring(m.x, m.z, m.n, 3.6, 9, 'orb', Math.random(), 0.8);
+    }
+  }
+  updateTracks(dt) {
+    for (let i = this.tracks.length - 1; i >= 0; i--) {
+      const q = this.tracks[i];
+      q.t += dt;
+      if (q.s.life <= 0 || q.fn(q.s, q.t, dt)) this.tracks.splice(i, 1);
+    }
+  }
 
   spawnMid(kind, x, z) { const m = new MidBoss(this.game, kind, x, z); this.mids.push(m); return m; }
 
@@ -235,6 +316,109 @@ export class Enemies {
     g.ui.bossBar(1, '타이탄 MK-I');
   }
 
+  // 타이탄이 처음 쓰러지면: 다리가 터져 나가고 비행 코어 MK-II 로 재기동 (체력 55% 로 다시)
+  rebirth(B) {
+    const g = this.game, fx = g.fx;
+    B.reborn = true; B.inv = true; B.hp = 1; B.state = 'reborn'; B.st = 0; B.kx = B.kz = 0; B.vy = 0; B.y = 0;
+    this.warn.visible = false;
+    g.shots.enemyList.length = 0; this.tracks = []; this.strikes = [];
+    g.ui.banner('타이탄 다리 붕괴… 코어가 살아 있다!', true); g.sfx.play('alarm');
+    g.hitStop(0.15); g.slowMo(1.0); fx.addTrauma(0.9);
+    fx.explosion(B.x, 1.5, B.z, 2.6, { color: [1, 0.55, 0.3] }); g.sfx.play('bigboom');
+  }
+  updateReborn(B, dt) {
+    const g = this.game, fx = g.fx;
+    B.flash = Math.sin(B.st * 25) > 0 ? 0.05 : 0;
+    if (Math.random() < 0.25) { fx.explosion(B.x + (Math.random() - 0.5) * 4, Math.random() * 2, B.z + (Math.random() - 0.5) * 4, 0.9, { color: [1, 0.6, 0.3] }); g.sfx.play('boom', { vol: 0.5 }); }
+    if (B.st > 1.2 && !B.swapped) {
+      // 다리 대신 추진기를 단 상체로 갈아 끼운다
+      B.swapped = true;
+      g.scene.remove(B.mech.root);
+      B.mech = buildMech({ legs: 'jet', frame: 'fortress', paint: 'boss', weapons: [{ id: 'laser', slot: 'armR' }, { id: 'laser', slot: 'armL' }, { id: 'missile', slot: 'shR' }, { id: 'missile', slot: 'shL' }, { id: 'missile', slot: 'back' }], modules: { armor: 3, booster: 3, reactor: 2 } });
+      B.mech.root.scale = [2.4, 2.4, 2.4]; B.legs = 'jet';
+      g.scene.add(B.mech.root);
+      fx.explosion(B.x, 2, B.z, 3, { color: [1, 0.5, 0.3] }); fx.ring(B.x, 0.2, B.z, 9, [1, 0.4, 0.3], 0.6); fx.addTrauma(0.8); g.sfx.play('bigboom');
+      this.ring(B.x, B.z, 24, 4, 12, 'orb', 0, 1.4);
+    }
+    if (B.swapped) B.y += (1.4 - B.y) * Math.min(1, dt * 3);
+    if (B.st > 2.6) {
+      B.inv = false; B.maxHp *= 0.55; B.hp = B.maxHp; B.state = 'walk'; B.st = 0; B.pattern = 0; B.flash = 0;
+      g.ui.bossBar(1, '타이탄 MK-II'); g.ui.banner('타이탄 MK-II 기동!', true); g.sfx.play('overdrive');
+    }
+  }
+
+  // MK-II: 떠다니며 회전 레이저 우리, 미사일 비, 조여 오는 고리, 탄을 까는 돌진, 휘는 은하 나선
+  updateMk2(B, dt, { d, toP }) {
+    const g = this.game, p = g.player, fx = g.fx, H = this.hazards, P2 = B.hp < B.maxHp * 0.5;
+    B.y = 1.4 + Math.sin(g.time * 2) * 0.2;
+    let move = 0;
+    if (B.state === 'walk') {
+      move = 1;
+      const sp = d > 5 ? 3.2 : 0;
+      B.x += Math.sin(toP) * sp * dt; B.z += Math.cos(toP) * sp * dt;
+      B.yaw = toP;
+      if (B.st > (P2 ? 0.8 : 1.2)) { const L = ['halo', 'rain', 'charge', 'galaxy', 'cage']; B.state = L[B.pattern++ % L.length]; B.st = 0; B.shots = 0; B.acc = 0; }
+    } else if (B.state === 'halo') {
+      // 회전 레이저 우리: 짧은 빔 5(2페이즈 6)개가 몸을 중심으로 돈다. 경고 1초 → 3초
+      const n = P2 ? 6 : 5, L = 10, W = 0.8, live = B.st > 1;
+      if (!B.shots) { B.shots = 1; B.spin = toP + Math.PI / n; B.dir = Math.random() < 0.5 ? 1 : -1; }
+      if (live) B.spin += B.dir * (P2 ? 1.1 : 0.85) * dt;
+      B.x += Math.sin(toP) * 1.4 * dt; B.z += Math.cos(toP) * 1.4 * dt; move = 0.5;
+      for (let k = 0; k < n; k++) {
+        const a = B.spin + (k / n) * TAU;
+        H.laser(B.x, B.z, a, L, W, live, B.st);
+        if (live && laserHits(p.x, p.z, B.x, B.z, a, L, W * 0.5 + p.r * 0.6)) p.hurt(22 * this.k.dmg, Math.sin(a), Math.cos(a));
+      }
+      if (B.st > 4) { B.state = 'walk'; B.st = 0; }
+    } else if (B.state === 'rain') {
+      // 미사일 비: 플레이어 자리 + 예측 자리 + 주변에 바닥 표식
+      B.yaw = toP;
+      if (B.st > 0.4 + B.shots * 0.18 && B.shots < (P2 ? 14 : 10)) {
+        const lead = B.shots % 3 === 1 ? 0.6 : 0, j = B.shots % 3 === 2 ? 4 : 0;
+        this.strike(p.x + p.vx * lead + (Math.random() - 0.5) * j, p.z + p.vz * lead + (Math.random() - 0.5) * j, 1.8, 1.1, 18, P2 ? 6 : 0);
+        const m = B.mech.muzzle(['shR', 'shL', 'back'][B.shots % 3]);
+        fx.muzzle(m, [0, 1, 0], [1, 0.5, 0.3], 2); g.sfx.play('missile', { vol: 0.6 });
+        B.shots++;
+      }
+      if (B.st > 3.4) { B.state = 'walk'; B.st = 0; }
+    } else if (B.state === 'charge') {
+      // 경고선 → 저공 돌진, 지나간 자리에 탄을 깔아 양옆으로 퍼뜨린다 (2번, 2페이즈 3번)
+      const pre = B.shots ? 0.45 : 0.75;
+      if (B.st < pre) {
+        if (B.st < pre * 0.6) { B.da = toP; B.dl = Math.min(20, d + 6); }
+        B.yaw = B.da; B.flash = Math.sin(B.st * 30) > 0 ? 0.04 : 0; B.drops = 0;
+        H.line(B.x, B.z, B.da, B.dl, 2.6, [1, 0.25, 0.3], 0.2 + 0.45 * (B.st / pre));
+      } else {
+        if (!B.drops) { B.ox = B.x; B.oz = B.z; g.sfx.play('dash'); }
+        B.x += Math.sin(B.da) * 26 * dt; B.z += Math.cos(B.da) * 26 * dt; move = 1;
+        if ((B.acc += dt) > 0.05) { B.acc = 0; B.drops++; for (const s of [1, -1]) this.lay(B.x, B.z, B.da + s * Math.PI / 2, 0.7, 4.4, 12, B.drops % 2 ? 'shell' : 'orb', 1.2); }
+        if (laserHits(p.x, p.z, B.x - Math.sin(B.da) * 2, B.z - Math.cos(B.da) * 2, B.da, 4, 1.6 + p.r)) p.hurt(B.T.dmg * this.k.dmg, Math.sin(B.da), Math.cos(B.da));
+        const RM = g.rooms, out = Math.abs(B.x) > RM.hx - 2.2 || Math.abs(B.z) > RM.hz - 2.2;
+        if (Math.hypot(B.x - B.ox, B.z - B.oz) >= B.dl || out) {
+          fx.addTrauma(0.3); for (let i = 0; i < 6; i++) fx.dust(B.x + (Math.random() - 0.5) * 3, B.z + (Math.random() - 0.5) * 3, 1);
+          if (++B.shots < (P2 ? 3 : 2)) B.st = 0; else { B.state = 'walk'; B.st = 0; }
+        }
+      }
+    } else if (B.state === 'galaxy') {
+      // 은하 나선: 팔 6개, 번갈아 반대로 휜다
+      if (B.st < 0.7) { B.flash = Math.sin(B.st * 30) > 0 ? 0.04 : 0; B.spin = toP; }
+      else if ((B.acc += dt) > 0.15) {
+        B.acc = 0; B.spin += 0.13;
+        const arms = P2 ? 7 : 6;
+        for (let k = 0; k < arms; k++) this.curve(B.x, B.z, B.spin + (k / arms) * TAU, 5, 12, (k % 2 ? 1 : -1) * 0.8, 1.8, 'orb', 1.6);
+      }
+      if (B.st > 3.6) { B.state = 'walk'; B.st = 0; }
+    } else if (B.state === 'cage') {
+      // 조여 오는 고리 두 겹 + 몸에서 조준 부채꼴
+      if (!B.shots) { B.shots = 1; B.cx = p.x; B.cz = p.z; }
+      if (B.st < 0.8) H.ring(B.cx, B.cz, 8, [1, 0.3, 0.4], 0.3 + 0.4 * Math.sin(B.st * 30));
+      else if (B.shots === 1) { B.shots = 2; this.converge(B.cx, B.cz, 8, 34, 3.2, 12, 3); this.converge(B.cx, B.cz, 10.5, 34, 3.2, 12, 3); }
+      if (B.shots >= 2 && B.st > 1.1 + (B.shots - 2) * 0.5 && B.shots < 5) { B.shots++; const m = B.mech.muzzle(B.shots % 2 ? 'armR' : 'armL'); this.fan(m[0], m[2], Math.atan2(p.x - m[0], p.z - m[2]), P2 ? 7 : 5, 0.18, 9, 12, 'shell', 1.4); }
+      if (B.st > 2.8) { B.state = 'walk'; B.st = 0; }
+    }
+    return move;
+  }
+
   updateBoss(dt) {
     const B = this.boss, g = this.game, p = g.player, fx = g.fx;
     if (!B) return;
@@ -243,10 +427,12 @@ export class Enemies {
     const dx = p.x - B.x, dz = p.z - B.z, d = Math.hypot(dx, dz) || 1;
     const toP = Math.atan2(dx, dz);
     let move = 0;
+    if (B.state === 'reborn') this.updateReborn(B, dt);
+    else if (B.reborn) move = this.updateMk2(B, dt, { dx, dz, d, toP });
     const P2 = B.hp < B.maxHp * 0.5; // 2페이즈: 패턴 간격이 짧아지고 탄이 늘어난다
-    if (P2 && !B.p2) { B.p2 = true; g.ui.banner('타이탄 출력 상승!', true); g.sfx.play('alarm'); fx.ring(B.x, 0.2, B.z, 8, [1, 0.3, 0.4], 0.6); this.ring(B.x, B.z, 32, 5, 12, 'orb', 0, 1.4); }
+    if (P2 && !B.p2 && !B.reborn) { B.p2 = true; g.ui.banner('타이탄 출력 상승!', true); g.sfx.play('alarm'); fx.ring(B.x, 0.2, B.z, 8, [1, 0.3, 0.4], 0.6); this.ring(B.x, B.z, 32, 5, 12, 'orb', 0, 1.4); }
     const fireRing = (n, speed, off = 0) => this.ring(B.x, B.z, n, speed, 12, 'orb', off, 1.4);
-    if (B.state === 'drop' || B.state === 'stompFall') {
+    if (B.reborn) { /* MK-II: updateReborn / updateMk2 */ } else if (B.state === 'drop' || B.state === 'stompFall') {
       B.vy -= 60 * dt; B.y += B.vy * dt;
       this.warn.material.opacity = 0.35 + 0.35 * Math.sin(B.st * 30);
       if (B.y <= 0) {
@@ -337,7 +523,7 @@ export class Enemies {
     const m = B.mech;
     m.root.position = [B.x, B.y, B.z];
     m.root.rotation[1] = B.yaw;
-    animateMech(m, B.anim, { move, dt, t: g.time, legs: 'walker', aimRel: 0 });
+    animateMech(m, B.anim, { move, dt, t: g.time, legs: B.legs || 'walker', aimRel: 0 });
     const f = B.flash > 0;
     for (const mesh of m.meshes) { mesh.material.emissive = f ? 0.7 : 0; mesh.material.color = f ? [2.2, 2.2, 2.2] : [1, 1, 1]; }
   }
@@ -345,9 +531,27 @@ export class Enemies {
   // ---- 피격 ----
   hit(e, dmg, dirX, dirZ, knock, { crit = false, quiet = false, noNum = false, launch = 0, stun = 0 } = {}) {
     const g = this.game;
-    if (e.dead || e.under) return;
+    if (e.dead || e.under || e.inv) return;
     if (e.prop) return g.rooms.hazards.hitProp(e, dmg); // 환경 소품 (hazards.js)
     if (e.guard) { dmg *= e.guard.dmgMul(e); launch = 0; stun = 0; knock = 0; }
+    e.hitT = g.time;
+    let col = crit ? [1, 0.85, 0.2] : [1, 1, 1];
+    // 방패 기체: 정면에서 날아온 공격은 대부분 막힌다 (방향 없는 공격은 플레이어 쪽에서 온 것으로)
+    if (e.T.shield && !(e.stun > 0)) {
+      let ax = dirX, az = dirZ;
+      if (!ax && !az) { ax = e.x - g.player.x; az = e.z - g.player.z; }
+      if ((ax * Math.sin(e.yaw) + az * Math.cos(e.yaw)) / (Math.hypot(ax, az) || 1) < -0.35) {
+        dmg *= 0.12; knock *= 0.25; launch = 0; col = [0.5, 0.8, 1];
+        if (Math.random() < 0.35) { g.fx.hitSpark([e.x + Math.sin(e.yaw) * 0.6, 0.9, e.z + Math.cos(e.yaw) * 0.6], [0.5, 0.9, 1], 3); g.sfx.play('tink', { vol: 0.3 }); }
+      }
+    }
+    // 보호막 특성: 보호막이 먼저 깎인다
+    if (e.shield > 0) {
+      const a = Math.min(e.shield, dmg);
+      e.shield -= a; dmg -= a; col = [0.5, 0.8, 1];
+      if (e.shield <= 0) { g.fx.ring(e.x, (e.y || 0) + 0.8, e.z, e.r * 2.4, [0.4, 0.85, 1], 0.35); g.fx.hitSpark([e.x, (e.y || 0) + 0.8, e.z], [0.5, 0.9, 1], 10); g.sfx.play('tink'); }
+      if (dmg <= 0) { e.flash = 0.04; return; }
+    }
     e.hp -= dmg;
     e.flash = 0.09;
     const k = knock / (e.mass || e.T.mass);
@@ -357,14 +561,23 @@ export class Enemies {
       if (stun) e.stun = Math.max(e.stun || 0, stun);
     }
     g.stats.dealt += dmg;
-    if (!noNum && (!quiet || crit)) g.fx.number([e.x, (e.y || 0) + (e.boss ? 4 : 1), e.z], dmg, { color: crit ? [1, 0.85, 0.2] : [1, 1, 1], big: crit });
+    if (!noNum && (!quiet || crit)) g.fx.number([e.x, (e.y || 0) + (e.boss ? 4 : 1), e.z], dmg, { color: col, big: crit });
     if (e.boss) { g.ui.bossBar(Math.max(0, e.hp / e.maxHp)); if (crit) g.hitStop(0.03); }
+    if (e.hp <= 0 && e.boss && !e.reborn) return this.rebirth(e);
     if (e.hp <= 0) this.kill(e);
   }
 
   kill(e) {
     const g = this.game, fx = g.fx;
     e.dead = true;
+    if (e.T.inert) { fx.explosion(e.x, e.y, e.z, 0.6, { scorch: false }); return; } // 장식 부위 (히드라 목)
+    if (e.T.mine) {
+      // 지뢰: 밟아서 터지면 플레이어도 다치고, 쏴서 터뜨리면 주변 적만 다친다. 처치 수/경험치 없음
+      if (e.fizzle || e.doomT !== undefined) { fx.pop(e.x, 0.2, e.z, [1, 0.5, 0.2]); return; }
+      this.blast(e.x, e.z, 1.9, e.trip ? e.T.dmg * 2 * this.k.dmg : 18 * g.player.stats.dmgMul, !!e.trip, 0.02);
+      fx.ring(e.x, 0.15, e.z, 1.9, [1, 0.4, 0.2], 0.3);
+      return;
+    }
     g.stats.kills++;
     g.onKill?.();
     if (e.boss) {
@@ -393,6 +606,10 @@ export class Enemies {
     g.player.addOd(T.xp * 0.0045 * (e.elite ? 6 : 1));
     const chain = g.player.stats.chain || 0;
     if (e.affix?.volatile && e.doomT === undefined) { this.blast(e.x, e.z, 2.8, T.dmg * 2.5 * this.k.dmg, true, 0.35); this.ring(e.x, e.z, 12, 4.2, T.dmg, 'orb', Math.random()); fx.ring(e.x, 0.15, e.z, 2.8, [1, 0.3, 0.2], 0.4); }
+    if (e.doomT === undefined) {
+      if (T.split) this.spill(T.split, e.x, e.z, e.elite ? 6 : 3, 7);  // 분열: 조각이 튀어나온다
+      if (e.affix?.brood) this.spill('mite', e.x, e.z, 8, 9);
+    }
     if (T.bomb) this.blast(e.x, e.z, 2.2, 26 * this.k.dmg, true, 0.04);
     else if (chain && Math.random() < chain) this.blast(e.x, e.z, 1.6 + (e.elite ? 1 : 0) + T.r, (8 + e.maxHp * 0.6) * g.player.stats.dmgMul, false, 0.07);
     // 부품 노획: 적의 부위가 뜯겨 나와 떨어진다
@@ -409,6 +626,45 @@ export class Enemies {
     const r = Math.random();
     if ((!T.swarm && e.type !== 'drone' && r < 0.03) || r < 0.003) g.pickups.drop('kit', e.x + 0.5, e.z);
     else if (r > 0.9985) g.pickups.drop('magnet', e.x + 0.5, e.z);
+  }
+
+  // 정예 특성: 재생 / 보호막 재충전 / 점멸
+  affixTick(e, dt, d) {
+    const g = this.game, fx = g.fx, A = e.affix, quiet = g.time - (e.hitT || 0);
+    if (A.regen && quiet > 2 && e.hp < e.maxHp) {
+      e.hp = Math.min(e.maxHp, e.hp + e.maxHp * 0.05 * dt);
+      if (Math.random() < 0.15) fx.trail.emit({ position: [e.x + (Math.random() - 0.5) * e.r * 2, e.y + 0.3, e.z + (Math.random() - 0.5) * e.r * 2], velocity: [0, 2.5, 0], life: 0.5, size: 2, sizeEnd: 0.5, color: [0.4, 1, 0.5], colorEnd: [0.1, 0.5, 0.2], emissive: 1, gravity: 0 });
+    }
+    if (A.shielded && quiet > 4 && e.shield < e.shieldMax) {
+      if (e.shield <= 0) g.sfx.play('tune', { vol: 0.3 });
+      e.shield = Math.min(e.shieldMax, e.shield + e.shieldMax * 0.4 * dt);
+    }
+    if (A.blink && e.spawnT > 1 && e.state === 'walk') {
+      // 도착 지점에 0.45초 표식 → 순간이동 (플레이어 옆쪽, 너무 가깝지 않게)
+      if (e.blinkTo) {
+        e.blinkT -= dt;
+        this.hazards.ring(e.blinkTo[0], e.blinkTo[1], e.r * 1.8, [0.75, 0.4, 1], 0.35 + 0.35 * Math.sin(e.blinkT * 40));
+        if (e.blinkT <= 0) {
+          fx.ring(e.x, 0.15, e.z, 1.5, [0.75, 0.4, 1], 0.25);
+          [e.x, e.z] = e.blinkTo; e.blinkTo = null; e.kx = e.kz = 0;
+          fx.ring(e.x, 0.15, e.z, 1.5, [0.75, 0.4, 1], 0.25); fx.light([e.x, 1, e.z], [0.75, 0.4, 1], 3, 0.8, 0.2);
+        }
+      } else if ((e.bcd = (e.bcd ?? 2 + Math.random() * 2) - dt) <= 0 && d < 16) {
+        e.bcd = 3.5 + Math.random() * 2;
+        const p = g.player, a = Math.atan2(e.x - p.x, e.z - p.z) + (Math.random() < 0.5 ? 1 : -1) * (1.1 + Math.random() * 0.8), r = Math.max(4, Math.min(8, d));
+        const spot = { x: p.x + Math.sin(a) * r, z: p.z + Math.cos(a) * r };
+        g.rooms.clamp(spot, e.r);
+        e.blinkTo = [spot.x, spot.z]; e.blinkT = 0.45;
+      }
+    }
+  }
+
+  // 죽은 자리에서 작은 적이 사방으로 튀어나온다
+  spill(type, x, z, n, power) {
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * TAU + Math.random() * 0.5, s = this.spawn(type, x + Math.sin(a) * 0.3, z + Math.cos(a) * 0.3);
+      if (s) { s.spawnT = 0.15; s.kx = Math.sin(a) * power; s.kz = Math.cos(a) * power; s.y = 0.2; s.vy = 5 + Math.random() * 2; }
+    }
   }
 
   // ---- 폭발 (연쇄) ----
@@ -445,7 +701,7 @@ export class Enemies {
   nearest(x, z, maxR = 1e9, skip = null) {
     let best = null, bd = maxR * maxR;
     for (const e of this.list) {
-      if (e === skip || e.spawnT < 0.2 || e.under) continue;
+      if (e === skip || e.spawnT < 0.2 || e.under || e.T.mine) continue;
       const d = (e.x - x) ** 2 + (e.z - z) ** 2;
       if (d < bd) { bd = d; best = e; }
     }
@@ -480,7 +736,13 @@ export class Enemies {
       let mx = dx / d, mz = dz / d, sp = e.speed;
       // 탄막 특성 정예: 주기적으로 고리탄
       if (e.affix?.gunner && e.spawnT > 1) { e.gcd = (e.gcd ?? 2) - dt; if (e.gcd < 0.5) e.charging = true; if (e.gcd <= 0) { e.gcd = 3; e.charging = false; this.ring(e.x, e.z, 12, 4.6, T.dmg, 'orb', e.st, 0.9); } }
-      if (e.type === 'tank') {
+      if (e.affixes) this.affixTick(e, dt, d);
+      if (T.ai) {
+        // troops.js 의 적: 각자 ai 가 이동/공격을 정한다
+        const c = { dx, dz, d, mx, mz, sp, dt, depth, p, g };
+        if (T.ai(this, e, c)) continue;
+        ({ mx, mz, sp } = c);
+      } else if (e.type === 'tank') {
         // 사거리 안이면 거리 유지 + 포격 (0.5초 예고). 깊을수록 부채꼴 / 연발
         if (d < 8) { sp *= -0.3; }
         else if (d < 11) { sp *= 0.25; }
@@ -553,6 +815,7 @@ export class Enemies {
         sp = 0; e.charging = false; e.cd = Math.max(e.cd, 0.6);
         if (e.stun > 0) e.stun -= dt;
         if (e.state === 'charge' || e.state === 'wind') { e.state = 'rest'; e.st = 0; }
+        else if (T.calm && e.state !== 'walk') { e.state = 'walk'; e.st = 0; e.cd = Math.max(e.cd, 1); } // 조준/수리 빔 끊김
       }
       if (e.spawnT < 0.35) sp *= 0.2;
       e.x += (mx * sp + e.kx) * dt;
@@ -572,7 +835,7 @@ export class Enemies {
       if (!T.fly) g.rooms.clamp(e, e.r); else g.rooms.clamp(e, 0.3);
 
       // 접촉 피해
-      if (e.spawnT > 0.3 && d < e.r + p.r && e.y < T.fly + 0.6 && !(p.stats.flying && !T.fly)) { // 비행 모드: 지상 적과 부딪혀도 안전
+      if (e.spawnT > 0.3 && !e.under && !T.mine && d < e.r + p.r && e.y < T.fly + 0.6 && !(p.stats.flying && !T.fly)) { // 비행 모드: 지상 적과 부딪혀도 안전
         const dmg = e.state === 'charge' ? T.dmg * 1.5 : T.dmg;
         if (p.hurt(dmg * (e.elite ? 1.5 : 1) * this.k.dmg, dx / d, dz / d)) { e.kx -= mx * 6; e.kz -= mz * 6; }
         // 탱크 다리로 대시 들이받기
@@ -588,6 +851,8 @@ export class Enemies {
     }
     this.updateBoss(dt);
     if (this.guardian) { this.guardian.update(dt); if (this.guardian.dead && !this.list.some((e) => e.guard === this.guardian)) this.guardian.done = true; }
+    this.updateTracks(dt);
+    this.updateStrikes(dt);
     this.hazards.flush();
     this.updateBlasts(dt);
     // 처치된 적 정리
@@ -598,26 +863,40 @@ export class Enemies {
   render(time) {
     const counts = {};
     for (const id in this.meshes) counts[id] = 0;
+    let na = 0, nb = 0;
     for (const e of this.list) {
       const M = this.meshes[e.type], i = counts[e.type]++;
       const pop = Math.min(1, e.spawnT / 0.25);
-      const s = (e.elite ? 1.35 : 1) * (pop < 1 ? pop * (1.3 - 0.3 * pop) : 1);
+      const s = (e.elite ? 1.35 : 1) * (pop < 1 ? pop * (1.3 - 0.3 * pop) : 1) * (e.vis ?? 1);
+      // 정예 특성 고리 (특성마다 하나, 바깥 고리는 반대로 돈다) + 보호막 거품
+      if (e.affixes && s > 0.01) {
+        e.affixes.forEach((k, j) => {
+          if (na >= this.aura.capacity) return;
+          const r = e.r * (1.45 + j * 0.4) * (1 + Math.sin(time * 5 + j) * 0.05);
+          this.aura.setAt(na++, m4.fromTRS([e.x, e.y + 0.07 + j * 0.02, e.z], [0, (j ? -1 : 1) * time * 2.2 + e.seed, 0], [r, 1, r]), AFFIXES[k].aura, 1);
+        });
+        if (e.shield > 0 && nb < this.bubble.capacity) {
+          const k = e.shield / e.shieldMax, r = e.r * 1.55;
+          this.bubble.setAt(nb++, m4.fromTRS([e.x, e.y + e.r * 0.9, e.z], [0, time, 0], [r, r, r]), [0.3 + 0.2 * k, 0.6 + 0.3 * k, 1], 1);
+        }
+      }
       let y = e.y, roll = (e.y > e.T.fly + 0.05) ? e.vy * 0.08 : 0;
       if (e.T.fly) { y += Math.sin(time * 4 + e.seed) * 0.12; roll = Math.sin(time * 3 + e.seed) * 0.15; }
       if (e.type === 'brute' && e.state === 'wind') y += Math.abs(Math.sin(e.st * 30)) * 0.05;
       const mat = m4.fromTRS([e.x, y, e.z], [e.rx || 0, e.yaw, roll], [s, s, s]);
       const f = e.flash > 0 || (e.state === 'wind' && Math.sin(e.st * 28) > 0);
-      const tint = f ? [2.6, 2.6, 2.6] : e.elite ? (e.tint || [1.25, 1.1, 0.7]) : [1, 1, 1];
+      const tint = f ? [2.6, 2.6, 2.6] : e.elite ? (e.tint || [1.25, 1.1, 0.7]) : (e.tint || [1, 1, 1]);
       M.body.setAt(i, mat, tint, f ? 0.65 : 0);
       const glowK = e.charging || e.state === 'wind' ? 2.2 : 1;
       const gk = e.exposed ? 1.6 + Math.sin(time * 14) * 0.6 : glowK;
       M.glow.setAt(i, mat, e.elite ? [1.6 * glowK, 1.3 * glowK, 0.4] : [gk, gk, gk], 1);
     }
     for (const id in this.meshes) { this.meshes[id].body.count = counts[id]; this.meshes[id].glow.count = counts[id]; }
+    this.aura.count = na; this.bubble.count = nb;
   }
 
   clear() {
-    this.list = []; this.pending = []; this.blasts = []; this.guardian = null; this.mids = [];
+    this.list = []; this.pending = []; this.blasts = []; this.guardian = null; this.mids = []; this.tracks = []; this.strikes = [];
     this.hazards.flush();
     if (this.boss) { this.game.scene.remove(this.boss.mech.root); this.boss = null; }
     this.warn.visible = false;
