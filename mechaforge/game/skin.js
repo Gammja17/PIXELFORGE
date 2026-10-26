@@ -89,6 +89,8 @@ export function applySkin() {
   set('--plate-dark', plate({ metal: '#363844', fill: '#101116', rivets: true, seed: 3 }));
   set('--plate-press', plate({ fill: '#22242d', groove: '#ffc93d', pressed: true, seed: 4 }));
   set('--plate-gold', plate({ metal: '#565865', fill: '#f2bd2c', groove: '#6b4a08', hazard: true, seed: 5 }));
+  set('--plate-alert', plate({ metal: '#7d2a34', fill: '#1c0f13', groove: '#ff5468', rivets: true, seed: 6 }));
+  set('--plate-od', plate({ metal: '#7a4a22', fill: '#1d130b', groove: '#ff8a2a', rivets: true, seed: 7 }));
   set('--inset', inset({}));
   set('--inset-lit', inset({ fill: '#1d1a10', lit: '#ffc93d' }));
   set('--btn-atk', round('#ffc93d')); set('--btn-atk-on', round('#ffc93d', true));

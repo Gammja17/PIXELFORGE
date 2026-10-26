@@ -81,6 +81,7 @@ export const PIX = {
   boss:    ['p.p.p.p.p.', 'ppppppppp.', 'p#ppppp#p.', 'ppppppppp.', '.ppp.ppp..', '.p.p.p.p..', '..........', '..........', '..........', '..........'],
   heal:    ['....gg....', '....gg....', '..gggggg..', '..gggggg..', '....gg....', '....gg....', '..........', '..........', '..........', '..........'],
   xp:      ['....g.....', '...ggg....', '..ggggg...', '.ggg#ggg..', '..ggggg...', '...ggg....', '....g.....', '..........', '..........', '..........'],
+  heart:   ['.rr...rr..', 'r#rr.rrrr.', 'r#rrrrrrr.', 'rrrrrrrrr.', '.rrrrrrr..', '..rrrrr...', '...rrr....', '....r.....', '..........', '..........'],
 };
 const pixCache = new Map();
 export function pixIcon(name, u = 4) {
