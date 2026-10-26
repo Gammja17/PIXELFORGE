@@ -16,7 +16,7 @@ const css = (c, a = 1) => `rgba(${c.map((v) => Math.round(Math.min(1, v) * 255))
 
 // 바닥 테두리: 네 모서리 ㄱ자 브래킷 (드롭이 뭔지 색으로 구분)
 function bracketGeo() {
-  const g = new Geometry(), h = 0.7, L = 0.34, w = 0.07;
+  const g = new Geometry(), h = 0.7, L = 0.4, w = 0.13;
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
     g.merge(Geometry.box(L, 0.04, w), { position: [sx * (h - L / 2), 0, sz * h] });
     g.merge(Geometry.box(w, 0.04, L), { position: [sx * h, 0, sz * (h - L / 2)] });
@@ -61,7 +61,7 @@ export class Pickups {
     // 이미 최대 레벨이거나 자리가 없는 부품은 떨어뜨리지 않는다 (줍자마자 분해 → 경험치로 기체만 계속 커지던 문제)
     if (!g.salvageChoice(kind, id, this.parts.filter((q) => q.kind === kind && q.id === id).length)) return;
     const node = g.scene.add(partPreview(kind, id, g.player.loadout.paint));
-    const beam = g.scene.add(new Mesh(Geometry.cylinder(0.05, 0.05, 1, 5, [1, 0.8, 0.3]), new Material({ emissive: 1, outline: false, castShadow: false, opacity: 0.5 })));
+    const beam = g.scene.add(new Mesh(Geometry.cylinder(0.11, 0.11, 1, 6, [1, 0.8, 0.3]), new Material({ emissive: 1, outline: false, castShadow: false, opacity: 0.5 })));
     const a = Math.random() * 6.28;
     this.parts.push({ kind, id, x, z, y: 1.2, vx: Math.cos(a) * 3, vz: Math.sin(a) * 3, vy: 7, t: 0, node, beam, spin: (Math.random() - 0.5) * 14 });
     const name = kind === 'weapon' ? WEAPONS[id].name : MODULES[id].name;
@@ -166,19 +166,35 @@ export class Pickups {
     this.frameMesh.dirty = true;
   }
 
-  // 오버레이: 드롭 위에 테두리 있는 이름표 (무기/모듈/상자 구분). project(p) → [디바이스 x, y] | null
+  // 오버레이: 드롭을 화면에서 굵은 테두리(네 모서리 ㄱ자)로 감싸고 위에 이름표 (무기/모듈/상자 구분).
+  //  project(p) → [디바이스 x, y] | null, px: 도트 1칸 (디바이스 픽셀)
   drawLabels(ctx, project, px) {
     const g = this.game;
     if (g.state !== 'play' && g.state !== 'install') return;
-    const fs = Math.round(px * 5.5);
+    const fs = Math.round(px * 8);
     ctx.font = `bold ${fs}px system-ui, sans-serif`;
     ctx.textBaseline = 'middle';
-    const tag = (pt, text, color, badge) => {
-      const s = project(pt);
-      if (!s) return;
+    const t = g.time || 0;
+    // 테두리: 검은 외곽 → 색 → 안쪽 옅은 색 채움. big = 상자/코어/노획 부품
+    const box = (s, color, big) => {
+      const H = Math.round(px * (big ? 15 : 10) * (1 + Math.sin(t * 6) * 0.07)), L = Math.round(H * 0.6), T = Math.round(px * 2);
+      const x0 = Math.round(s[0] - H), y0 = Math.round(s[1] - H), x1 = Math.round(s[0] + H), y1 = Math.round(s[1] + H);
+      ctx.fillStyle = css(color, 0.14); ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+      // 두 점 사이 사각형 (o 만큼 부풀림)
+      const rect = (ax, ay, bx, by, o) => ctx.fillRect(Math.min(ax, bx) - o, Math.min(ay, by) - o, Math.abs(bx - ax) + o * 2, Math.abs(by - ay) + o * 2);
+      for (const [o, c] of [[px, '#0b0910'], [0, css(color)]]) {
+        ctx.fillStyle = c;
+        for (const [cx, sx] of [[x0, 1], [x1, -1]]) for (const [cy, sy] of [[y0, 1], [y1, -1]]) {
+          rect(cx, cy, cx + sx * L, cy + sy * T, o); // 가로
+          rect(cx, cy, cx + sx * T, cy + sy * L, o); // 세로
+        }
+      }
+      return y0 - px * 2;
+    };
+    const tag = (s, top, text, color, badge) => {
       const bw = badge ? ctx.measureText(badge).width + px * 3 : 0;
       const tw = ctx.measureText(text).width, w = Math.round(tw + bw + px * 6), h = Math.round(fs + px * 4);
-      const x = Math.round(s[0] - w / 2), y = Math.round(s[1] - h);
+      const x = Math.round(s[0] - w / 2), y = Math.round(top - h - px * 2);
       // 어두운 판 + 색 테두리 2겹 (도트 느낌으로 모서리만 깎음)
       ctx.fillStyle = '#120f18';
       ctx.fillRect(x - px, y, w + px * 2, h); ctx.fillRect(x, y - px, w, h + px * 2);
@@ -194,8 +210,12 @@ export class Pickups {
       // 아래로 꼬리 (가리키는 대상)
       ctx.fillStyle = css(color); ctx.fillRect(Math.round(s[0] - px), y + h, px * 2, px * 2);
     };
-    for (const q of this.parts) tag([q.x, q.y + 1.6, q.z], q.label, PART_COLORS[q.kind], q.badge);
-    for (const it of this.items) if (!(it.t > 25 && Math.sin(it.t * 20) < 0)) tag([it.x, it.y + 1.1, it.z], ITEM_NAMES[it.kind], ITEM_COLORS[it.kind]);
+    for (const q of this.parts) { const s = project([q.x, q.y + 0.3, q.z]); if (s) tag(s, box(s, PART_COLORS[q.kind], true), q.label, PART_COLORS[q.kind], q.badge); }
+    for (const it of this.items) {
+      if (it.t > 25 && Math.sin(it.t * 20) < 0) continue;
+      const s = project([it.x, it.y + 0.1, it.z]), big = it.kind === 'crate' || it.kind === 'core';
+      if (s) tag(s, box(s, ITEM_COLORS[it.kind], big), ITEM_NAMES[it.kind], ITEM_COLORS[it.kind]);
+    }
   }
 
   clear() { for (const q of this.parts || []) { this.game.scene.remove(q.node); this.game.scene.remove(q.beam); } this.parts = []; this.gems = []; this.items = []; this.gemMesh.count = 0; this.itemMesh.count = 0; this.frameMesh.count = 0; }

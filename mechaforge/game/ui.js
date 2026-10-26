@@ -547,7 +547,13 @@ function start() {
 
   // ---- 마우스: 커서 방향 조준, 왼쪽 버튼 공격, 오른쪽 버튼 특수기 ----
   const canvas = $('view');
-  let mx = 0, my = 0, mouseT = -10;
+  let mx = 0, my = 0, mouseT = -10, mouseMode = false, inside = false, lastCur = null;
+  // 게임 중 커서: 어느 배경에서도 보이는 굵은 조준경 (흰 테 + 검은 외곽 + 주황 중심)
+  const CROSS = (() => {
+    const ring = (c, w) => `<circle cx="16" cy="16" r="9" fill="none" stroke="${c}" stroke-width="${w}"/><path d="M16 1v8M16 23v8M1 16h8M23 16h8" stroke="${c}" stroke-width="${w}"/>`;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" shape-rendering="crispEdges">${ring('#000', 5)}${ring('#fff', 2)}<rect x="14" y="14" width="4" height="4" fill="#ff8a1e" stroke="#000"/></svg>`;
+    return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 16 16, crosshair`;
+  })();
   const updateAim = () => {
     const cam = engine.camera, p = game.player;
     const ray = cam.screenRay(mx, my, canvas.clientWidth, canvas.clientHeight, engine.scale, engine.dpr);
@@ -555,20 +561,25 @@ function start() {
     const hx = ray.origin[0] + ray.dir[0] * t, hz = ray.origin[2] + ray.dir[2] * t;
     p.mouseYaw = Math.atan2(hx - p.x, hz - p.z);
   };
-  canvas.addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse') { mx = e.offsetX; my = e.offsetY; mouseT = performance.now(); } });
+  canvas.addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse') { mx = e.offsetX; my = e.offsetY; mouseT = performance.now(); inside = true; } });
   canvas.addEventListener('pointerdown', (e) => {
     if (game.state === 'install') { game.installer.skip(); return; }
     if (e.pointerType !== 'mouse') return;
-    mx = e.offsetX; my = e.offsetY; mouseT = performance.now();
+    mx = e.offsetX; my = e.offsetY; mouseT = performance.now(); inside = true; mouseMode = true;
     if (e.button === 0) { game.btn.attack = true; game.btn.attackPressed = true; }
     if (e.button === 2) game.btn.special = true;
   });
   addEventListener('pointerup', (e) => { if (e.pointerType === 'mouse' && e.button === 0) game.btn.attack = false; });
-  canvas.addEventListener('pointerleave', () => { mouseT = -10; });
+  canvas.addEventListener('pointerleave', () => { mouseT = -10; inside = false; });
   const prevUpdate = engine.onUpdate;
   engine.onUpdate = (dt, t) => {
-    const p = game.player;
-    p.mouseActive = !coarse && game.state === 'play' && performance.now() - mouseT < 2500;
+    const p = game.player, inp = engine.input;
+    // 마우스로 공격하면 커서가 화면 안에 있는 동안 계속 마우스 조준 (가만히 쏘고 있어도 방향이 안 튐).
+    // 키보드(J/K)로 공격하면 자동 조준으로 돌아가고, 그때는 최근에 마우스를 움직였을 때만 마우스 조준
+    if (inp.pressed('j') || inp.pressed('k')) mouseMode = false;
+    p.mouseActive = !coarse && game.state === 'play' && (mouseMode ? inside : performance.now() - mouseT < 2500);
+    const cur = !coarse && (game.state === 'play' || game.state === 'install') ? CROSS : '';
+    if (cur !== lastCur) { canvas.style.cursor = lastCur = cur; } // 격납고(grab)는 CSS 커서 그대로
     if (p.mouseActive) updateAim();
     prevUpdate(dt, t);
   };

@@ -2,6 +2,7 @@
 
 import { Mesh, Material, Geometry, dampAngle } from '../engine/index.js';
 import { LEGS, FRAMES, HEADS, buildMech, animateMech } from './parts.js';
+import { WEAPONS, lvOf } from './weapons.js';
 
 // 스탯 업그레이드 (외형 변화 없음 → 드론 튜닝 연출)
 export const STAT_UPS = {
@@ -174,6 +175,49 @@ export class Player {
     if (X > 0.5 && Math.random() < 0.5) fx.sparks.emit({ position: [this.x - Math.sin(this.yaw) * 0.4 * this.size, 1.5 * this.size, this.z - Math.cos(this.yaw) * 0.4 * this.size], velocity: [(Math.random() - 0.5) * 2, 3, (Math.random() - 0.5) * 2], life: 0.35, size: 2, sizeEnd: 1, color: [1, 0.8, 0.3], colorEnd: [1, 0.2, 0.1], emissive: 1, gravity: -0.3 });
     // 변형 순간: 몸이 살짝 움찔
     if (this.transformT > 0) { const t = this.transformT / 0.35; m.upper.position[1] += Math.sin(t * Math.PI) * 0.12; }
+  }
+
+  // ---- 조준 가이드: 주무장이 실제로 닿는 범위를 바닥에 그린다 ----
+  //  부채꼴 무기(화염, 베기, 채찍) = 양쪽 테두리 + 끝 호, 총/빔 = 화살표 한 줄. 쏘는 중엔 더 밝게
+  updateAimGuide() {
+    const g = this.game, st = this.stats;
+    if (!this.guide) {
+      this.guide = [];
+      for (let i = 0; i < 14; i++) { const m = g.scene.add(new Mesh(Geometry.box(1, 1, 1, [1, 1, 1]), new Material({ emissive: 1, outline: false, castShadow: false }))); m.visible = false; this.guide.push(m); }
+    }
+    let n = 0;
+    const bar = (x0, z0, x1, z1, w, col, op) => {
+      const m = this.guide[n++]; if (!m) return;
+      const dx = x1 - x0, dz = z1 - z0, len = Math.hypot(dx, dz);
+      m.position = [(x0 + x1) / 2, 0.08, (z0 + z1) / 2]; m.rotation = [0, Math.atan2(dx, dz), 0]; m.scale = [w, 0.03, len];
+      m.material.color = col.map((c) => c * op); m.visible = true; // 반투명은 디더링으로 점선이 돼서 밝기로 조절
+    };
+    const show = g.state === 'play' && this.mode !== 'snipe'; // 저격 모드는 자체 조준선
+    const w = g.weapons.primary;
+    if (show) {
+      const L = w ? lvOf(w) : null, W = w ? WEAPONS[w.id] : null;
+      const yaw = this.attackYaw(W ? W.range * st.rangeMul : 4);
+      const firing = g.ctl?.attack || g.weapons.swingLock > 0;
+      const col = this.mouseActive ? [1, 0.6, 0.15] : [0.5, 0.9, 1], op = firing ? 1.1 : 0.6;
+      const x = this.x, z = this.z, r0 = this.r + 0.3;
+      let reach, half;
+      if (!w) { reach = 1.9 * st.areaMul; half = 0.95; }                                       // 주먹
+      else if (L.cone) { reach = W.range * st.rangeMul * (L.far || 1); half = (L.cone * st.areaMul) / 2; } // 화염
+      else if (L.arc && L.reach) { reach = L.reach * st.rangeMul; half = L.arc / 2; }          // 채찍
+      else if (L.arc) { reach = L.radius * st.areaMul; half = Math.min(3.1, L.arc / 2); }      // 사벨
+      if (reach) {
+        const pt = (a, r) => [x + Math.sin(a) * r, z + Math.cos(a) * r];
+        for (const s of [-1, 1]) { const a = pt(yaw + s * half, r0), b = pt(yaw + s * half, reach); bar(a[0], a[1], b[0], b[1], 0.16, col, op); }
+        const seg = Math.max(3, Math.min(10, Math.round(half * 4)));
+        for (let i = 0; i < seg; i++) { const a = pt(yaw - half + (2 * half * i) / seg, reach), b = pt(yaw - half + (2 * half * (i + 1)) / seg, reach); bar(a[0], a[1], b[0], b[1], 0.16, col, op); }
+      } else {
+        // 총/빔: 6칸까지 가는 화살표
+        const len = Math.min(6, W.range * st.rangeMul), [ex, ez] = [x + Math.sin(yaw) * len, z + Math.cos(yaw) * len];
+        bar(x + Math.sin(yaw) * r0, z + Math.cos(yaw) * r0, ex, ez, 0.12, col, op);
+        for (const s of [-1, 1]) bar(ex, ez, ex - Math.sin(yaw + s * 0.5) * 0.7, ez - Math.cos(yaw + s * 0.5) * 0.7, 0.16, col, op);
+      }
+    }
+    for (let i = n; i < this.guide.length; i++) this.guide[i].visible = false;
   }
 
   // ---- 오버드라이브 ----
@@ -375,6 +419,7 @@ export class Player {
     m.upper.position[1] = this.upperY;
     m.upper.position[2] = -this.recoil * 0.12;
     this.applyModePose?.(dt);
+    this.updateAimGuide();
     for (const w of g.weapons.list) {
       const si = m.slotInfo[w.slot];
       if (si && w.id !== 'saber') si.inner.position[2] = -(w.kick || 0) * 0.5;
