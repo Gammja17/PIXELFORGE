@@ -267,17 +267,21 @@ export class Game {
   }
 
   // 노획 부품 줍기 → 무기/모듈로 장착 (이미 있으면 레벨 업, 못 달면 경험치로 분해)
-  salvageInstall(kind, id, from) {
+  // 노획 부품을 장착할 수 있으면 카드 정보, 꽉 찼으면 null. pending: 바닥에 이미 떨어져 있는 같은 부품 수
+  salvageChoice(kind, id, pending = 0) {
     const p = this.player, ws = this.weapons.list;
-    let c = null;
     if (kind === 'weapon') {
       const W = WEAPONS[id], own = ws.find((w) => w.id === id);
-      if (own) { if (own.level < W.levels.length) c = { kind: 'weapon', id, level: own.level + 1, name: W.name }; }
-      else { const slot = freeSlot(ws, W.prefer); if (slot && ws.filter((w) => w.id !== 'funnel').length < 5) c = { kind: 'weapon', id, level: 1, isNew: true, slot, name: W.name }; }
-    } else {
-      const M = MODULES[id], lv = p.loadout.modules[id] || 0;
-      if (lv < M.max) c = { kind: 'module', id, level: lv + 1, isNew: !lv, name: M.name };
+      if (own) return !own.evo && own.level + pending < W.levels.length ? { kind: 'weapon', id, level: own.level + 1, name: W.name } : null;
+      const slot = freeSlot(ws, W.prefer);
+      return !pending && slot && ws.filter((w) => w.id !== 'funnel').length < 5 ? { kind: 'weapon', id, level: 1, isNew: true, slot, name: W.name } : null;
     }
+    const M = MODULES[id], lv = p.loadout.modules[id] || 0;
+    return lv + pending < M.max ? { kind: 'module', id, level: lv + 1, isNew: !lv, name: M.name } : null;
+  }
+  salvageInstall(kind, id, from) {
+    const p = this.player;
+    const c = this.salvageChoice(kind, id);
     if (!c) { this.addXp(this.xpNeed * 0.35); p.heal(p.stats.maxHp * 0.15); this.ui.toast('장착할 자리가 없어 분해: 경험치 + 수리'); this.sfx.play('crate'); return; }
     const r = applyChoice(this, c);
     this.state = 'install';
@@ -462,6 +466,7 @@ export class Game {
     if (o.width !== c.width || o.height !== c.height) { o.width = c.width; o.height = c.height; }
     ctx.clearRect(0, 0, o.width, o.height);
     const px = Math.max(2, Math.round(2 * this.engine.dpr));
+    this.pickups.drawLabels(ctx, (q) => this.project(q), px);
     this.fx.drawNumbers(ctx, (q) => { const s = this.project(q); return s && s[0] > -50 && s[1] > -50 && s[0] < c.width + 50 && s[1] < c.height + 50 ? s : null; }, px);
   }
 

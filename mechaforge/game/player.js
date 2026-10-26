@@ -86,6 +86,7 @@ export class Player {
     const visible = this.mech ? this.mech.root.visible : true;
     if (this.mech) sc.remove(this.mech.root);
     this.mech = buildMech(this.loadout);
+    this.upperY = this.mech.upper.position[1]; // 변형 움찔이 누적되지 않게 기준 높이 기억
     this.mech.root.visible = visible;
     sc.add(this.mech.root);
     this.hidden = [];
@@ -363,12 +364,14 @@ export class Player {
     this.place();
     const c = Math.cos(this.yaw), s = Math.sin(this.yaw);
     const fwd = (this.vx * s + this.vz * c) / 10, side = (this.vx * c - this.vz * s) / 10;
+    m.body.rotation[0] = m.body.rotation[2] = 0; // 궤도 등은 animateMech 가 기울기를 안 지워서 대시 숙임이 누적됨
     animateMech(m, this.anim, { move: moveK, dt, t: g.time, legs: this.loadout.legs, aimRel: this.aimYaw - this.yaw, lean: [fwd * 0.25, side * 0.25] });
     // 대시: 앞으로 확 숙였다가 복귀 / 사격 반동: 상체가 뒤로 젖혀짐
     this.dashLean = Math.max(0, (this.dashLean || 0) - dt * 4);
     this.recoil = Math.max(0, (this.recoil || 0) - dt * 5);
     m.body.rotation[0] += this.dashLean * 0.55;
     m.upper.rotation[0] = -this.recoil * 0.5;
+    m.upper.position[1] = this.upperY;
     m.upper.position[2] = -this.recoil * 0.12;
     this.applyModePose?.(dt);
     for (const w of g.weapons.list) {
