@@ -170,7 +170,7 @@ export class Game {
     }, 260);
   }
 
-  zoneMusic() { const R = this.rooms; if (R.reward === 'boss') this.sfx.music('level2', 1.08); else this.sfx.music({ desert: 'level1', factory: 'level2', crystal: 'level3' }[R.zone] || 'level1'); }
+  zoneMusic() { const R = this.rooms; if (R.reward === 'boss') this.sfx.music('level2', 1.08); else this.sfx.music(...(ZONES[R.zone]?.music || ['level1'])); }
 
   // ---- 진행 ----
   addXp(v) {
