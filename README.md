@@ -6,6 +6,7 @@
 ## 바로 실행하기
 
 - `dist/island.html` 을 더블클릭하면 데모가 열립니다. (인터넷 없어도 됨). 웹에서 바로 하려면 https://gammja17.github.io/PIXELFORGE/
+- 메카포지 (메카 로그라이크) 바로 하기: https://gammja17.github.io/PIXELFORGE/mechaforge/dist/mecha.html
 - 코드를 고치면서 보려면:
   ```bash
   npm run dev      # http://localhost:3000/island-dev.html 열기 (ES 모듈 그대로 로드)

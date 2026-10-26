@@ -2,6 +2,8 @@
 
 하데스식 직접 조작 전투 + 뱀서식 물량전. 고철을 주워 부품을 붙이며 기체가 점점 거대해진다.
 
+**웹에서 바로 하기: https://gammja17.github.io/PIXELFORGE/mechaforge/dist/mecha.html**
+
 ## 실행 / 빌드
 - `dist/mecha.html` 더블클릭 (단일 파일, 사운드 포함)
 - `node tools/pack-audio.mjs` (사운드 에셋을 바꿨을 때만) → `node build.mjs`
