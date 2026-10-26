@@ -267,6 +267,108 @@ export const WEAPON_MODELS = {
     cbox(g, 0.5, 0.36, 0.2, STEEL, [0, 0.2, 0]);
     return { geo: g, muzzle: [0, 0.5, 0] };
   },
+  // ---- 시작 무기 (추가) ----
+  flamer: (P) => {
+    const g = new Geometry();
+    cbox(g, 0.26, 0.26, 0.5, STEEL, [0, 0, 0.1]);
+    zcyl(g, 0.12, 0.42, [0.75, 0.3, 0.2], [-0.02, 0.2, -0.08], 6);           // 연료 탱크
+    zcyl(g, 0.07, 0.5, DARK, [0, 0, 0.55], 6);
+    zcyl(g, 0.11, 0.1, P.acc, [0, 0, 0.82], 6);
+    const glow = new Geometry();
+    zcyl(glow, 0.05, 0.06, [1, 0.6, 0.2], [0, 0, 0.9], 5);
+    return { geo: g, glow, muzzle: [0, 0, 0.92] };
+  },
+  rod: (P) => {
+    const g = new Geometry();
+    cbox(g, 0.26, 0.3, 0.3, P.main, [0, 0.06, 0.02]);
+    zcyl(g, 0.07, 0.3, GREY, [0, 0, 0.2]);
+    const glow = new Geometry();
+    for (let i = 0; i < 4; i++) add(glow, box(0.08, 0.08, 0.22, [1, 0.55, 0.15]), [0, -0.04 - i * 0.02, 0.42 + i * 0.2], [0.12 * i, 0, 0]);  // 늘어진 마디
+    return { geo: g, glow, muzzle: [0, 0, 0.5] };
+  },
+  // ---- 런 무기 ----
+  saw: (P) => {
+    const g = new Geometry();
+    cbox(g, 0.24, 0.24, 0.3, STEEL, [0, 0, 0]);
+    add(g, Geometry.cylinder(0.3, 0.3, 0.05, 10, GREY), [0, 0.13, 0.1]);
+    for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; add(g, box(0.1, 0.05, 0.12, [0.85, 0.87, 0.9]), [Math.sin(a) * 0.3, 0.13, 0.1 + Math.cos(a) * 0.3], [0, a + 0.5, 0]); }
+    cbox(g, 0.12, 0.08, 0.12, P.acc, [0, 0.2, 0.1]);
+    return { geo: g, muzzle: [0, 0.15, 0.1] };
+  },
+  tesla: (P) => {
+    const g = new Geometry();
+    cbox(g, 0.34, 0.16, 0.34, DARK, [0, 0.08, 0]);
+    for (let i = 0; i < 3; i++) add(g, Geometry.cylinder(0.14 - i * 0.02, 0.14 - i * 0.02, 0.06, 8, [0.8, 0.55, 0.3]), [0, 0.18 + i * 0.12, 0]); // 구리 코일
+    add(g, Geometry.cylinder(0.04, 0.05, 0.5, 5, GREY), [0, 0.16, 0]);
+    const glow = new Geometry();
+    add(glow, Geometry.icosphere(0.1, 0, [0.6, 0.9, 1]), [0, 0.7, 0]);
+    return { geo: g, glow, muzzle: [0, 0.7, 0] };
+  },
+  mine: (P) => {
+    const g = new Geometry();
+    cbox(g, 0.3, 0.34, 0.4, P.sub, [0, 0, -0.02]);
+    for (let i = 0; i < 3; i++) add(g, Geometry.cylinder(0.11, 0.11, 0.05, 6, [0.36, 0.38, 0.32]), [0.16, -0.12 + i * 0.1, -0.02], [0, 0, -Math.PI / 2]);
+    cbox(g, 0.2, 0.1, 0.12, DARK, [0, -0.18, 0.18]);
+    cbox(g, 0.32, 0.05, 0.42, P.acc, [0, 0.18, -0.02]);
+    return { geo: g, muzzle: [0, -0.2, 0.2] };
+  },
+  disc: (P) => {
+    const g = new Geometry();
+    cbox(g, 0.18, 0.4, 0.3, STEEL, [0, 0.1, -0.05]);
+    add(g, Geometry.cylinder(0.32, 0.32, 0.05, 10, [0.55, 0.95, 1]), [0.1, 0.1, 0], [0, 0, Math.PI / 2]);
+    add(g, Geometry.cylinder(0.12, 0.12, 0.07, 6, DARK), [0.12, 0.1, 0], [0, 0, Math.PI / 2]);
+    cbox(g, 0.2, 0.06, 0.32, P.trim, [0, 0.33, -0.05]);
+    return { geo: g, muzzle: [0.1, 0.1, 0.3] };
+  },
+  stomp: (P) => {
+    const g = new Geometry();
+    cbox(g, 0.3, 0.26, 0.34, P.main, [0, 0.05, 0]);
+    add(g, Geometry.cylinder(0.08, 0.08, 0.5, 6, GREY), [0, -0.5, 0.04]);                 // 피스톤
+    add(g, Geometry.cylinder(0.2, 0.22, 0.12, 6, DARK), [0, -0.6, 0.04]);
+    cbox(g, 0.32, 0.06, 0.36, P.acc, [0, 0.2, 0]);
+    return { geo: g, muzzle: [0, -0.6, 0.04] };
+  },
+  gravity: (P) => {
+    const g = new Geometry();
+    cbox(g, 0.5, 0.3, 0.24, STEEL, [0, 0.15, 0]);
+    for (const s of [-1, 1]) add(g, box(0.06, 0.5, 0.06, P.sub), [s * 0.22, 0.3, 0], [0, 0, -s * 0.35]);
+    const glow = new Geometry();
+    add(glow, Geometry.icosphere(0.14, 1, [0.75, 0.45, 1]), [0, 0.7, 0]);
+    return { geo: g, glow, muzzle: [0, 0.7, 0] };
+  },
+  gauss: (P) => {
+    const g = new Geometry();
+    cbox(g, 0.3, 0.26, 0.5, P.sub, [0, 0.12, -0.1]);
+    for (const s of [-1, 1]) cbox(g, 0.06, 0.08, 1.2, STEEL, [s * 0.09, 0.14, 0.6]);       // 레일 2줄
+    for (let i = 0; i < 3; i++) cbox(g, 0.28, 0.04, 0.06, P.acc, [0, 0.2, 0.25 + i * 0.3]);
+    const glow = new Geometry();
+    cbox(glow, 0.06, 0.04, 1.0, [1, 0.85, 0.35], [0, 0.14, 0.62]);
+    return { geo: g, glow, muzzle: [0, 0.14, 1.2] };
+  },
+  turret: (P) => {
+    const g = new Geometry();
+    add(g, Geometry.cylinder(0.28, 0.32, 0.18, 8, STEEL), [0, 0.2, 0]);
+    cbox(g, 0.3, 0.2, 0.34, P.main, [0, 0.48, 0]);
+    zcyl(g, 0.06, 0.4, DARK, [0, 0.48, 0.32], 6);
+    const glow = new Geometry();
+    zcyl(glow, 0.05, 0.06, [1, 0.4, 0.55], [0, 0.48, 0.53], 5);
+    return { geo: g, glow, muzzle: [0, 0.48, 0.55] };
+  },
+  cluster: (P) => {
+    const g = new Geometry();
+    cbox(g, 0.36, 0.22, 0.36, P.sub, [0, 0.1, -0.05]);
+    for (const s of [-1, 1]) add(g, Geometry.cylinder(0.11, 0.11, 0.6, 6, DARK), [s * 0.09, 0.15, -0.05], [0.35, 0, 0]);  // 위로 선 포신 2개
+    cbox(g, 0.38, 0.05, 0.38, P.acc, [0, 0.22, -0.05]);
+    return { geo: g, muzzle: [0, 0.7, 0.16] };
+  },
+  ricochet: (P) => {
+    const g = new Geometry();
+    cbox(g, 0.18, 0.24, 0.4, STEEL, [0, 0, 0.05]);
+    xcyl(g, 0.12, 0.2, P.sub, [0.1, 0.02, 0.18]);                                          // 실린더
+    zcyl(g, 0.05, 0.4, DARK, [0, 0.04, 0.45], 6);
+    cbox(g, 0.12, 0.2, 0.1, [0.5, 0.35, 0.25], [0, -0.16, -0.06]);
+    return { geo: g, muzzle: [0, 0.04, 0.66] };
+  },
 };
 export const funnelBitGeo = (P) => cached('bit' + P.name, () => {
   const g = new Geometry();
@@ -322,8 +424,10 @@ export function moduleGeo(id, level, P, F = FRAMES.standard) {
   return { geo: g, glow, glowColor };
 }
 
-export const SLOT_IDS = ['armR', 'armL', 'shR', 'shL', 'back'];
-export const SLOT_KIND = { armR: 'arm', armL: 'arm', shR: 'shoulder', shL: 'shoulder', back: 'back' };
+export const SLOT_IDS = ['armR', 'armL', 'shR', 'shL', 'back', 'hpR', 'hpL'];
+export const SLOT_KIND = { armR: 'arm', armL: 'arm', shR: 'shoulder', shL: 'shoulder', back: 'back', hpR: 'hip', hpL: 'hip' };
+// 허리 무기 자리: 프레임 표에 없으면 팔 위치에서 계산 (허리 옆, 약간 뒤)
+const slotPos = (F, s) => F.slots[s] || (s === 'hpR' || s === 'hpL' ? [(s === 'hpR' ? 1 : -1) * F.slots.armR[0] * 0.78, 0.16, -0.32] : [0, 0, 0]);
 
 /**
  * 로드아웃으로 메카를 조립한다.
@@ -392,7 +496,7 @@ export function buildMech(loadout) {
 
   // 무기 슬롯
   const slotNodes = {}, slotInfo = {};
-  for (const s of SLOT_IDS) { const n = upper.add(new Node(s)); n.position = [...F.slots[s]]; slotNodes[s] = n; }
+  for (const s of SLOT_IDS) { const n = upper.add(new Node(s)); n.position = [...slotPos(F, s)]; slotNodes[s] = n; }
   const used = new Set();
   for (const w of loadout.weapons || []) {
     const model = cached(key('w-' + w.id), () => WEAPON_MODELS[w.id](P));

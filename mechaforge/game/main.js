@@ -9,7 +9,7 @@ import { Shots, WeaponSystem, WEAPONS, weaponName } from './weapons.js';
 import { Enemies } from './enemies.js';
 import { Pickups } from './pickups.js';
 import { Player } from './player.js';
-import { rollChoices, applyChoice, freeSlot, cardImage } from './upgrades.js';
+import { rollChoices, applyChoice, freeSlot, cardImage, MAX_WEAPONS } from './upgrades.js';
 import { MODULES, LEGS, FRAMES, HEADS } from './parts.js';
 import { Rooms, RUN_ZONES, ZONES } from './rooms.js';
 import { Installer } from './install.js';
@@ -64,6 +64,7 @@ export class Game {
     // 잠긴 부품이 선택돼 있으면 기본값으로
     for (const k of Object.keys(PRICES)) if (!this.meta.isUnlocked(k, this.selection[k])) this.selection[k] = Object.keys(PRICES[k])[0];
     for (const [k, T] of [['legs', LEGS], ['frame', FRAMES], ['head', HEADS], ['weapon', WEAPONS]]) if (!T[this.selection[k]]) this.selection[k] = Object.keys(T)[0];
+    if (!WEAPONS[this.selection.weapon].starter) this.selection.weapon = 'saber';
     this.best = store.get('best2', { depth: 0, win: false });
     this.setSelection(this.selection);
     this.hangarLighting();
@@ -106,6 +107,7 @@ export class Game {
     this.loadout = { legs: sel.legs, frame: sel.frame, head: sel.head, paint: sel.paint, weapons: [{ id: sel.weapon, slot: freeSlot([], W.prefer) }], modules: {} };
     this.weapons.list = this.loadout.weapons.map((w) => ({ ...w, level: 1, cd: 0.4 }));
     this.player.reset(this.loadout);
+    this.weapons.syncBits();
     this.player.buildFlash = 0.3;
     this.player.yaw = this.player.aimYaw = this.turn || 0.6;
   }
@@ -273,7 +275,7 @@ export class Game {
     if (kind === 'weapon') {
       const W = WEAPONS[id], own = ws.find((w) => w.id === id);
       if (own) { if (own.level < W.levels.length) c = { kind: 'weapon', id, level: own.level + 1, name: W.name }; }
-      else { const slot = freeSlot(ws, W.prefer); if (slot && ws.filter((w) => w.id !== 'funnel').length < 5) c = { kind: 'weapon', id, level: 1, isNew: true, slot, name: W.name }; }
+      else { const slot = freeSlot(ws, W.prefer); if (slot && ws.length < MAX_WEAPONS) c = { kind: 'weapon', id, level: 1, isNew: true, slot, name: W.name }; }
     } else {
       const M = MODULES[id], lv = p.loadout.modules[id] || 0;
       if (lv < M.max) c = { kind: 'module', id, level: lv + 1, isNew: !lv, name: M.name };
@@ -337,6 +339,7 @@ export class Game {
     for (let i = 0; i < 10; i++) this.fx.chunk(p.x, 1.2, p.z, p.mech.paint.main, 9);
     p.mech.root.visible = false;
     for (const b of this.weapons.bits) b.mesh.visible = false;
+    this.weapons.hideOrbitals();
     this.slowMo(1.6);
     this.saveBest(false);
   }
@@ -404,7 +407,7 @@ export class Game {
       this.shots.update(simDt);
       this.pickups.update(simDt);
     }
-    if (this.state === 'install') { this.installer.update(dt); p.animate(dt, 0); this.weapons.updateBits(dt); }
+    if (this.state === 'install') { this.installer.update(dt); p.animate(dt, 0); this.weapons.updateBits(dt); this.weapons.updateOrbitals(dt, false); }
     if (this.state === 'dying') { this.dyingT += dt; if (this.dyingT > 1.8) { this.state = 'over'; this.ui.bossBar(0); this.ui.result(this.resultData(false)); } }
     if (this.state === 'play' && this.pendingCrates > 0 && this.hitStopT <= 0) { this.pendingCrates--; this.offerCards('part', '정예 부품 노획'); this.cardKind = 'crate'; }
     if (this.state === 'play' && this.pendingLevels > 0 && this.hitStopT <= 0) { this.cardKind = 'level'; this.offerCards('any'); this.cardKind = 'level'; }
@@ -478,6 +481,15 @@ export class Game {
       level(n) { for (let i = 0; i < n; i++) g.addXp(g.xpNeed - g.xp + 0.01); },
       boss() { g.rooms.depth = g.rooms.last - 1; g.nextRoom('boss', 'E'); },
       guardian(depth = 1) { g.rooms.depth = depth; g.nextRoom('guardian', 'E'); },
+      // 무기 바로 달기/올리기: weapon('saw', 5), weapon('saw', 'evo')
+      weapon(id, lv = 1) {
+        let w = g.weapons.get(id);
+        if (!w) { const slot = freeSlot(g.weapons.list, WEAPONS[id].prefer); if (!slot) return 'no slot'; w = { id, level: 1, slot, cd: 0.3 }; g.weapons.list.push(w); }
+        if (lv === 'evo') { w.level = MAX_LEVEL; w.evo = true; } else w.level = Math.min(MAX_LEVEL, lv);
+        g.player.loadout.weapons = g.weapons.list.map((q) => ({ id: q.id, slot: q.slot, evo: q.evo }));
+        g.player.rebuild(true); g.weapons.syncBits();
+        return w.slot;
+      },
     };
   }
 }

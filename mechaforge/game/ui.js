@@ -14,7 +14,8 @@ const $ = (id) => document.getElementById(id);
 const fmt = (t) => `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
 const css = (c) => `rgb(${c.map((v) => Math.round(v * 255)).join(',')})`;
 const KIND_KO = { weapon: '무기', module: '몸통 부품', stat: '시스템', heal: '정비' };
-const HANGAR_WEAPONS = ['saber', 'mg', 'shotgun', 'laser', 'missile'];
+// 격납고 주무장 = 시작 무기 (런 중에는 고른 것만 강화 카드로 나온다)
+const HANGAR_WEAPONS = ['saber', 'mg', 'shotgun', 'laser', 'missile', 'flamer', 'rod'];
 
 function start() {
   applySkin();
