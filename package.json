@@ -1,0 +1,10 @@
+{
+  "name": "pixelforge",
+  "version": "0.1.0",
+  "description": "로우폴리 3D를 픽셀아트처럼 렌더하는 WebGL2 게임 엔진 (의존성 없음)",
+  "type": "module",
+  "scripts": {
+    "dev": "npx --yes serve .",
+    "build": "node build.mjs"
+  }
+}

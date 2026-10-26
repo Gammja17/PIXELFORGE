@@ -1,0 +1,3041 @@
+<title>PixelForge Island</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Noto+Sans+KR:wght@400;600&display=swap">
+<style>
+  /* 한 화면 게임 UI: 캔버스가 전체를 덮고, 도트 테두리 패널이 위에 뜬다 */
+  :root {
+    --ink: #15131d;
+    --ink-2: #221f2e;
+    --paper: #f3ead8;
+    --muted: #a9a2b8;
+    --accent: #ffcf4a;
+    --accent-ink: #2a2110;
+    --magic: #7b4bd6;
+    --line: #3a3550;
+    --font-pixel: "Silkscreen", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    --font-body: "Noto Sans KR", system-ui, -apple-system, "Apple SD Gothic Neo", sans-serif;
+    color-scheme: dark;
+  }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--ink); color: var(--paper); font-family: var(--font-body); overflow: hidden; }
+  #view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; image-rendering: pixelated; outline: none; }
+
+  .pix { /* 픽셀 계단식 테두리 */
+    background: color-mix(in srgb, var(--ink) 90%, transparent);
+    border: 2px solid var(--paper);
+    box-shadow: 4px 4px 0 0 rgba(0, 0, 0, 0.45);
+  }
+
+  #hud {
+    position: fixed; top: calc(env(safe-area-inset-top, 0px) + 12px); left: calc(env(safe-area-inset-left, 0px) + 12px);
+    padding: 8px 12px 9px; display: grid; gap: 3px; pointer-events: none;
+  }
+  #hud h1 { margin: 0; font-family: var(--font-pixel); font-weight: 700; font-size: 18px; letter-spacing: 0.06em; line-height: 1; }
+  #hud h1 span { color: var(--accent); }
+  #stats { font-family: var(--font-pixel); font-size: 10px; color: var(--muted); letter-spacing: 0.04em; font-variant-numeric: tabular-nums; }
+
+  #topright {
+    position: fixed; top: calc(env(safe-area-inset-top, 0px) + 12px); right: calc(env(safe-area-inset-right, 0px) + 12px);
+    display: flex; gap: 8px; align-items: flex-start;
+  }
+  .seg { display: flex; padding: 3px; gap: 3px; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .seg button {
+    border: 0; background: transparent; padding: 6px 10px; font-family: var(--font-pixel); font-size: 11px; letter-spacing: 0.05em; color: var(--muted);
+  }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+  #gear { width: 40px; height: 38px; border: 2px solid var(--paper); display: grid; place-items: center; padding: 0; }
+  #gear[aria-expanded="true"] { background: var(--accent); color: var(--accent-ink); }
+
+  #panel {
+    position: fixed; top: calc(env(safe-area-inset-top, 0px) + 62px); right: calc(env(safe-area-inset-right, 0px) + 12px);
+    width: min(280px, calc(100vw - 24px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
+    max-height: calc(100% - 140px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); overflow-y: auto;
+    padding: 14px 14px 16px; display: grid; gap: 14px; box-sizing: border-box;
+  }
+  #panel header { display: flex; justify-content: space-between; align-items: center; }
+  #panel h2 { margin: 0; font-family: var(--font-pixel); font-size: 12px; letter-spacing: 0.08em; color: var(--accent); }
+  #panel-close { border: 0; background: none; color: var(--muted); font-size: 18px; line-height: 1; padding: 2px 4px; }
+  .field { display: grid; gap: 6px; }
+  .row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 13px; }
+  .row output, .val { font-family: var(--font-pixel); font-size: 11px; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .toggles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
+  .toggles label, .check { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+  input[type="checkbox"] { appearance: none; width: 16px; height: 16px; margin: 0; border: 2px solid var(--paper); background: transparent; display: grid; place-items: center; flex: none; }
+  input[type="checkbox"]:checked { background: var(--accent); border-color: var(--accent); box-shadow: inset 0 0 0 2px var(--ink); }
+  input[type="range"] { width: 100%; accent-color: var(--accent); margin: 0; }
+  select { font: inherit; font-size: 13px; color: var(--paper); background: var(--ink-2); border: 2px solid var(--line); padding: 6px 8px; border-radius: 0; }
+  .note { margin: 0; font-size: 12px; line-height: 1.55; color: var(--muted); }
+  .divider { height: 2px; background: var(--line); }
+
+  #hint {
+    position: fixed; left: calc(env(safe-area-inset-left, 0px) + 12px); bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+    margin: 0; padding: 6px 10px; font-size: 12px; max-width: calc(100vw - 120px); pointer-events: none;
+  }
+  #actions {
+    position: fixed; right: calc(env(safe-area-inset-right, 0px) + 18px); bottom: calc(env(safe-area-inset-bottom, 0px) + 22px);
+    display: flex; flex-direction: column; align-items: flex-end; gap: 14px;
+  }
+  #actions button {
+    width: 68px; height: 68px; font-family: var(--font-pixel); font-size: 12px; letter-spacing: 0.05em;
+    background: var(--accent); color: var(--accent-ink); border: 2px solid var(--paper); box-shadow: 4px 4px 0 rgba(0,0,0,.45); touch-action: none;
+  }
+  #actions #magic { background: var(--magic); color: var(--paper); width: 76px; height: 76px; }
+  #actions button:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 rgba(0,0,0,.45); }
+  #dots {
+    position: fixed; top: calc(env(safe-area-inset-top, 0px) + 74px); left: calc(env(safe-area-inset-left, 0px) + 12px);
+    display: flex; align-items: center; gap: 2px; padding: 3px;
+  }
+  .dots-label { font-family: var(--font-pixel); font-size: 10px; color: var(--muted); padding: 0 6px 0 5px; letter-spacing: 0.06em; }
+  #dots button { width: 32px; height: 30px; border: 0; background: var(--ink-2); font-size: 18px; line-height: 1; padding: 0; }
+  #dots button:active { background: var(--accent); color: var(--accent-ink); }
+  #dot-val { min-width: 34px; text-align: center; font-family: var(--font-pixel); font-size: 12px; color: var(--accent); font-variant-numeric: tabular-nums; }
+  #stick { position: fixed; left: 0; top: 0; width: 112px; height: 112px; pointer-events: none; border: 2px solid rgba(243,234,216,.6); border-radius: 50%; box-sizing: border-box; display: grid; place-items: center; }
+  #knob { width: 40px; height: 40px; background: rgba(243,234,216,.75); border-radius: 50%; }
+
+  #error { position: fixed; inset: 0; display: grid; place-items: center; padding: 24px; padding-left: max(24px, env(safe-area-inset-left, 0px)); padding-right: max(24px, env(safe-area-inset-right, 0px)); }
+  #error .pix { max-width: 420px; padding: 18px; }
+  #error h2 { margin: 0 0 8px; font-family: var(--font-pixel); font-size: 14px; color: var(--accent); }
+
+  @media (max-width: 520px) {
+    #hud h1 { font-size: 14px; }
+    .seg button { padding: 6px 8px; font-size: 10px; }
+    #hint { font-size: 11px; }
+  }
+  @media (prefers-reduced-motion: reduce) { #actions button:active { transform: none; } }
+</style>
+
+<canvas id="view" tabindex="0" aria-label="PixelForge 데모 화면: 작은 섬을 돌아다니는 캐릭터"></canvas>
+
+<div id="hud" class="pix">
+  <h1>PIXEL<span>FORGE</span></h1>
+  <div id="stats">—</div>
+</div>
+
+<div id="topright">
+  <div class="seg pix" role="group" aria-label="렌더 방식">
+    <button type="button" data-mode="pixel" aria-pressed="true">PIXEL</button>
+    <button type="button" data-mode="raw" aria-pressed="false">RAW 3D</button>
+  </div>
+  <button type="button" id="gear" class="pix" aria-label="설정 열기" aria-expanded="false" aria-controls="panel">
+    <svg width="18" height="18" viewBox="0 0 9 9" shape-rendering="crispEdges" aria-hidden="true"><path fill="currentColor" d="M3 0h3v1h1v1h1v1h1v3H8v1H7v1H6v1H3V8H2V7H1V6H0V3h1V2h1V1h1zm0 3v3h3V3z"/></svg>
+  </button>
+</div>
+
+<section id="panel" class="pix" hidden aria-label="렌더 설정">
+  <header><h2>RENDER SETTINGS</h2><button type="button" id="panel-close" aria-label="설정 닫기">×</button></header>
+
+
+  <div class="field">
+    <div class="row"><label for="hour">시간</label><output id="hour-label">16:36</output></div>
+    <input id="hour" type="range" min="0" max="23.9" step="0.1" value="16.6">
+    <label class="check"><input id="auto" type="checkbox"> 시간 자동으로 흐르기</label>
+  </div>
+
+  <div class="divider" role="presentation"></div>
+
+  <div class="toggles">
+    <label><input id="outline" type="checkbox" checked> 외곽선</label>
+    <label><input id="bloom" type="checkbox" checked> 블룸</label>
+    <label><input id="clouds" type="checkbox" checked> 구름 그림자</label>
+    <label><input id="dither" type="checkbox"> 디더링</label>
+    <label><input id="free-rot" type="checkbox"> 자유 회전</label>
+  </div>
+
+  <div class="field">
+    <div class="row"><label for="palette">팔레트</label></div>
+    <select id="palette">
+      <option value="">자유 색 (제한 없음)</option>
+      <option value="meadow">Meadow 32색</option>
+      <option value="db16">DawnBringer 16색</option>
+      <option value="handheld">휴대용 게임기 4색</option>
+    </select>
+  </div>
+
+  <p class="note">회전은 45° 단위로 넘어가요(자유 회전을 켜면 마음대로 돌릴 수 있지만 도트가 깜빡여요). RAW 3D를 누르면 같은 장면을 픽셀화·외곽선 없이 원래 해상도로 보여줘요. 해 질 무렵(18시 전후)과 밤(21시 이후)에 가로등, 창문, 반딧불이가 켜집니다.</p>
+</section>
+
+<p id="hint" class="pix">WASD 이동 · Space 점프 · F/클릭 마법 · 드래그 또는 Q/E 회전 · 휠 줌</p>
+<div id="dots" class="pix" role="group" aria-label="도트 크기">
+  <span class="dots-label">DOT</span>
+  <button type="button" id="dot-minus" aria-label="도트 작게">−</button>
+  <output id="dot-val" aria-live="polite">×4</output>
+  <button type="button" id="dot-plus" aria-label="도트 크게">+</button>
+</div>
+<div id="actions">
+  <button type="button" id="magic" hidden>MAGIC</button>
+  <button type="button" id="jump" hidden>JUMP</button>
+</div>
+<div id="stick" hidden><div id="knob"></div></div>
+
+<div id="error" hidden>
+  <div class="pix">
+    <h2>렌더러를 시작하지 못했어요</h2>
+    <p class="note" id="error-msg"></p>
+    <p class="note">WebGL2를 지원하는 최신 브라우저(Chrome, Safari 15+, Firefox)에서 다시 열어 주세요.</p>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+const __m = {};
+__m["engine/shaders.js"] = (() => {
+// PixelForge — GLSL 셰이더 모음
+// 렌더 순서:  그림자맵 → 장면(저해상도, MRT: 색+법선+깊이) → 물 → 블룸 → 합성(외곽선/색보정/팔레트) → 업스케일
+
+const HEADER = `#version 300 es
+precision highp float;
+precision highp int;
+`;
+
+// ---------- 공통 조명 ----------
+const LIGHTING = `
+uniform sampler2D uShadowMap;
+uniform mat4 uLightVP;
+uniform vec3 uSunDir;
+uniform vec3 uSunColor;
+uniform vec3 uSkyAmb;
+uniform vec3 uGroundAmb;
+uniform vec3 uFogColor;
+uniform vec2 uFog;
+uniform float uShadowBias;
+uniform float uTime;
+uniform float uClouds;
+#define MAX_POINT 8
+uniform vec4 uPointPos[MAX_POINT];   // xyz 위치, w 반경
+uniform vec4 uPointCol[MAX_POINT];   // rgb 색, a 세기
+uniform int uPointCount;
+
+float hash12(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * .1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+float vnoise(vec2 p){
+  vec2 i = floor(p), f = fract(p);
+  vec2 u = f*f*(3.0-2.0*f);
+  return mix(mix(hash12(i), hash12(i+vec2(1,0)), u.x), mix(hash12(i+vec2(0,1)), hash12(i+vec2(1,1)), u.x), u.y);
+}
+
+float shadowAt(vec3 world, float ndl){
+  vec4 lp = uLightVP * vec4(world, 1.0);
+  vec3 p = lp.xyz / lp.w * 0.5 + 0.5;
+  if (p.x < 0.0 || p.x > 1.0 || p.y < 0.0 || p.y > 1.0 || p.z > 1.0) return 1.0;
+  float bias = uShadowBias * (1.0 + 3.0 * (1.0 - clamp(ndl, 0.0, 1.0)));
+  return p.z - bias > texture(uShadowMap, p.xy).r ? 0.0 : 1.0;
+}
+
+// 구름 그림자: 땅 위를 천천히 흘러가는 큰 얼룩
+float cloudShadow(vec3 world){
+  if (uClouds < 0.5) return 1.0;
+  vec2 q = world.xz * 0.06 + vec2(uTime * 0.025, uTime * 0.012);
+  float n = vnoise(q) * 0.65 + vnoise(q * 2.3 + 7.0) * 0.35;
+  return n > 0.58 ? 0.3 : 1.0;
+}
+
+// 툰 램프: 빛의 양을 3단계로 끊어서 "손으로 칠한" 명암을 만든다
+float toonRamp(float l){ return l > 0.5 ? 1.0 : (l > 0.14 ? 0.6 : 0.0); }
+
+// 점광원 (가로등, 마법 폭발 등) — 거리 감쇠도 3단계로 끊어서 픽셀아트스러운 동심원 빛
+vec3 pointLights(vec3 n, vec3 world){
+  vec3 sum = vec3(0.0);
+  for (int i = 0; i < MAX_POINT; i++) {
+    if (i >= uPointCount) break;
+    vec3 L = uPointPos[i].xyz - world;
+    float d = length(L);
+    float att = clamp(1.0 - d / uPointPos[i].w, 0.0, 1.0);
+    att *= att;
+    float ndl = max(dot(n, L / max(d, 1e-4)), 0.0) * 0.7 + 0.3;
+    float a = att * ndl;
+    a = a > 0.45 ? 1.0 : (a > 0.18 ? 0.55 : (a > 0.04 ? 0.22 : 0.0));
+    sum += uPointCol[i].rgb * uPointCol[i].a * a;
+  }
+  return sum;
+}
+
+vec3 shade(vec3 base, vec3 n, vec3 world){
+  float ndl = dot(n, uSunDir);
+  float sh = ndl > 0.0 ? shadowAt(world, ndl) * cloudShadow(world) : 0.0;
+  float r = toonRamp(max(ndl, 0.0) * sh);
+  vec3 amb = mix(uGroundAmb, uSkyAmb, n.y * 0.5 + 0.5);
+  return base * (amb + uSunColor * r + pointLights(n, world));
+}
+
+// 스크린도어 투명도용 4x4 베이어 임계값
+float bayerL(vec2 p){
+  ivec2 i = ivec2(mod(p, 4.0));
+  int idx = i.x + i.y * 4;
+  const float m[16] = float[16](0.,8.,2.,10.,12.,4.,14.,6.,3.,11.,1.,9.,15.,7.,13.,5.);
+  return (m[idx] + 0.5) / 16.0;
+}
+
+vec3 applyFog(vec3 c, float depth){ return mix(c, uFogColor, smoothstep(uFog.x, uFog.y, depth)); }
+
+vec4 encodeNormal(vec3 worldN, mat4 view, float outline){
+  return vec4(normalize(mat3(view) * worldN) * 0.5 + 0.5, outline);
+}
+`;
+
+// ---------- 일반 메시 ----------
+const SCENE_VS = `
+layout(location=0) in vec3 aPos;
+layout(location=1) in vec3 aNormal;
+layout(location=2) in vec3 aColor;
+layout(location=3) in vec2 aUV;
+#ifdef INSTANCED
+layout(location=4) in mat4 aInst;      // 인스턴스 변환 (4~7)
+layout(location=8) in vec4 aInstColor; // rgb 색, a 발광
+#endif
+uniform mat4 uModel;
+uniform mat4 uView;
+uniform mat4 uViewProj;
+uniform mat3 uNormalMat;
+uniform float uTime;
+uniform float uWind;
+uniform float uEmissive;
+out vec3 vWorld;
+out vec3 vNormal;
+out vec3 vColor;
+out vec2 vUV;
+out float vDepth;
+out float vEmis;
+void main(){
+#ifdef INSTANCED
+  mat4 M = uModel * aInst;
+  vec4 w = M * vec4(aPos, 1.0);
+  vNormal = normalize(mat3(M) * aNormal);
+  vColor = aColor * aInstColor.rgb;
+  vEmis = max(uEmissive, aInstColor.a);
+  vec3 up = normalize(mat3(M) * vec3(0.0, 1.0, 0.0));
+#else
+  vec4 w = uModel * vec4(aPos, 1.0);
+  vNormal = normalize(uNormalMat * aNormal);
+  vColor = aColor;
+  vEmis = uEmissive;
+  vec3 up = vec3(0.0, 1.0, 0.0);
+#endif
+  if (uWind > 0.0) {
+    float h = max(aPos.y, 0.0);
+    vec3 side = normalize(cross(up, vec3(0.3, 0.1, 0.9)) + 1e-4);
+    w.xyz += side * sin(uTime * 1.7 + w.x * 0.5 + w.z * 0.3) * uWind * h;
+  }
+  vWorld = w.xyz;
+  vUV = aUV;
+  vDepth = -(uView * w).z;
+  gl_Position = uViewProj * w;
+}`;
+const sceneVS = HEADER + SCENE_VS;
+const sceneInstVS = HEADER + '#define INSTANCED\n' + SCENE_VS;
+
+const sceneFS = HEADER + LIGHTING + `
+in vec3 vWorld;
+in vec3 vNormal;
+in vec3 vColor;
+in vec2 vUV;
+in float vDepth;
+in float vEmis;
+uniform mat4 uView;
+uniform vec3 uMatColor;
+uniform float uOutline;
+uniform float uRim;       // 1이면 대기 껍질: 가장자리만 디더링으로 보임
+uniform vec3 uViewDir;
+uniform float uUseTex;
+uniform sampler2D uTex;
+uniform float uOpacity;
+layout(location=0) out vec4 oColor;
+layout(location=1) out vec4 oNormal;
+void main(){
+  if (uOpacity < 1.0 && uOpacity < bayerL(gl_FragCoord.xy)) discard; // 디더링 투명
+  vec3 base = uMatColor * vColor;
+  vec3 n = normalize(vNormal);
+  if (!gl_FrontFacing) n = -n;
+  if (uRim > 0.0) {
+    float edge = 1.0 - abs(dot(n, uViewDir));
+    float a = pow(edge, 4.5) * 1.8 * uRim;
+    if (a < bayerL(gl_FragCoord.xy)) discard;
+    float day = clamp(dot(n, uSunDir) * 1.4 + 0.35, 0.08, 1.0);
+    oColor = vec4(base * day, 0.25 * day);
+    oNormal = encodeNormal(n, uView, 0.0);
+    return;
+  }
+  if (uUseTex > 0.5) {
+    vec4 t = texture(uTex, vUV);
+    if (t.a < 0.5) discard;
+    base *= t.rgb;
+    n = normalize(vec3(0.0, 1.0, 0.0) + n * 0.6); // 스프라이트는 위쪽을 보는 것처럼 조명
+  }
+  vec3 lit = shade(base, n, vWorld);
+  lit = mix(lit, base * 1.15, vEmis);
+  oColor = vec4(applyFog(lit, vDepth), vEmis);
+  oNormal = encodeNormal(n, uView, uOutline);
+}`;
+
+// ---------- 그림자맵 (깊이만) ----------
+const SHADOW_VS = `
+layout(location=0) in vec3 aPos;
+layout(location=3) in vec2 aUV;
+#ifdef INSTANCED
+layout(location=4) in mat4 aInst;
+#endif
+uniform mat4 uModel;
+uniform mat4 uLightVP;
+uniform float uTime;
+uniform float uWind;
+out vec2 vUV;
+void main(){
+#ifdef INSTANCED
+  vec4 w = uModel * aInst * vec4(aPos, 1.0);
+#else
+  vec4 w = uModel * vec4(aPos, 1.0);
+#endif
+  if (uWind > 0.0) {
+    float h = max(aPos.y, 0.0);
+    w.x += sin(uTime * 1.7 + w.x * 0.5 + w.z * 0.3) * uWind * h;
+  }
+  vUV = aUV;
+  gl_Position = uLightVP * w;
+}`;
+const shadowVS = HEADER + SHADOW_VS;
+const shadowInstVS = HEADER + '#define INSTANCED\n' + SHADOW_VS;
+
+const shadowFS = HEADER + `
+in vec2 vUV;
+uniform float uUseTex;
+uniform sampler2D uTex;
+void main(){
+  if (uUseTex > 0.5 && texture(uTex, vUV).a < 0.5) discard;
+}`;
+
+// ---------- 잔디 (인스턴싱) ----------
+const grassVS = HEADER + `
+layout(location=0) in vec3 aBlade;
+layout(location=4) in vec3 aOffset;
+layout(location=5) in vec3 aColor;
+layout(location=6) in vec2 aParams; // 높이, 위상
+uniform mat4 uView;
+uniform mat4 uViewProj;
+uniform vec3 uCamRight;
+uniform float uTime;
+uniform float uWidth;
+uniform float uWindStrength;
+uniform vec4 uPushers[4]; // xyz 위치, w 반경
+out vec3 vColor;
+out vec3 vWorld;
+out float vDepth;
+void main(){
+  float h = aParams.x;
+  float t = aBlade.y;
+  vec3 p = aOffset + uCamRight * aBlade.x * uWidth;
+  // 바람: 들판을 가로질러 지나가는 큰 물결 + 잎마다의 작은 떨림
+  float gust = sin(uTime * 1.3 + aOffset.x * 0.35 + aOffset.z * 0.22) * 0.5 + 0.5;
+  vec2 bend = vec2(sin(uTime * 2.1 + aParams.y), cos(uTime * 1.7 + aParams.y)) * 0.08;
+  bend += vec2(0.3, 0.12) * gust * uWindStrength;
+  // 플레이어 근처의 잎은 밀려서 눕는다
+  for (int i = 0; i < 4; i++) {
+    if (uPushers[i].w > 0.0) {
+      vec3 d = aOffset - uPushers[i].xyz;
+      float dist = length(d.xz);
+      float k = (1.0 - smoothstep(0.0, uPushers[i].w, dist)) * step(abs(d.y), 1.5);
+      bend += normalize(d.xz + 1e-4) * k * 1.1;
+    }
+  }
+  p.xz += bend * t * h;
+  p.y += t * h * (1.0 - 0.4 * clamp(length(bend), 0.0, 1.0));
+  vWorld = p;
+  vColor = aColor * mix(0.8, 1.15, t);
+  vDepth = -(uView * vec4(p, 1.0)).z;
+  gl_Position = uViewProj * vec4(p, 1.0);
+}`;
+
+const grassFS = HEADER + LIGHTING + `
+in vec3 vColor;
+in vec3 vWorld;
+in float vDepth;
+uniform mat4 uView;
+layout(location=0) out vec4 oColor;
+layout(location=1) out vec4 oNormal;
+void main(){
+  vec3 n = vec3(0.0, 1.0, 0.0);
+  oColor = vec4(applyFog(shade(vColor, n, vWorld), vDepth), 0.0);
+  oNormal = encodeNormal(n, uView, 0.0);
+}`;
+
+// ---------- 물 ----------
+const waterVS = HEADER + `
+layout(location=0) in vec3 aPos;
+layout(location=1) in vec3 aNormal;
+uniform mat4 uModel;
+uniform mat4 uView;
+uniform mat4 uViewProj;
+uniform float uTime;
+uniform float uWave;
+uniform float uRadial;   // 1이면 구형 바다 (원점 기준 바깥쪽으로 물결)
+out vec3 vWorld;
+out vec3 vNormal;
+out float vDepth;
+void main(){
+  vec3 p = aPos;
+  float w = sin(p.x * 0.6 + uTime * 1.2) * cos(p.z * 0.5 + uTime * 0.9) + 0.5 * sin((p.x + p.y + p.z) * 1.1 - uTime * 1.6);
+  vec3 up = uRadial > 0.5 ? normalize(aPos) : vec3(0.0, 1.0, 0.0);
+  p += up * w * uWave;
+  vec4 wp = uModel * vec4(p, 1.0);
+  vWorld = wp.xyz;
+  vNormal = normalize(mat3(uModel) * (uRadial > 0.5 ? aNormal : vec3(0.0, 1.0, 0.0)));
+  vDepth = -(uView * wp).z;
+  gl_Position = uViewProj * wp;
+}`;
+
+const waterFS = HEADER + LIGHTING + `
+in vec3 vWorld;
+in vec3 vNormal;
+in float vDepth;
+uniform mat4 uView;
+uniform vec3 uViewDir;
+uniform float uWaterEmissive;
+uniform sampler2D uSceneColor;
+uniform sampler2D uSceneDepth;
+uniform vec2 uInvRes;
+uniform float uNear;
+uniform float uFar;
+uniform vec3 uShallow;
+uniform vec3 uDeep;
+uniform vec3 uFoam;
+uniform float uDepthRange;
+uniform float uSunVis;
+layout(location=0) out vec4 oColor;
+layout(location=1) out vec4 oNormal;
+float linD(vec2 uv){ return uNear + texture(uSceneDepth, uv).r * (uFar - uNear); }
+void main(){
+  vec2 suv = gl_FragCoord.xy * uInvRes;
+  vec3 N = normalize(vNormal);
+  float thick = (linD(suv) - vDepth) * abs(dot(N, uViewDir));
+
+  // 물속 굴절: 살짝 일렁이게 (물보다 앞에 있는 물체는 샘플하지 않음)
+  vec2 wob = vec2(sin(vWorld.z * 2.0 + uTime * 2.0), cos(vWorld.x * 2.0 + uTime * 1.7)) * uInvRes * 1.5;
+  vec2 ruv = linD(suv + wob) > vDepth ? suv + wob : suv;
+  vec3 under = texture(uSceneColor, ruv).rgb;
+
+  // 깊이를 4단계로 끊어서 툰 스타일 그라데이션
+  float k = clamp(thick / uDepthRange, 0.0, 1.0);
+  k = floor(k * 4.0 + 0.5) / 4.0;
+  vec3 water = mix(uShallow, uDeep, k);
+  vec3 col = mix(under * mix(vec3(1.0), uShallow, 0.6), water, clamp(0.35 + k * 0.9, 0.0, 1.0));
+
+  float ndl = dot(N, uSunDir);
+  float sh = ndl > 0.0 ? shadowAt(vWorld, 1.0) * cloudShadow(vWorld) : 0.0;
+  float sunVis = clamp(uSunVis, 0.0, 1.0) * (ndl > 0.1 ? 1.0 : (ndl > -0.05 ? 0.5 : 0.0));
+  col *= mix(0.7, 1.0, sh);
+  col *= mix(uSkyAmb * 1.1, vec3(1.0), sunVis);
+  col += uShallow * pointLights(N, vWorld) * 0.8;
+
+  // 반짝임
+  float s = sin(vWorld.x * 5.3 + uTime * 1.5) * sin(vWorld.z * 4.7 - uTime * 1.2) * sin((vWorld.x - vWorld.z) * 2.9 + uTime * 0.8);
+  float sparkle = step(0.8, s) * sh * sunVis;
+
+  // 물가 거품: 얕은 곳 + 바깥쪽 물결선
+  float wave = 0.12 * sin(uTime * 2.0 + vWorld.x * 3.0 + vWorld.z * 2.0);
+  float foam = step(thick, 0.22 + wave);
+  float ring = 0.62 + 0.18 * sin(uTime * 0.9 + vWorld.x * 0.7 + vWorld.z * 0.5);
+  foam = max(foam, step(abs(thick - ring), 0.035) * 0.8);
+  col = mix(col, uFoam * mix(0.7, 1.0, max(sh, uWaterEmissive)), max(foam, sparkle));
+  // 용암처럼 스스로 빛나는 액체
+  float glow = uWaterEmissive * (0.55 + 0.45 * k);
+  col = mix(col, mix(uShallow, uFoam, foam) * 1.1, uWaterEmissive);
+
+  oColor = vec4(applyFog(col, vDepth), max(sparkle * 0.8, glow * 0.6));
+  oNormal = encodeNormal(N, uView, 0.0);
+}`;
+
+// ---------- 파티클 ----------
+const BAYER = `
+float bayer4(vec2 p){
+  ivec2 i = ivec2(mod(p, 4.0));
+  int idx = i.x + i.y * 4;
+  const float m[16] = float[16](0.,8.,2.,10.,12.,4.,14.,6.,3.,11.,1.,9.,15.,7.,13.,5.);
+  return (m[idx] + 0.5) / 16.0;
+}`;
+
+const particleVS = HEADER + `
+layout(location=0) in vec3 aPos;
+layout(location=1) in vec4 aColor;   // rgb, emissive
+layout(location=2) in vec2 aAlphaSize;
+uniform mat4 uModel;
+uniform mat4 uView;
+uniform mat4 uViewProj;
+out vec4 vColor;
+out float vAlpha;
+out float vDepth;
+flat out float vSize;
+void main(){
+  vColor = aColor;
+  vAlpha = aAlphaSize.x;
+  vec4 w = uModel * vec4(aPos, 1.0);
+  vDepth = -(uView * w).z;
+  gl_Position = uViewProj * w;
+  gl_PointSize = max(1.0, floor(aAlphaSize.y + 0.5));
+  vSize = gl_PointSize;
+}`;
+
+const particleFS = HEADER + BAYER + `
+in vec4 vColor;
+in float vAlpha;
+in float vDepth;
+flat in float vSize;
+uniform vec3 uLight;
+uniform vec3 uFogColor;
+uniform vec2 uFog;
+layout(location=0) out vec4 oColor;
+layout(location=1) out vec4 oNormal;
+void main(){
+  if (vAlpha < bayer4(gl_FragCoord.xy)) discard;
+  if (vSize >= 3.0) { vec2 c = gl_PointCoord - 0.5; if (dot(c, c) > 0.2) discard; }
+  vec3 col = mix(vColor.rgb * uLight, vColor.rgb * 1.2, vColor.a);
+  col = mix(col, uFogColor, smoothstep(uFog.x, uFog.y, vDepth));
+  oColor = vec4(col, vColor.a);
+  oNormal = vec4(0.5, 0.5, 1.0, 0.0);
+}`;
+
+// ---------- 후처리 공통 ----------
+const fullscreenVS = HEADER + `
+const vec2 P[3] = vec2[3](vec2(-1.0, -1.0), vec2(3.0, -1.0), vec2(-1.0, 3.0));
+void main(){ gl_Position = vec4(P[gl_VertexID], 0.0, 1.0); }`;
+
+// 발광 성분 추출 (색 * 알파채널=발광량)
+const bloomExtractFS = HEADER + `
+uniform sampler2D uColor;
+uniform vec2 uInvRes;
+out vec4 o;
+void main(){
+  vec2 uv = gl_FragCoord.xy * uInvRes;
+  vec4 c = texture(uColor, uv);
+  o = vec4(c.rgb * c.a, 1.0);
+}`;
+
+const blurFS = HEADER + `
+uniform sampler2D uImage;
+uniform vec2 uInvRes;
+uniform vec2 uDir;
+out vec4 o;
+void main(){
+  vec2 uv = gl_FragCoord.xy * uInvRes;
+  const float w[5] = float[5](0.227, 0.194, 0.122, 0.054, 0.016);
+  vec3 s = texture(uImage, uv).rgb * w[0];
+  for (int i = 1; i < 5; i++) {
+    vec2 o2 = uDir * uInvRes * float(i) * 1.5;
+    s += (texture(uImage, uv + o2).rgb + texture(uImage, uv - o2).rgb) * w[i];
+  }
+  o = vec4(s, 1.0);
+}`;
+
+// 합성: 외곽선 + 하이라이트 + 블룸 + 색보정 + 팔레트/디더링
+const compositeFS = HEADER + BAYER + `
+uniform sampler2D uColor;
+uniform sampler2D uNormal;
+uniform sampler2D uDepth;
+uniform sampler2D uBloom;
+uniform vec2 uInvRes;
+uniform float uNear;
+uniform float uFar;
+uniform float uOutline;
+uniform float uDepthThresh;
+uniform float uOutlineDark;
+uniform float uHighlight;
+uniform float uBloomStrength;
+uniform float uSaturation;
+uniform float uContrast;
+uniform float uVignette;
+uniform vec3 uGrade;
+uniform vec3 uPalette[32];
+uniform int uPaletteSize;
+uniform float uDither;
+uniform float uStars;      // 1이면 배경(깊이 최대)에 별
+uniform vec2 uStarOffset;  // 별 스크롤 (저해상도 픽셀)
+uniform float uTimeC;
+out vec4 o;
+
+float hashS(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * .1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+
+float linD(vec2 uv){ return uNear + texture(uDepth, uv).r * (uFar - uNear); }
+
+void main(){
+  vec2 uv = gl_FragCoord.xy * uInvRes;
+  vec3 col = texture(uColor, uv).rgb;
+  vec4 nm = texture(uNormal, uv);
+
+  if (uOutline > 0.5 && nm.a > 0.5) {
+    float d = linD(uv);
+    vec3 n = nm.xyz * 2.0 - 1.0;
+    float dEdge = 0.0, nEdge = 0.0;
+    vec2 offs[4] = vec2[4](vec2(1, 0), vec2(-1, 0), vec2(0, 1), vec2(0, -1));
+    for (int i = 0; i < 4; i++) {
+      vec2 u2 = uv + offs[i] * uInvRes;
+      float dd = linD(u2) - d;
+      vec4 nm2 = texture(uNormal, u2);
+      vec3 n2 = nm2.xyz * 2.0 - 1.0;
+      // 1) 깊이 경계: 이웃이 훨씬 뒤에 있으면 나는 물체의 실루엣 → 어둡게
+      dEdge = max(dEdge, step(uDepthThresh, dd));
+      // 2) 법선 경계: 볼록한 모서리 한쪽에만 1픽셀 하이라이트 (이웃이 앞에 있으면 무시)
+      float side = smoothstep(-0.01, 0.01, dot(n - n2, vec3(1.0)));
+      nEdge += (1.0 - dot(n, n2)) * side * step(-0.1, dd) * nm2.a;
+    }
+    if (dEdge > 0.0) col *= uOutlineDark;
+    else col *= 1.0 + uHighlight * step(0.32, nEdge);
+  }
+
+  if (uStars > 0.5 && texture(uDepth, uv).r >= 0.99999) {
+    vec2 sp = floor(gl_FragCoord.xy + uStarOffset);
+    float h = hashS(sp);
+    if (h > 0.9965) {
+      float tw = 0.6 + 0.4 * sin(uTimeC * (2.0 + h * 40.0) + h * 100.0);
+      col += vec3(0.85, 0.9, 1.0) * tw * (h > 0.9992 ? 1.0 : 0.55);
+    }
+    // 은하수 같은 흐릿한 띠
+    float band = exp(-pow((sp.y - sp.x * 0.35 - 40.0) / 70.0, 2.0)) * (0.5 + 0.5 * hashS(floor(sp / 3.0)));
+    col += vec3(0.16, 0.12, 0.28) * band * 0.35;
+  }
+  col += texture(uBloom, uv).rgb * uBloomStrength;
+
+  // 색보정
+  float l = dot(col, vec3(0.299, 0.587, 0.114));
+  col = mix(vec3(l), col, uSaturation);
+  col = (col - 0.5) * uContrast + 0.5;
+  col *= uGrade;
+  vec2 q = uv - 0.5;
+  col *= 1.0 - uVignette * dot(q, q) * 1.6;
+  col = clamp(col, 0.0, 1.0);
+
+  // 제한 팔레트 + 베이어 디더링
+  if (uPaletteSize > 0) {
+    col += (bayer4(gl_FragCoord.xy) - 0.5) * uDither;
+    float best = 1e9; vec3 pick = col;
+    for (int i = 0; i < 32; i++) {
+      if (i >= uPaletteSize) break;
+      vec3 d = uPalette[i] - col;
+      float e = dot(d * d, vec3(0.3, 0.59, 0.11));
+      if (e < best) { best = e; pick = uPalette[i]; }
+    }
+    col = pick;
+  } else if (uDither > 0.0) {
+    // 팔레트 없이 디더링만: 채널당 24단계 양자화
+    col = floor(col * 24.0 + bayer4(gl_FragCoord.xy)) / 24.0;
+  }
+  o = vec4(col, 1.0);
+}`;
+
+// 최종 업스케일: 저해상도 이미지를 정수 배율 + 서브픽셀 오프셋으로 화면에 그린다
+const upscaleFS = HEADER + `
+uniform sampler2D uImage;
+uniform sampler2D uPrev;     // 직전 프레임 (회전 중 깜빡임 완화용)
+uniform vec2 uLowSize;
+uniform float uScale;
+uniform vec2 uOffset;        // 여백 + 서브픽셀
+uniform vec2 uPrevOffset;
+uniform float uHistory;      // 0이면 끔
+out vec4 o;
+void main(){
+  vec2 p = gl_FragCoord.xy / uScale;
+  vec4 c = texture(uImage, (p + uOffset) / uLowSize);
+  if (uHistory > 0.0) c = mix(c, texture(uPrev, (p + uPrevOffset) / uLowSize), uHistory);
+  o = c;
+}`;
+
+return { sceneVS, sceneInstVS, sceneFS, shadowVS, shadowInstVS, shadowFS, grassVS, grassFS, waterVS, waterFS, particleVS, particleFS, fullscreenVS, bloomExtractFS, blurFS, compositeFS, upscaleFS };
+})();
+
+__m["engine/gl.js"] = (() => {
+// PixelForge — WebGL2 저수준 헬퍼 (셰이더, 텍스처, 프레임버퍼)
+
+function createProgram(gl, vsSrc, fsSrc, name = 'program') {
+  const compile = (type, src) => {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+      const log = gl.getShaderInfoLog(s);
+      const numbered = src.split('\n').map((l, i) => `${i + 1}: ${l}`).join('\n');
+      throw new Error(`[${name}] 셰이더 컴파일 실패:\n${log}\n${numbered}`);
+    }
+    return s;
+  };
+  const p = gl.createProgram();
+  gl.attachShader(p, compile(gl.VERTEX_SHADER, vsSrc));
+  gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fsSrc));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(`[${name}] 링크 실패: ${gl.getProgramInfoLog(p)}`);
+
+  // 유니폼 위치를 캐시하고 타입에 맞게 세팅하는 래퍼
+  // 샘플러마다 고정된 텍스처 유닛을 배정한다
+  const uniforms = {};
+  const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+  let samplers = 0;
+  gl.useProgram(p);
+  for (let i = 0; i < n; i++) {
+    const info = gl.getActiveUniform(p, i);
+    const key = info.name.replace(/\[0\]$/, '');
+    const u = { loc: gl.getUniformLocation(p, info.name), type: info.type, size: info.size };
+    if (info.type === gl.SAMPLER_2D) { u.unit = samplers++; gl.uniform1i(u.loc, u.unit); }
+    uniforms[key] = u;
+  }
+  return {
+    handle: p,
+    use() { gl.useProgram(p); return this; },
+    has(name) { return !!uniforms[name]; },
+    set(name, v) {
+      const u = uniforms[name];
+      if (!u) return this;
+      const L = u.loc;
+      switch (u.type) {
+        case gl.FLOAT: u.size > 1 ? gl.uniform1fv(L, v) : gl.uniform1f(L, v); break;
+        case gl.FLOAT_VEC2: gl.uniform2fv(L, v); break;
+        case gl.FLOAT_VEC3: gl.uniform3fv(L, v); break;
+        case gl.FLOAT_VEC4: gl.uniform4fv(L, v); break;
+        case gl.INT: case gl.BOOL: gl.uniform1i(L, v); break;
+        case gl.FLOAT_MAT3: gl.uniformMatrix3fv(L, false, v); break;
+        case gl.FLOAT_MAT4: gl.uniformMatrix4fv(L, false, v); break;
+        case gl.SAMPLER_2D:
+          gl.activeTexture(gl.TEXTURE0 + u.unit);
+          gl.bindTexture(gl.TEXTURE_2D, v);
+          break;
+        default: throw new Error('지원하지 않는 유니폼 타입: ' + name);
+      }
+      return this;
+    },
+  };
+}
+
+function createTexture(gl, w, h, { internal = gl.RGBA8, format = gl.RGBA, type = gl.UNSIGNED_BYTE, filter = gl.NEAREST, data = null } = {}) {
+  const t = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.texImage2D(gl.TEXTURE_2D, 0, internal, w, h, 0, format, type, data);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  return t;
+}
+
+function createDepthTexture(gl, w, h) {
+  return createTexture(gl, w, h, { internal: gl.DEPTH_COMPONENT24, format: gl.DEPTH_COMPONENT, type: gl.UNSIGNED_INT });
+}
+
+// 여러 컬러 어태치먼트(MRT) + 선택적 깊이 텍스처를 갖는 프레임버퍼
+function createTarget(gl, w, h, { colors = 1, depth = false, filter = gl.NEAREST } = {}) {
+  const fb = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+  const textures = [];
+  const bufs = [];
+  for (let i = 0; i < colors; i++) {
+    const t = createTexture(gl, w, h, { filter });
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i, gl.TEXTURE_2D, t, 0);
+    textures.push(t);
+    bufs.push(gl.COLOR_ATTACHMENT0 + i);
+  }
+  let depthTex = null;
+  if (depth) {
+    depthTex = createDepthTexture(gl, w, h);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, depthTex, 0);
+  }
+  if (colors > 0) gl.drawBuffers(bufs); else { gl.drawBuffers([gl.NONE]); gl.readBuffer(gl.NONE); }
+  const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+  if (status !== gl.FRAMEBUFFER_COMPLETE) throw new Error('프레임버퍼 생성 실패: 0x' + status.toString(16));
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  return {
+    fb, w, h, textures, depth: depthTex,
+    dispose() {
+      gl.deleteFramebuffer(fb);
+      textures.forEach((t) => gl.deleteTexture(t));
+      if (depthTex) gl.deleteTexture(depthTex);
+    },
+  };
+}
+
+// 픽셀아트 텍스처: 문자열 배열 + 팔레트로 정의 ('.'는 투명)
+//   Texture.fromPixels(gl, ['.aa.', 'abba'], { a: '#ff0000', b: '#ffffff' })
+function textureFromPixels(gl, rows, palette) {
+  const h = rows.length, w = rows[0].length;
+  const data = new Uint8Array(w * h * 4);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const ch = rows[h - 1 - y][x]; // GL 텍스처는 아래에서 위로
+      const i = (y * w + x) * 4;
+      if (ch === '.' || ch === ' ' || !palette[ch]) { data[i + 3] = 0; continue; }
+      const n = parseInt(palette[ch].replace('#', ''), 16);
+      data[i] = (n >> 16) & 255; data[i + 1] = (n >> 8) & 255; data[i + 2] = n & 255; data[i + 3] = 255;
+    }
+  }
+  const t = createTexture(gl, w, h, { data });
+  t.width = w; t.height = h;
+  return t;
+}
+
+return { createProgram, createTexture, createDepthTexture, createTarget, textureFromPixels };
+})();
+
+__m["engine/math.js"] = (() => {
+// PixelForge — 수학 유틸 (vec3 / mat4 / 노이즈 / 난수)
+// 행렬은 WebGL과 같은 column-major Float32Array(16)
+
+const v3 = {
+  add: (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]],
+  sub: (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]],
+  scale: (a, s) => [a[0] * s, a[1] * s, a[2] * s],
+  dot: (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2],
+  cross: (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]],
+  len: (a) => Math.hypot(a[0], a[1], a[2]),
+  norm: (a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; },
+  lerp: (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t],
+};
+
+const lerp = (a, b, t) => a + (b - a) * t;
+const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+const smoothstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+// 프레임레이트와 무관한 지수 감쇠 보간 (부드러운 카메라/회전에 사용)
+const damp = (a, b, lambda, dt) => lerp(a, b, 1 - Math.exp(-lambda * dt));
+const dampAngle = (a, b, lambda, dt) => {
+  let d = ((b - a + Math.PI) % (Math.PI * 2)) - Math.PI;
+  if (d < -Math.PI) d += Math.PI * 2;
+  return a + d * (1 - Math.exp(-lambda * dt));
+};
+
+const m4 = {
+  identity() { const m = new Float32Array(16); m[0] = m[5] = m[10] = m[15] = 1; return m; },
+  multiply(a, b, out = new Float32Array(16)) {
+    for (let c = 0; c < 4; c++) {
+      for (let r = 0; r < 4; r++) {
+        out[c * 4 + r] = a[r] * b[c * 4] + a[4 + r] * b[c * 4 + 1] + a[8 + r] * b[c * 4 + 2] + a[12 + r] * b[c * 4 + 3];
+      }
+    }
+    return out;
+  },
+  ortho(l, r, b, t, n, f) {
+    const m = new Float32Array(16);
+    m[0] = 2 / (r - l); m[5] = 2 / (t - b); m[10] = -2 / (f - n);
+    m[12] = -(r + l) / (r - l); m[13] = -(t + b) / (t - b); m[14] = -(f + n) / (f - n); m[15] = 1;
+    return m;
+  },
+  perspective(fovy, aspect, n, f) {
+    const m = new Float32Array(16), t = 1 / Math.tan(fovy / 2);
+    m[0] = t / aspect; m[5] = t; m[10] = (f + n) / (n - f); m[11] = -1; m[14] = (2 * f * n) / (n - f);
+    return m;
+  },
+  // 카메라 위치(eye)에서 forward 방향을 보는 view 행렬
+  lookDir(eye, fwd, upHint = [0, 1, 0]) {
+    const z = v3.norm(v3.scale(fwd, -1));
+    let x = v3.cross(upHint, z);
+    if (v3.len(x) < 1e-5) x = [1, 0, 0];
+    x = v3.norm(x);
+    const y = v3.cross(z, x);
+    const m = new Float32Array(16);
+    m[0] = x[0]; m[4] = x[1]; m[8] = x[2];
+    m[1] = y[0]; m[5] = y[1]; m[9] = y[2];
+    m[2] = z[0]; m[6] = z[1]; m[10] = z[2];
+    m[12] = -v3.dot(x, eye); m[13] = -v3.dot(y, eye); m[14] = -v3.dot(z, eye); m[15] = 1;
+    return m;
+  },
+  // 위치/회전(오일러 XYZ, 라디안)/스케일 → 모델 행렬
+  fromTRS(p, r, s) {
+    const [cx, cy, cz] = [Math.cos(r[0]), Math.cos(r[1]), Math.cos(r[2])];
+    const [sx, sy, sz] = [Math.sin(r[0]), Math.sin(r[1]), Math.sin(r[2])];
+    // R = Ry * Rx * Rz  (yaw → pitch → roll, 게임에서 다루기 쉬운 순서)
+    const m00 = cy * cz + sy * sx * sz, m01 = -cy * sz + sy * sx * cz, m02 = sy * cx;
+    const m10 = cx * sz, m11 = cx * cz, m12 = -sx;
+    const m20 = -sy * cz + cy * sx * sz, m21 = sy * sz + cy * sx * cz, m22 = cy * cx;
+    const m = new Float32Array(16);
+    m[0] = m00 * s[0]; m[1] = m10 * s[0]; m[2] = m20 * s[0];
+    m[4] = m01 * s[1]; m[5] = m11 * s[1]; m[6] = m21 * s[1];
+    m[8] = m02 * s[2]; m[9] = m12 * s[2]; m[10] = m22 * s[2];
+    m[12] = p[0]; m[13] = p[1]; m[14] = p[2]; m[15] = 1;
+    return m;
+  },
+  transformPoint(m, p) {
+    return [
+      m[0] * p[0] + m[4] * p[1] + m[8] * p[2] + m[12],
+      m[1] * p[0] + m[5] * p[1] + m[9] * p[2] + m[13],
+      m[2] * p[0] + m[6] * p[1] + m[10] * p[2] + m[14],
+    ];
+  },
+  transformDir(m, d) {
+    return [m[0] * d[0] + m[4] * d[1] + m[8] * d[2], m[1] * d[0] + m[5] * d[1] + m[9] * d[2], m[2] * d[0] + m[6] * d[1] + m[10] * d[2]];
+  },
+  // 법선 행렬: 모델 행렬 3x3의 역전치 (비균등 스케일에서도 법선이 맞도록)
+  normalMatrix(m, out = new Float32Array(9)) {
+    const a00 = m[0], a01 = m[1], a02 = m[2], a10 = m[4], a11 = m[5], a12 = m[6], a20 = m[8], a21 = m[9], a22 = m[10];
+    const b01 = a22 * a11 - a12 * a21, b11 = -a22 * a10 + a12 * a20, b21 = a21 * a10 - a11 * a20;
+    let det = a00 * b01 + a01 * b11 + a02 * b21;
+    det = det ? 1 / det : 0;
+    out[0] = b01 * det; out[3] = (-a22 * a01 + a02 * a21) * det; out[6] = (a12 * a01 - a02 * a11) * det;
+    out[1] = b11 * det; out[4] = (a22 * a00 - a02 * a20) * det; out[7] = (-a12 * a00 + a02 * a10) * det;
+    out[2] = b21 * det; out[5] = (-a21 * a00 + a01 * a20) * det; out[8] = (a11 * a00 - a01 * a10) * det;
+    return out;
+  },
+};
+
+// ---- 시드 난수 / 값 노이즈 ----
+function rng(seed = 1) {
+  let s = seed >>> 0 || 1;
+  const f = () => { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; return (s >>> 0) / 4294967296; };
+  f.range = (a, b) => a + (b - a) * f();
+  f.pick = (arr) => arr[Math.floor(f() * arr.length)];
+  return f;
+}
+
+function hash2(x, y) {
+  let h = (x * 374761393 + y * 668265263) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+function noise2(x, y) {
+  const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi;
+  const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+  const a = hash2(xi, yi), b = hash2(xi + 1, yi), c = hash2(xi, yi + 1), d = hash2(xi + 1, yi + 1);
+  return lerp(lerp(a, b, u), lerp(c, d, u), v);
+}
+function fbm(x, y, oct = 4) {
+  let s = 0, a = 0.5, f = 1, n = 0;
+  for (let i = 0; i < oct; i++) { s += noise2(x * f, y * f) * a; n += a; a *= 0.5; f *= 2; }
+  return s / n;
+}
+
+function hash3(x, y, z) {
+  let h = (x * 374761393 + y * 668265263 + z * 2147483647) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+function noise3(x, y, z) {
+  const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
+  const xf = x - xi, yf = y - yi, zf = z - zi;
+  const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf), w = zf * zf * (3 - 2 * zf);
+  const c = (a, b, d) => hash3(xi + a, yi + b, zi + d);
+  const x00 = lerp(c(0, 0, 0), c(1, 0, 0), u), x10 = lerp(c(0, 1, 0), c(1, 1, 0), u);
+  const x01 = lerp(c(0, 0, 1), c(1, 0, 1), u), x11 = lerp(c(0, 1, 1), c(1, 1, 1), u);
+  return lerp(lerp(x00, x10, v), lerp(x01, x11, v), w);
+}
+function fbm3(x, y, z, oct = 4) {
+  let s = 0, a = 0.5, f = 1, n = 0;
+  for (let i = 0; i < oct; i++) { s += noise3(x * f + i * 17.3, y * f, z * f) * a; n += a; a *= 0.5; f *= 2; }
+  return s / n;
+}
+// 축(axis) 기준 회전 행렬 (로드리게스)
+function axisAngle(axis, ang) {
+  const [x, y, z] = v3.norm(axis), c = Math.cos(ang), s = Math.sin(ang), t = 1 - c;
+  const m = new Float32Array(16);
+  m[0] = t * x * x + c; m[1] = t * x * y + s * z; m[2] = t * x * z - s * y;
+  m[4] = t * x * y - s * z; m[5] = t * y * y + c; m[6] = t * y * z + s * x;
+  m[8] = t * x * z + s * y; m[9] = t * y * z - s * x; m[10] = t * z * z + c;
+  m[15] = 1;
+  return m;
+}
+// 기저 벡터(오른쪽, 위, 앞)와 위치로 모델 행렬 만들기
+function basisMatrix(right, up, fwd, pos, scale = 1) {
+  const m = new Float32Array(16);
+  m[0] = right[0] * scale; m[1] = right[1] * scale; m[2] = right[2] * scale;
+  m[4] = up[0] * scale; m[5] = up[1] * scale; m[6] = up[2] * scale;
+  m[8] = fwd[0] * scale; m[9] = fwd[1] * scale; m[10] = fwd[2] * scale;
+  m[12] = pos[0]; m[13] = pos[1]; m[14] = pos[2]; m[15] = 1;
+  return m;
+}
+
+const hexColor = (hex) => {
+  const n = parseInt(hex.replace('#', ''), 16);
+  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+};
+
+return { v3, lerp, clamp, smoothstep, damp, dampAngle, m4, rng, noise2, fbm, noise3, fbm3, axisAngle, basisMatrix, hexColor };
+})();
+
+__m["engine/scene.js"] = (() => {
+// PixelForge — 씬 그래프 (노드 / 메시 / 스프라이트 / 머티리얼 / 씬)
+
+const { m4, hexColor } = __m["engine/math.js"];
+
+const toColor = (c) => (typeof c === 'string' ? hexColor(c) : c);
+
+class Material {
+  /**
+   * @param {object} o
+   *  color     기본색 (정점색과 곱해짐) '#rrggbb' 또는 [r,g,b]
+   *  emissive  0~1, 빛을 받지 않고 스스로 빛남 + 블룸
+   *  outline   외곽선/하이라이트 대상 여부
+   *  wind      바람 흔들림 세기 (나뭇잎 등, 로컬 y가 높을수록 많이 흔들림)
+   *  texture   픽셀아트 텍스처 (알파 0.5 미만은 버림)
+   *  castShadow 그림자 드리우기
+   *  opacity   0~1, 베이어 디더링으로 표현하는 반투명 (이펙트 페이드에 사용)
+   *  rim       0~1, 행성 대기처럼 실루엣 가장자리만 빛나는 껍질
+   */
+  constructor({ color = [1, 1, 1], emissive = 0, outline = true, wind = 0, texture = null, castShadow = true, opacity = 1, rim = 0 } = {}) {
+    this.color = toColor(color);
+    this.emissive = emissive;
+    this.outline = outline;
+    this.wind = wind;
+    this.texture = texture;
+    this.castShadow = castShadow;
+    this.opacity = opacity; // 1 미만이면 디더링으로 반투명
+    this.rim = rim;         // 대기 껍질용: 가장자리만 보이게
+  }
+}
+
+class Node {
+  constructor(name = '') {
+    this.name = name;
+    this.position = [0, 0, 0];
+    this.rotation = [0, 0, 0]; // 오일러 (x, y, z) 라디안
+    this.scale = [1, 1, 1];
+    this.children = [];
+    this.parent = null;
+    this.visible = true;
+    this.world = m4.identity();
+    this.matrix = null; // 지정하면 position/rotation/scale 대신 이 로컬 행렬을 사용 (예: 지구본 회전)
+  }
+  add(...nodes) {
+    for (const n of nodes) { if (n.parent) n.parent.remove(n); n.parent = this; this.children.push(n); }
+    return nodes[0];
+  }
+  remove(n) {
+    const i = this.children.indexOf(n);
+    if (i >= 0) { this.children.splice(i, 1); n.parent = null; }
+  }
+  setScale(s) { this.scale = typeof s === 'number' ? [s, s, s] : s; return this; }
+  updateWorld(parentWorld = null) {
+    const local = this.matrix || m4.fromTRS(this.position, this.rotation, this.scale);
+    this.world = parentWorld ? m4.multiply(parentWorld, local) : local;
+    for (const c of this.children) c.updateWorld(this.world);
+  }
+  worldPosition() { return [this.world[12], this.world[13], this.world[14]]; }
+  traverse(fn) { if (fn(this) === false) return; for (const c of this.children) c.traverse(fn); }
+}
+
+class Mesh extends Node {
+  constructor(geometry, material = new Material(), name = '') {
+    super(name);
+    this.geometry = geometry;
+    this.material = material instanceof Material ? material : new Material(material);
+  }
+}
+
+// 카메라를 향해 Y축으로 회전하는 2D 스프라이트.
+// pixelsPerUnit을 주면 텍스처 1픽셀 = 화면 1 저해상도 픽셀이 되도록 크기를 맞출 수 있음 (Engine.pixelSprite 참고)
+class Sprite extends Mesh {
+  constructor(geometry, material, { billboard = true, unitsPerPixel = 0, pixelPerfect = true } = {}) {
+    super(geometry, material);
+    this.billboard = billboard;
+    this.unitsPerPixel = unitsPerPixel; // 텍스처 1칸의 월드 크기 (지오메트리를 만들 때 쓴 값)
+    this.pixelPerfect = pixelPerfect;
+  }
+}
+
+/**
+ * 같은 모양을 수백~수천 개 한 번에 그리는 메시 (생물, 나무, 집 등).
+ *   const trees = new InstancedMesh(geo, mat, 5000);
+ *   trees.setAt(i, matrix, [r,g,b], emissive); trees.count = n;
+ * 인스턴스 행렬은 이 노드 기준 로컬 좌표.
+ */
+class InstancedMesh extends Node {
+  constructor(geometry, material = new Material(), capacity = 1000, name = '') {
+    super(name);
+    this.geometry = geometry;
+    this.material = material instanceof Material ? material : new Material(material);
+    this.capacity = capacity;
+    this.count = 0;
+    this.matrices = new Float32Array(capacity * 16);
+    this.colors = new Float32Array(capacity * 4).fill(1);
+    for (let i = 0; i < capacity; i++) this.colors[i * 4 + 3] = 0;
+    this.dirty = true;
+    this._gpu = null;
+  }
+  setAt(i, matrix, color = null, emissive = null) {
+    this.matrices.set(matrix, i * 16);
+    if (color) { this.colors[i * 4] = color[0]; this.colors[i * 4 + 1] = color[1]; this.colors[i * 4 + 2] = color[2]; }
+    if (emissive !== null) this.colors[i * 4 + 3] = emissive;
+    this.dirty = true;
+  }
+  upload(gl) {
+    const g = this.geometry.upload(gl);
+    if (!this._gpu) {
+      const vao = gl.createVertexArray();
+      gl.bindVertexArray(vao);
+      const [bp, bn, bc, bu] = g.buffers;
+      const bind = (buf, loc, size) => { gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, size, gl.FLOAT, false, 0, 0); };
+      bind(bp, 0, 3); bind(bn, 1, 3); bind(bc, 2, 3); bind(bu, 3, 2);
+      const mb = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, mb);
+      gl.bufferData(gl.ARRAY_BUFFER, this.matrices.byteLength, gl.DYNAMIC_DRAW);
+      for (let k = 0; k < 4; k++) {
+        gl.enableVertexAttribArray(4 + k);
+        gl.vertexAttribPointer(4 + k, 4, gl.FLOAT, false, 64, k * 16);
+        gl.vertexAttribDivisor(4 + k, 1);
+      }
+      const cb = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, cb);
+      gl.bufferData(gl.ARRAY_BUFFER, this.colors.byteLength, gl.DYNAMIC_DRAW);
+      gl.enableVertexAttribArray(8); gl.vertexAttribPointer(8, 4, gl.FLOAT, false, 0, 0); gl.vertexAttribDivisor(8, 1);
+      gl.bindVertexArray(null);
+      this._gpu = { vao, mb, cb, count: g.count };
+      this.dirty = true;
+    }
+    if (this.dirty && this.count > 0) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, this._gpu.mb);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.matrices, 0, this.count * 16);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this._gpu.cb);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.colors, 0, this.count * 4);
+      this.dirty = false;
+    }
+    return this._gpu;
+  }
+}
+
+class Scene extends Node {
+  constructor() {
+    super('scene');
+    this.sun = {
+      direction: [0.5, 0.8, 0.3], // 빛이 오는 방향(표면→태양)
+      color: [1.0, 0.95, 0.85],
+      intensity: 1.0,
+    };
+    this.ambientSky = [0.42, 0.48, 0.62];
+    this.ambientGround = [0.30, 0.26, 0.24];
+    this.skyColor = [0.55, 0.75, 0.9];
+    this.fog = { color: [0.55, 0.75, 0.9], near: 40, far: 90 };
+    this.particles = []; // ParticleSystem 목록
+    this.grass = [];     // GrassField 목록
+    this.water = [];     // Water 목록
+    this.stars = false;  // 배경에 별 (우주 장면)
+    this.starOffset = [0, 0];
+    this.lights = [];    // 점광원 { position:[x,y,z], color:[r,g,b], radius, intensity } (최대 8개)
+  }
+}
+
+return { Material, Node, Mesh, Sprite, InstancedMesh, Scene };
+})();
+
+__m["engine/renderer.js"] = (() => {
+// PixelForge — 픽셀 렌더 파이프라인
+//
+//  [그림자맵] → [장면: 저해상도 MRT(색, 법선, 깊이)] → [복사] → [물] → [파티클]
+//            → [블룸 추출/블러] → [합성: 외곽선·하이라이트·색보정·팔레트] → [업스케일: 정수배율+서브픽셀]
+
+const { createProgram, createTarget, createTexture } = __m["engine/gl.js"];
+const { m4, v3 } = __m["engine/math.js"];
+const { Mesh, Sprite, InstancedMesh } = __m["engine/scene.js"];
+const S = __m["engine/shaders.js"];
+
+const DEFAULT_SETTINGS = {
+  outline: true,
+  depthThreshold: 0.45, // 월드 단위. 이보다 깊이 차이가 크면 외곽선
+  outlineDarkness: 0.5,  // 외곽선 픽셀 밝기 배율
+  highlight: 0.28,       // 볼록 모서리 하이라이트 세기
+  bloom: true,
+  bloomStrength: 1.3,
+  saturation: 1.12,
+  contrast: 1.04,
+  vignette: 0.22,
+  grade: [1, 1, 1],
+  palette: null,         // [[r,g,b], ...] 최대 32색. null이면 자유 색
+  dither: 0,             // 0~0.15 정도
+  clouds: true,
+  shadowSize: 22,        // 그림자맵이 덮는 반경 (월드 단위)
+  shadowResolution: 2048,
+  windStrength: 1,
+  history: 0,            // 0~0.6: 직전 프레임을 섞는 양. 회전처럼 화면 전체가 바뀔 때 도트 깜빡임을 줄여줌
+};
+
+class Renderer {
+  constructor(gl) {
+    this.gl = gl;
+    this.settings = { ...DEFAULT_SETTINGS };
+    this.p = {
+      scene: createProgram(gl, S.sceneVS, S.sceneFS, 'scene'),
+      sceneInst: createProgram(gl, S.sceneInstVS, S.sceneFS, 'sceneInst'),
+      shadow: createProgram(gl, S.shadowVS, S.shadowFS, 'shadow'),
+      shadowInst: createProgram(gl, S.shadowInstVS, S.shadowFS, 'shadowInst'),
+      grass: createProgram(gl, S.grassVS, S.grassFS, 'grass'),
+      water: createProgram(gl, S.waterVS, S.waterFS, 'water'),
+      particle: createProgram(gl, S.particleVS, S.particleFS, 'particle'),
+      bloomExtract: createProgram(gl, S.fullscreenVS, S.bloomExtractFS, 'bloomExtract'),
+      blur: createProgram(gl, S.fullscreenVS, S.blurFS, 'blur'),
+      composite: createProgram(gl, S.fullscreenVS, S.compositeFS, 'composite'),
+      upscale: createProgram(gl, S.fullscreenVS, S.upscaleFS, 'upscale'),
+    };
+    this.emptyVAO = gl.createVertexArray();
+    this.identity = m4.identity();
+    this.white = createTexture(gl, 1, 1, { data: new Uint8Array([255, 255, 255, 255]) });
+    const res = Math.min(this.settings.shadowResolution, gl.getParameter(gl.MAX_TEXTURE_SIZE));
+    this.shadowTarget = createTarget(gl, res, res, { colors: 0, depth: true });
+    this.targets = null;
+    this.lowSize = [0, 0];
+    this.stats = { drawCalls: 0, lowW: 0, lowH: 0, scale: 1 };
+  }
+
+  _ensureTargets(w, h) {
+    if (this.targets && this.lowSize[0] === w && this.lowSize[1] === h) return;
+    const gl = this.gl;
+    if (this.targets) Object.values(this.targets).forEach((t) => t.dispose());
+    const bw = Math.max(1, w >> 1), bh = Math.max(1, h >> 1);
+    this.targets = {
+      scene: createTarget(gl, w, h, { colors: 2, depth: true }),
+      copy: createTarget(gl, w, h, { colors: 1, depth: true }),
+      bloomA: createTarget(gl, bw, bh, { colors: 1, filter: gl.LINEAR }),
+      bloomB: createTarget(gl, bw, bh, { colors: 1, filter: gl.LINEAR }),
+      final: createTarget(gl, w, h, { colors: 1 }),
+      prev: createTarget(gl, w, h, { colors: 1 }),
+    };
+    this._prevValid = false;
+    this.lowSize = [w, h];
+  }
+
+  _lightUniforms(prog, scene, time) {
+    const sun = scene.sun, st = this.settings;
+    prog.set('uShadowMap', this.shadowTarget.depth)
+      .set('uLightVP', this.lightVP)
+      .set('uSunDir', this.sunDir)
+      .set('uSunColor', v3.scale(sun.color, sun.intensity))
+      .set('uSkyAmb', scene.ambientSky)
+      .set('uGroundAmb', scene.ambientGround)
+      .set('uFogColor', scene.fog.color)
+      .set('uFog', [scene.fog.near, scene.fog.far])
+      .set('uShadowBias', 0.0012)
+      .set('uTime', time)
+      .set('uClouds', st.clouds ? 1 : 0)
+      .set('uPointPos', this._pointPos).set('uPointCol', this._pointCol).set('uPointCount', this._pointCount);
+  }
+
+  /**
+   * @param scene  Scene
+   * @param camera PixelCamera
+   * @param canvasW, canvasH  실제 캔버스 픽셀 크기
+   * @param scale  저해상도 픽셀 1칸 = 화면 픽셀 몇 칸 (정수)
+   */
+  render(scene, camera, canvasW, canvasH, scale, time) {
+    const gl = this.gl, st = this.settings;
+    const lowW = Math.ceil(canvasW / scale) + 2, lowH = Math.ceil(canvasH / scale) + 2;
+    this._ensureTargets(lowW, lowH);
+    this.stats = { drawCalls: 0, lowW, lowH, scale };
+    camera.update(lowW, lowH, canvasH / scale);
+
+    // ---- 씬 그래프 갱신 (스프라이트는 카메라를 바라보게) ----
+    const meshes = [], instanced = [];
+    scene.traverse((n) => {
+      if (!n.visible) return false;
+      if (n instanceof InstancedMesh) { if (n.count > 0) instanced.push(n); return; }
+      if (n instanceof Sprite) {
+        if (n.billboard) n.rotation[1] = camera.yaw;
+        // 픽셀 퍼펙트: 텍스처 1칸이 항상 저해상도 화면 1칸이 되도록 크기 보정
+        if (n.pixelPerfect && n.unitsPerPixel) { const k = camera.pixelWorld / n.unitsPerPixel; n.scale = [k, k, k]; }
+      }
+      if (n instanceof Mesh) meshes.push(n);
+    });
+    scene.updateWorld();
+
+    // ---- 점광원 패킹 (세기 순으로 최대 8개) ----
+    this._pointPos = new Float32Array(32); this._pointCol = new Float32Array(32);
+    const lights = scene.lights.filter((l) => l.intensity > 0.01).sort((a, b) => b.intensity - a.intensity).slice(0, 8);
+    lights.forEach((l, i) => { this._pointPos.set([...l.position, l.radius], i * 4); this._pointCol.set([...l.color, l.intensity], i * 4); });
+    this._pointCount = lights.length;
+
+    // ---- 태양 빛 행렬 (그림자맵 텍셀 단위로 스냅해서 그림자 가장자리 지글거림 방지) ----
+    this.sunDir = v3.norm(scene.sun.direction);
+    const S2 = st.shadowSize, res = this.shadowTarget.w;
+    const lightDir = v3.scale(this.sunDir, -1);
+    const lv0 = m4.lookDir([0, 0, 0], lightDir);
+    const c = m4.transformPoint(lv0, camera.target);
+    const texel = (S2 * 2) / res;
+    const cx = Math.round(c[0] / texel) * texel, cy = Math.round(c[1] / texel) * texel;
+    // 스냅된 중심을 다시 월드로: lv0의 역회전(전치) 사용
+    const right = [lv0[0], lv0[4], lv0[8]], up = [lv0[1], lv0[5], lv0[9]];
+    const along = v3.dot(camera.target, this.sunDir);
+    const center = v3.add(v3.add(v3.scale(right, cx), v3.scale(up, cy)), v3.scale(this.sunDir, along));
+    const lightEye = v3.add(center, v3.scale(this.sunDir, 70));
+    const lightView = m4.lookDir(lightEye, lightDir);
+    const lightProj = m4.ortho(-S2, S2, -S2, S2, 1, 160);
+    this.lightVP = m4.multiply(lightProj, lightView);
+
+    gl.enable(gl.DEPTH_TEST);
+    gl.depthFunc(gl.LEQUAL);
+    gl.disable(gl.CULL_FACE);
+    gl.disable(gl.BLEND);
+
+    // ---- 1. 그림자맵 ----
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.shadowTarget.fb);
+    gl.viewport(0, 0, res, res);
+    gl.clear(gl.DEPTH_BUFFER_BIT);
+    const sp = this.p.shadow.use();
+    sp.set('uLightVP', this.lightVP).set('uTime', time);
+    for (const m of meshes) {
+      if (!m.material.castShadow || m.material.emissive >= 1 || m.material.opacity < 0.5) continue;
+      const g = m.geometry.upload(gl);
+      const tex = m.material.texture;
+      sp.set('uModel', m.world).set('uWind', m.material.wind * st.windStrength)
+        .set('uUseTex', tex ? 1 : 0).set('uTex', tex || this.white);
+      gl.bindVertexArray(g.vao);
+      gl.drawArrays(gl.TRIANGLES, 0, g.count);
+      this.stats.drawCalls++;
+    }
+
+    const spi = this.p.shadowInst.use();
+    spi.set('uLightVP', this.lightVP).set('uTime', time);
+    for (const m of instanced) {
+      if (!m.material.castShadow || m.material.opacity < 0.5) continue;
+      const g = m.upload(gl), tex = m.material.texture;
+      spi.set('uModel', m.world).set('uWind', m.material.wind * st.windStrength)
+        .set('uUseTex', tex ? 1 : 0).set('uTex', tex || this.white);
+      gl.bindVertexArray(g.vao);
+      gl.drawArraysInstanced(gl.TRIANGLES, 0, g.count, m.count);
+      this.stats.drawCalls++;
+    }
+
+    // ---- 2. 장면 (저해상도) ----
+    const T = this.targets;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, T.scene.fb);
+    gl.viewport(0, 0, lowW, lowH);
+    gl.clearBufferfv(gl.COLOR, 0, [...scene.fog.color, 0]);
+    gl.clearBufferfv(gl.COLOR, 1, [0.5, 0.5, 1, 0]);
+    gl.clearBufferfv(gl.DEPTH, 0, [1]);
+
+    const prog = this.p.scene.use();
+    this._lightUniforms(prog, scene, time);
+    prog.set('uView', camera.view).set('uViewProj', camera.viewProj).set('uWind', 0).set('uViewDir', v3.scale(camera.forward, -1));
+    for (const m of meshes) {
+      const g = m.geometry.upload(gl), mat = m.material;
+      prog.set('uModel', m.world)
+        .set('uNormalMat', m4.normalMatrix(m.world))
+        .set('uMatColor', mat.color)
+        .set('uEmissive', mat.emissive)
+        .set('uOutline', mat.outline ? 1 : 0)
+        .set('uWind', mat.wind * st.windStrength)
+        .set('uUseTex', mat.texture ? 1 : 0)
+        .set('uTex', mat.texture || this.white)
+        .set('uOpacity', mat.opacity ?? 1)
+        .set('uRim', mat.rim || 0);
+      gl.bindVertexArray(g.vao);
+      gl.drawArrays(gl.TRIANGLES, 0, g.count);
+      this.stats.drawCalls++;
+    }
+
+    // 인스턴스 메시
+    if (instanced.length) {
+      const ip = this.p.sceneInst.use();
+      this._lightUniforms(ip, scene, time);
+      ip.set('uView', camera.view).set('uViewProj', camera.viewProj).set('uViewDir', v3.scale(camera.forward, -1));
+      for (const m of instanced) {
+        const g = m.upload(gl), mat = m.material;
+        ip.set('uModel', m.world)
+          .set('uMatColor', mat.color).set('uEmissive', mat.emissive).set('uOutline', mat.outline ? 1 : 0)
+          .set('uWind', mat.wind * st.windStrength).set('uUseTex', mat.texture ? 1 : 0).set('uTex', mat.texture || this.white)
+          .set('uOpacity', mat.opacity ?? 1).set('uRim', mat.rim || 0);
+        gl.bindVertexArray(g.vao);
+        gl.drawArraysInstanced(gl.TRIANGLES, 0, g.count, m.count);
+        this.stats.drawCalls++;
+      }
+    }
+
+    // 잔디
+    if (scene.grass.length) {
+      const gp = this.p.grass.use();
+      this._lightUniforms(gp, scene, time);
+      gp.set('uView', camera.view).set('uViewProj', camera.viewProj)
+        .set('uCamRight', camera.right).set('uWindStrength', st.windStrength);
+      for (const field of scene.grass) {
+        const push = new Float32Array(16);
+        field.interactors.slice(0, 4).forEach((it, i) => { push.set([it[0], it[1], it[2], it[3] ?? 0.9], i * 4); });
+        gp.set('uPushers', push).set('uWidth', field.width);
+        gl.bindVertexArray(field.upload(gl).vao);
+        gl.drawArraysInstanced(gl.TRIANGLES, 0, 3, field.count);
+        this.stats.drawCalls++;
+      }
+    }
+
+    // ---- 3. 물 (장면 색/깊이 복사본을 읽어서 깊이·거품·굴절 계산) ----
+    if (scene.water.length) {
+      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, T.scene.fb);
+      gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, T.copy.fb);
+      gl.readBuffer(gl.COLOR_ATTACHMENT0);
+      gl.blitFramebuffer(0, 0, lowW, lowH, 0, 0, lowW, lowH, gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT, gl.NEAREST);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, T.scene.fb);
+
+      const wp = this.p.water.use();
+      this._lightUniforms(wp, scene, time);
+      const sunVis = Math.min(1, scene.sun.intensity * Math.max(0, this.sunDir[1]) * 3);
+      wp.set('uView', camera.view).set('uViewProj', camera.viewProj)
+        .set('uSceneColor', T.copy.textures[0]).set('uSceneDepth', T.copy.depth)
+        .set('uInvRes', [1 / lowW, 1 / lowH]).set('uNear', camera.near).set('uFar', camera.far)
+        .set('uViewDir', v3.scale(camera.forward, -1)).set('uSunVis', sunVis);
+      for (const w of scene.water) {
+        wp.set('uShallow', w.shallow).set('uDeep', w.deep).set('uFoam', w.foam)
+          .set('uDepthRange', w.depthRange).set('uWave', w.waveHeight)
+          .set('uModel', w.node ? w.node.world : this.identity).set('uRadial', w.radial ? 1 : 0).set('uWaterEmissive', w.emissive || 0);
+        const g = w.geometry.upload(gl);
+        gl.bindVertexArray(g.vao);
+        gl.drawArrays(gl.TRIANGLES, 0, g.count);
+        this.stats.drawCalls++;
+      }
+    }
+
+    // ---- 4. 파티클 ----
+    if (scene.particles.length) {
+      const pp = this.p.particle.use();
+      const sun = scene.sun;
+      const light = v3.add(v3.scale(v3.add(scene.ambientSky, scene.ambientGround), 0.5), v3.scale(sun.color, sun.intensity * Math.max(0, this.sunDir[1]) * 0.8));
+      pp.set('uView', camera.view).set('uViewProj', camera.viewProj).set('uLight', light)
+        .set('uFogColor', scene.fog.color).set('uFog', [scene.fog.near, scene.fog.far]);
+      for (const ps of scene.particles) {
+        const n = ps.upload(gl);
+        if (!n) continue;
+        pp.set('uModel', ps.node ? ps.node.world : this.identity);
+        gl.bindVertexArray(ps._gpu.vao);
+        gl.drawArrays(gl.POINTS, 0, n);
+        this.stats.drawCalls++;
+      }
+    }
+
+    gl.disable(gl.DEPTH_TEST);
+    gl.bindVertexArray(this.emptyVAO);
+    const fullscreen = () => { gl.drawArrays(gl.TRIANGLES, 0, 3); this.stats.drawCalls++; };
+
+    // ---- 5. 블룸 ----
+    const bw = T.bloomA.w, bh = T.bloomA.h;
+    if (st.bloom) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, T.bloomA.fb);
+      gl.viewport(0, 0, bw, bh);
+      this.p.bloomExtract.use().set('uColor', T.scene.textures[0]).set('uInvRes', [1 / bw, 1 / bh]);
+      fullscreen();
+      const blur = this.p.blur.use().set('uInvRes', [1 / bw, 1 / bh]);
+      for (let i = 0; i < 2; i++) {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, T.bloomB.fb);
+        blur.set('uImage', T.bloomA.textures[0]).set('uDir', [1, 0]); fullscreen();
+        gl.bindFramebuffer(gl.FRAMEBUFFER, T.bloomA.fb);
+        blur.set('uImage', T.bloomB.textures[0]).set('uDir', [0, 1]); fullscreen();
+      }
+    }
+
+    // ---- 6. 합성 (저해상도) ----
+    gl.bindFramebuffer(gl.FRAMEBUFFER, T.final.fb);
+    gl.viewport(0, 0, lowW, lowH);
+    const pal = st.palette || [];
+    const palData = new Float32Array(96);
+    pal.slice(0, 32).forEach((c, i) => palData.set(c, i * 3));
+    this.p.composite.use()
+      .set('uColor', T.scene.textures[0]).set('uNormal', T.scene.textures[1]).set('uDepth', T.scene.depth)
+      .set('uBloom', T.bloomA.textures[0])
+      .set('uInvRes', [1 / lowW, 1 / lowH]).set('uNear', camera.near).set('uFar', camera.far)
+      .set('uOutline', st.outline ? 1 : 0).set('uDepthThresh', st.depthThreshold)
+      .set('uOutlineDark', st.outlineDarkness).set('uHighlight', st.highlight)
+      .set('uBloomStrength', st.bloom ? st.bloomStrength : 0)
+      .set('uSaturation', st.saturation).set('uContrast', st.contrast).set('uVignette', st.vignette)
+      .set('uGrade', st.grade)
+      .set('uPalette', palData).set('uPaletteSize', Math.min(32, pal.length)).set('uDither', st.dither)
+      .set('uStars', scene.stars ? 1 : 0).set('uStarOffset', scene.starOffset).set('uTimeC', time);
+    fullscreen();
+
+    // ---- 7. 업스케일 (화면) ----
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, canvasW, canvasH);
+    const offset = [1 + camera.subpixel[0], 1 + camera.subpixel[1]];
+    const history = this._prevValid ? st.history : 0;
+    this.p.upscale.use()
+      .set('uImage', T.final.textures[0]).set('uPrev', T.prev.textures[0])
+      .set('uLowSize', [lowW, lowH]).set('uScale', scale)
+      .set('uOffset', offset).set('uPrevOffset', this._prevOffset || offset).set('uHistory', history);
+    fullscreen();
+    gl.bindVertexArray(null);
+
+    // 이번 프레임을 다음 프레임의 "직전 프레임"으로 보관 (사용할 때만)
+    if (st.history > 0) {
+      [T.final, T.prev] = [T.prev, T.final];
+      this._prevOffset = offset;
+      this._prevValid = true;
+    } else this._prevValid = false;
+  }
+}
+
+return { DEFAULT_SETTINGS, Renderer };
+})();
+
+__m["engine/camera.js"] = (() => {
+// PixelForge — 픽셀 스냅 직교 카메라
+//
+// 핵심 아이디어:
+//  1) 카메라 위치를 "저해상도 픽셀 1칸" 단위로만 움직여서 렌더한다 → 정적인 물체의 픽셀이 절대 지글거리지 않음
+//  2) 스냅하면서 버린 소수점 이하 오프셋(subpixel)을 기억해 두었다가,
+//     마지막 업스케일 단계에서 저해상도 이미지를 그만큼 화면 픽셀 단위로 밀어준다 → 스크롤은 부드러움
+
+const { m4, v3 } = __m["engine/math.js"];
+
+class PixelCamera {
+  constructor({ yaw = Math.PI / 4, pitch = Math.PI / 6, viewHeight = 16, distance = 60 } = {}) {
+    this.target = [0, 0, 0];
+    this.yaw = yaw;           // Y축 회전
+    this.pitch = pitch;       // 내려다보는 각도
+    this.viewHeight = viewHeight; // 화면 세로에 보이는 월드 크기 (줌)
+    this.distance = distance;
+    this.snap = true;
+
+    this.view = m4.identity();
+    this.proj = m4.identity();
+    this.viewProj = m4.identity();
+    this.subpixel = [0, 0];
+    this.pixelWorld = 0.1;
+    this.near = 1; this.far = 200;
+    this.forward = [0, 0, -1]; this.right = [1, 0, 0]; this.up = [0, 1, 0];
+  }
+
+  /** lowW/lowH: 렌더 타깃 크기, visibleH: 실제 화면에 보이는 저해상도 세로 픽셀 수 */
+  update(lowW, lowH, visibleH) {
+    const pw = (this.pixelWorld = this.viewHeight / visibleH);
+    const cp = Math.cos(this.pitch), sp = Math.sin(this.pitch);
+    const fwd = (this.forward = [-Math.sin(this.yaw) * cp, -sp, -Math.cos(this.yaw) * cp]);
+    const right = (this.right = v3.norm(v3.cross(fwd, [0, 1, 0])));
+    const up = (this.up = v3.cross(right, fwd));
+    let eye = v3.sub(this.target, v3.scale(fwd, this.distance));
+
+    if (this.snap) {
+      const pr = v3.dot(eye, right) / pw, pu = v3.dot(eye, up) / pw;
+      const fr = pr - Math.round(pr), fu = pu - Math.round(pu);
+      this.subpixel = [fr, fu];
+      eye = v3.sub(eye, v3.add(v3.scale(right, fr * pw), v3.scale(up, fu * pw)));
+    } else {
+      this.subpixel = [0, 0];
+    }
+    this.eye = eye;
+    this.far = this.distance * 2 + 40;
+    this.view = m4.lookDir(eye, fwd);
+    const hw = (lowW / 2) * pw, hh = (lowH / 2) * pw;
+    this.proj = m4.ortho(-hw, hw, -hh, hh, this.near, this.far);
+    m4.multiply(this.proj, this.view, this.viewProj);
+  }
+
+  /**
+   * 화면 좌표(캔버스 기준 CSS 픽셀) → 월드 광선 { origin, dir }
+   * 직교 카메라라 모든 광선의 방향이 같다. scale: 저해상도 1칸당 화면 픽셀(디바이스 픽셀), dpr: 기기 배율
+   */
+  screenRay(cssX, cssY, cssW, cssH, scale, dpr = 1) {
+    const pw = this.pixelWorld;
+    const ox = ((cssX - cssW / 2) * dpr) / scale * pw;
+    const oy = ((cssH / 2 - cssY) * dpr) / scale * pw;
+    const origin = v3.add(this.eye, v3.add(v3.scale(this.right, ox), v3.scale(this.up, oy)));
+    return { origin, dir: this.forward };
+  }
+
+  /** 화면 기준 입력(x: 오른쪽, y: 위쪽)을 지면 위 이동 방향으로 변환 */
+  groundDirection(x, y) {
+    const f = v3.norm([this.forward[0], 0, this.forward[2]]);
+    const r = v3.norm([this.right[0], 0, this.right[2]]);
+    return v3.add(v3.scale(r, x), v3.scale(f, y));
+  }
+}
+
+return { PixelCamera };
+})();
+
+__m["engine/input.js"] = (() => {
+// PixelForge — 입력 (키보드 + 마우스 + 터치 가상 조이스틱)
+//
+//  input.axis()        → {x, y}  이동 입력 (-1~1, y는 화면 위쪽이 +)
+//  input.down('Space') → 키가 눌려 있는지
+//  input.pressed('jump') → 이번 프레임에 눌렸는지 (키 'Space' 또는 trigger('jump'))
+//  input.takeRotate()  → 누적된 카메라 회전량 (라디안)
+//  input.takeZoom()    → 누적된 줌 배율 (1 = 변화 없음)
+
+class Input {
+  /** opts.stick: false면 가상 조이스틱 없이 모든 터치를 드래그/핀치로 사용 */
+  constructor(el, { stick = true } = {}) {
+    this.el = el;
+    this.useStick = stick;
+    this.rotateV = 0;
+    this.keys = new Set();
+    this.justPressed = new Set();
+    this.rotate = 0;
+    this.zoom = 1;
+    this.stick = { active: false, id: null, ox: 0, oy: 0, x: 0, y: 0, radius: 56 };
+    this.pointers = new Map();
+    this.pinchDist = 0;
+    this.taps = []; // 드래그 없이 짧게 누른 위치 (캔버스 기준 CSS 픽셀)
+
+    const keyName = (e) => (e.code === 'Space' ? 'Space' : e.key.length === 1 ? e.key.toLowerCase() : e.key);
+    addEventListener('keydown', (e) => {
+      if (e.target && /INPUT|SELECT|TEXTAREA|BUTTON/.test(e.target.tagName)) return;
+      const k = keyName(e);
+      if (!this.keys.has(k)) this.justPressed.add(k === 'Space' ? 'jump' : k);
+      this.keys.add(k);
+      if (k === 'Space' || k.startsWith('Arrow')) e.preventDefault();
+    });
+    addEventListener('keyup', (e) => this.keys.delete(keyName(e)));
+    addEventListener('blur', () => this.keys.clear());
+
+    el.addEventListener('wheel', (e) => { e.preventDefault(); this.zoom *= Math.exp(e.deltaY * 0.0012); }, { passive: false });
+    el.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    el.addEventListener('pointerdown', (e) => {
+      el.setPointerCapture?.(e.pointerId);
+      const rect = el.getBoundingClientRect();
+      const x = e.clientX - rect.left, y = e.clientY - rect.top;
+      const isTouch = e.pointerType !== 'mouse';
+      const p = { x: e.clientX, y: e.clientY, sx: x, sy: y, t: performance.now(), moved: 0, role: 'rotate' };
+      if (this.useStick && isTouch && x < rect.width * 0.5 && !this.stick.active) {
+        p.role = 'stick';
+        Object.assign(this.stick, { active: true, id: e.pointerId, ox: x, oy: y, x: 0, y: 0 });
+      }
+      this.pointers.set(e.pointerId, p);
+      this._updatePinch();
+    });
+    el.addEventListener('pointermove', (e) => {
+      const p = this.pointers.get(e.pointerId);
+      if (!p) return;
+      const dx = e.clientX - p.x, dy = e.clientY - p.y;
+      p.moved += Math.abs(dx) + Math.abs(dy);
+      p.x = e.clientX; p.y = e.clientY;
+      if (p.role === 'stick') {
+        const rect = el.getBoundingClientRect();
+        let sx = (e.clientX - rect.left - this.stick.ox) / this.stick.radius;
+        let sy = -(e.clientY - rect.top - this.stick.oy) / this.stick.radius;
+        const l = Math.hypot(sx, sy);
+        if (l > 1) { sx /= l; sy /= l; }
+        this.stick.x = sx; this.stick.y = sy;
+      } else if (this._rotatePointers().length >= 2) {
+        const d = this._pinch();
+        if (this.pinchDist > 0 && d > 0) this.zoom *= this.pinchDist / d;
+        this.pinchDist = d;
+      } else {
+        this.rotate += dx * 0.008;
+        this.rotateV += dy * 0.008;
+      }
+    });
+    const end = (e) => {
+      const p = this.pointers.get(e.pointerId);
+      if (!p) return;
+      if (p.role === 'stick') Object.assign(this.stick, { active: false, id: null, x: 0, y: 0 });
+      else if (e.type === 'pointerup' && p.moved < 8 && performance.now() - p.t < 350 && this.pointers.size === 1) this.taps.push({ x: p.sx, y: p.sy });
+      this.pointers.delete(e.pointerId);
+      this._updatePinch();
+    };
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointercancel', end);
+  }
+  _rotatePointers() { return [...this.pointers.values()].filter((p) => p.role === 'rotate'); }
+  _pinch() { const r = this._rotatePointers(); return r.length >= 2 ? Math.hypot(r[0].x - r[1].x, r[0].y - r[1].y) : 0; }
+  _updatePinch() { this.pinchDist = this._pinch(); }
+
+  down(k) { return this.keys.has(k); }
+  pressed(k) { return this.justPressed.has(k); }
+  trigger(k) { this.justPressed.add(k); }
+
+  axis() {
+    let x = 0, y = 0;
+    if (this.down('a') || this.down('ArrowLeft')) x -= 1;
+    if (this.down('d') || this.down('ArrowRight')) x += 1;
+    if (this.down('w') || this.down('ArrowUp')) y += 1;
+    if (this.down('s') || this.down('ArrowDown')) y -= 1;
+    if (this.stick.active) { x += this.stick.x; y += this.stick.y; }
+    const l = Math.hypot(x, y);
+    if (l > 1) { x /= l; y /= l; }
+    return { x, y };
+  }
+  takeRotate() {
+    let r = this.rotate;
+    this.rotate = 0;
+    return r;
+  }
+  takeRotateV() { const r = this.rotateV; this.rotateV = 0; return r; }
+  takeZoom() { const z = this.zoom; this.zoom = 1; return z; }
+  takeTaps() { const t = this.taps; this.taps = []; return t; }
+  endFrame() { this.justPressed.clear(); }
+}
+
+return { Input };
+})();
+
+__m["engine/geometry.js"] = (() => {
+// PixelForge — 로우폴리 지오메트리 빌더
+// 모든 도형은 "플랫 셰이딩"(면마다 법선 하나)으로 만든다. 픽셀화했을 때 면이 또렷한 색 덩어리로 보이게.
+
+const { m4, v3, rng: makeRng } = __m["engine/math.js"];
+
+class Geometry {
+  constructor() {
+    this.pos = []; this.nrm = []; this.col = []; this.uv = [];
+    this._gpu = null;
+  }
+  get vertexCount() { return this.pos.length / 3; }
+
+  // 삼각형 하나 추가 (반시계 방향이 앞면). 법선은 면 법선으로 자동 계산
+  tri(a, b, c, color = [1, 1, 1], uvs = null, normal = null) {
+    const n = normal || v3.norm(v3.cross(v3.sub(b, a), v3.sub(c, a)));
+    for (const p of [a, b, c]) { this.pos.push(...p); this.nrm.push(...n); this.col.push(...color); }
+    if (uvs) this.uv.push(...uvs[0], ...uvs[1], ...uvs[2]); else this.uv.push(0, 0, 0, 0, 0, 0);
+    return this;
+  }
+  quad(a, b, c, d, color, uvs = null, normal = null) {
+    this.tri(a, b, c, color, uvs && [uvs[0], uvs[1], uvs[2]], normal);
+    this.tri(a, c, d, color, uvs && [uvs[0], uvs[2], uvs[3]], normal);
+    return this;
+  }
+
+  // 정점 색을 함수로 다시 칠하기: fn(위치, 법선, 면인덱스) → [r,g,b]
+  paint(fn) {
+    for (let i = 0; i < this.vertexCount; i += 3) {
+      const face = i / 3;
+      const cx = (this.pos[i * 3] + this.pos[i * 3 + 3] + this.pos[i * 3 + 6]) / 3;
+      const cy = (this.pos[i * 3 + 1] + this.pos[i * 3 + 4] + this.pos[i * 3 + 7]) / 3;
+      const cz = (this.pos[i * 3 + 2] + this.pos[i * 3 + 5] + this.pos[i * 3 + 8]) / 3;
+      const n = [this.nrm[i * 3], this.nrm[i * 3 + 1], this.nrm[i * 3 + 2]];
+      const c = fn([cx, cy, cz], n, face);
+      for (let k = 0; k < 3; k++) { const o = (i + k) * 3; this.col[o] = c[0]; this.col[o + 1] = c[1]; this.col[o + 2] = c[2]; }
+    }
+    return this;
+  }
+
+  // 다른 지오메트리를 변환해서 합치기 (드로우콜 줄이기)
+  merge(other, { position = [0, 0, 0], rotation = [0, 0, 0], scale = [1, 1, 1], color = null } = {}) {
+    const m = m4.fromTRS(position, rotation, typeof scale === 'number' ? [scale, scale, scale] : scale);
+    const nm = m4.normalMatrix(m);
+    for (let i = 0; i < other.vertexCount; i++) {
+      const p = m4.transformPoint(m, [other.pos[i * 3], other.pos[i * 3 + 1], other.pos[i * 3 + 2]]);
+      const n = other.nrm.slice(i * 3, i * 3 + 3);
+      const nn = v3.norm([nm[0] * n[0] + nm[3] * n[1] + nm[6] * n[2], nm[1] * n[0] + nm[4] * n[1] + nm[7] * n[2], nm[2] * n[0] + nm[5] * n[1] + nm[8] * n[2]]);
+      this.pos.push(...p); this.nrm.push(...nn);
+      this.col.push(...(color || other.col.slice(i * 3, i * 3 + 3)));
+      this.uv.push(other.uv[i * 2], other.uv[i * 2 + 1]);
+    }
+    return this;
+  }
+
+  upload(gl) {
+    if (this._gpu) return this._gpu;
+    const vao = gl.createVertexArray();
+    gl.bindVertexArray(vao);
+    const attrib = (loc, data, size) => {
+      const b = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, b);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW);
+      gl.enableVertexAttribArray(loc);
+      gl.vertexAttribPointer(loc, size, gl.FLOAT, false, 0, 0);
+      return b;
+    };
+    const buffers = [attrib(0, this.pos, 3), attrib(1, this.nrm, 3), attrib(2, this.col, 3), attrib(3, this.uv, 2)];
+    gl.bindVertexArray(null);
+    this._gpu = { vao, count: this.vertexCount, buffers };
+    return this._gpu;
+  }
+  dispose(gl) {
+    if (!this._gpu) return;
+    gl.deleteVertexArray(this._gpu.vao);
+    this._gpu.buffers.forEach((b) => gl.deleteBuffer(b));
+    this._gpu = null;
+  }
+
+  // ---------- 기본 도형 ----------
+
+  // 바닥 중앙이 원점인 상자
+  static box(w = 1, h = 1, d = 1, color = [1, 1, 1]) {
+    const g = new Geometry(), x = w / 2, z = d / 2;
+    const P = (a, b, c) => [a, b, c];
+    g.quad(P(-x, 0, z), P(x, 0, z), P(x, h, z), P(-x, h, z), color);     // 앞
+    g.quad(P(x, 0, -z), P(-x, 0, -z), P(-x, h, -z), P(x, h, -z), color); // 뒤
+    g.quad(P(x, 0, z), P(x, 0, -z), P(x, h, -z), P(x, h, z), color);     // 오른쪽
+    g.quad(P(-x, 0, -z), P(-x, 0, z), P(-x, h, z), P(-x, h, -z), color); // 왼쪽
+    g.quad(P(-x, h, z), P(x, h, z), P(x, h, -z), P(-x, h, -z), color);   // 위
+    g.quad(P(-x, 0, -z), P(x, 0, -z), P(x, 0, z), P(-x, 0, z), color);   // 아래
+    return g;
+  }
+
+  // y=0 ~ h 원기둥 (rTop=0이면 원뿔)
+  static cylinder(rTop = 0.5, rBottom = 0.5, h = 1, seg = 6, color = [1, 1, 1], { caps = true } = {}) {
+    const g = new Geometry();
+    for (let i = 0; i < seg; i++) {
+      const a0 = (i / seg) * Math.PI * 2, a1 = ((i + 1) / seg) * Math.PI * 2;
+      const b0 = [Math.cos(a0) * rBottom, 0, Math.sin(a0) * rBottom], b1 = [Math.cos(a1) * rBottom, 0, Math.sin(a1) * rBottom];
+      const t0 = [Math.cos(a0) * rTop, h, Math.sin(a0) * rTop], t1 = [Math.cos(a1) * rTop, h, Math.sin(a1) * rTop];
+      if (rTop > 0) g.quad(b1, b0, t0, t1, color); else g.tri(b1, b0, [0, h, 0], color);
+      if (caps) {
+        g.tri([0, 0, 0], b0, b1, color);
+        if (rTop > 0) g.tri([0, h, 0], t1, t0, color);
+      }
+    }
+    return g;
+  }
+  static cone(r = 0.5, h = 1, seg = 6, color) { return Geometry.cylinder(0, r, h, seg, color); }
+
+  // 울퉁불퉁한 로우폴리 구 (jitter로 바위/나뭇잎 덩어리)
+  static icosphere(r = 0.5, subdiv = 1, color = [1, 1, 1], { jitter = 0, seed = 1, squashY = 1 } = {}) {
+    const t = (1 + Math.sqrt(5)) / 2;
+    let verts = [[-1, t, 0], [1, t, 0], [-1, -t, 0], [1, -t, 0], [0, -1, t], [0, 1, t], [0, -1, -t], [0, 1, -t], [t, 0, -1], [t, 0, 1], [-t, 0, -1], [-t, 0, 1]].map(v3.norm);
+    let faces = [[0, 11, 5], [0, 5, 1], [0, 1, 7], [0, 7, 10], [0, 10, 11], [1, 5, 9], [5, 11, 4], [11, 10, 2], [10, 7, 6], [7, 1, 8], [3, 9, 4], [3, 4, 2], [3, 2, 6], [3, 6, 8], [3, 8, 9], [4, 9, 5], [2, 4, 11], [6, 2, 10], [8, 6, 7], [9, 8, 1]];
+    for (let s = 0; s < subdiv; s++) {
+      const cache = new Map(), nf = [];
+      const mid = (a, b) => {
+        const k = a < b ? `${a}_${b}` : `${b}_${a}`;
+        if (!cache.has(k)) { verts.push(v3.norm(v3.scale(v3.add(verts[a], verts[b]), 0.5))); cache.set(k, verts.length - 1); }
+        return cache.get(k);
+      };
+      for (const [a, b, c] of faces) {
+        const ab = mid(a, b), bc = mid(b, c), ca = mid(c, a);
+        nf.push([a, ab, ca], [b, bc, ab], [c, ca, bc], [ab, bc, ca]);
+      }
+      faces = nf;
+    }
+    const R = makeRng(seed);
+    verts = verts.map((v) => { const k = r * (1 + (R() - 0.5) * 2 * jitter); return [v[0] * k, v[1] * k * squashY, v[2] * k]; });
+    const g = new Geometry();
+    for (const [a, b, c] of faces) g.tri(verts[a], verts[b], verts[c], color);
+    return g;
+  }
+
+  // 격자 평면 (지형/물). heightFn(x,z) → y, colorFn(중심, 법선) → 색
+  static grid(w, d, nx, nz, heightFn = () => 0, colorFn = null, { y0 = 0 } = {}) {
+    const g = new Geometry();
+    const P = (i, j) => { const x = (i / nx - 0.5) * w, z = (j / nz - 0.5) * d; return [x, y0 + heightFn(x, z), z]; };
+    for (let j = 0; j < nz; j++) {
+      for (let i = 0; i < nx; i++) {
+        const a = P(i, j + 1), b = P(i + 1, j + 1), c = P(i + 1, j), e = P(i, j);
+        // 대각선 방향을 번갈아 바꿔서 줄무늬 없이 자연스럽게
+        if ((i + j) % 2) { g.tri(a, b, c); g.tri(a, c, e); } else { g.tri(a, b, e); g.tri(b, c, e); }
+      }
+    }
+    if (colorFn) g.paint(colorFn);
+    return g;
+  }
+
+  // 스프라이트용 사각형: 바닥 중앙 기준, +Z를 바라봄
+  static spriteQuad(w = 1, h = 1) {
+    const g = new Geometry(), x = w / 2;
+    g.quad([-x, 0, 0], [x, 0, 0], [x, h, 0], [-x, h, 0], [1, 1, 1], [[0, 0], [1, 0], [1, 1], [0, 1]]);
+    return g;
+  }
+
+  // 삼각 지붕 (집 만들 때)
+  static prism(w = 1, h = 0.6, d = 1, color = [1, 1, 1]) {
+    const g = new Geometry(), x = w / 2, z = d / 2;
+    g.tri([-x, 0, z], [x, 0, z], [0, h, z], color);
+    g.tri([x, 0, -z], [-x, 0, -z], [0, h, -z], color);
+    g.quad([x, 0, z], [x, 0, -z], [0, h, -z], [0, h, z], color);
+    g.quad([-x, 0, -z], [-x, 0, z], [0, h, z], [0, h, -z], color);
+    g.quad([-x, 0, -z], [x, 0, -z], [x, 0, z], [-x, 0, z], color);
+    return g;
+  }
+}
+
+return { Geometry };
+})();
+
+__m["engine/engine.js"] = (() => {
+// PixelForge — 엔진 본체 (캔버스, 게임 루프, 편의 함수)
+
+const { Renderer } = __m["engine/renderer.js"];
+const { Scene, Sprite, Material } = __m["engine/scene.js"];
+const { PixelCamera } = __m["engine/camera.js"];
+const { Input } = __m["engine/input.js"];
+const { Geometry } = __m["engine/geometry.js"];
+const { textureFromPixels } = __m["engine/gl.js"];
+
+class Engine {
+  /**
+   * @param canvas HTMLCanvasElement
+   * @param opts.pixelSize  저해상도 픽셀 1칸의 크기 (CSS 픽셀). 클수록 더 도트스러움
+   */
+  constructor(canvas, { pixelSize = 3, pixelScale = 0, stick = true } = {}) {
+    const gl = canvas.getContext('webgl2', { antialias: false, alpha: false, depth: false, powerPreference: 'high-performance' });
+    if (!gl) throw new Error('이 브라우저는 WebGL2를 지원하지 않습니다.');
+    this.canvas = canvas;
+    this.gl = gl;
+    this.renderer = new Renderer(gl);
+    this.scene = new Scene();
+    this.camera = new PixelCamera();
+    this.input = new Input(canvas, { stick });
+    this.pixelSize = pixelSize;
+    this.pixelScale = pixelScale; // 0이면 pixelSize × dpr 사용
+    this.raw = false; // true면 픽셀화 없이 원본 3D로 렌더 (비교용)
+    this.time = 0;
+    this.fps = 60;
+    this.onUpdate = null; // (dt, time) => {}
+    this._running = false;
+    this.resize();
+    addEventListener('resize', () => this.resize());
+  }
+
+  get dpr() { return Math.min(window.devicePixelRatio || 1, 3); }
+  // 저해상도 1칸 = 디바이스 픽셀 몇 칸. pixelScale(정수)을 직접 지정하면 그 값을 쓴다
+  get scale() {
+    if (this.raw) return 1;
+    if (this.pixelScale) return Math.max(1, Math.round(this.pixelScale));
+    return Math.max(1, Math.round(this.pixelSize * this.dpr));
+  }
+
+  resize() {
+    const c = this.canvas, d = this.dpr;
+    const w = Math.max(1, Math.floor(c.clientWidth * d)), h = Math.max(1, Math.floor(c.clientHeight * d));
+    if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+  }
+
+  start() {
+    if (this._running) return;
+    this._running = true;
+    let last = performance.now();
+    const frame = (now) => {
+      if (!this._running) return;
+      const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); // rAF 타임스탬프가 거꾸로 올 때 대비
+      last = now;
+      this.step(dt);
+      requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+  }
+  stop() { this._running = false; }
+
+  // 한 프레임 진행 (테스트나 녹화할 때 직접 호출해도 됨)
+  step(dt) {
+    this.time += dt;
+    this.fps = this.fps * 0.95 + (dt > 0 ? 1 / dt : 60) * 0.05;
+    this.resize();
+    if (this.onUpdate) this.onUpdate(dt, this.time);
+    for (const ps of this.scene.particles) ps.update(dt);
+    this.camera.snap = !this.raw;
+    this.renderer.render(this.scene, this.camera, this.canvas.width, this.canvas.height, this.scale, this.time);
+    this.input.endFrame();
+  }
+
+  /** 문자열 도트 그림 → 텍스처 */
+  texture(rows, palette) { return textureFromPixels(this.gl, rows, palette); }
+
+  /**
+   * 도트 그림으로 2D 스프라이트 만들기 (카메라를 향해 서 있는 판)
+   * unitsPerPixel: 도트 한 칸의 월드 크기
+   */
+  sprite(rows, palette, { unitsPerPixel = 1 / 12, billboard = true, emissive = 0, castShadow = true } = {}) {
+    const tex = this.texture(rows, palette);
+    const geo = Geometry.spriteQuad(tex.width * unitsPerPixel, tex.height * unitsPerPixel);
+    return new Sprite(geo, new Material({ texture: tex, emissive, castShadow, outline: true }), { billboard, unitsPerPixel });
+  }
+}
+
+return { Engine };
+})();
+
+__m["engine/particles.js"] = (() => {
+// PixelForge — 픽셀 파티클 시스템
+// 파티클 하나 = 저해상도 화면의 정사각형 점(GL_POINTS). 크기는 "저해상도 픽셀" 단위라 항상 또렷하다.
+// 투명도는 반투명 블렌딩 대신 베이어 디더링(스크린도어)으로 표현 → 픽셀아트스러운 페이드
+
+const { lerp } = __m["engine/math.js"];
+
+const STRIDE = 9; // pos3, rgb3, emissive1, alpha1, size1
+
+class ParticleSystem {
+  /**
+   * node: 지정하면 파티클 좌표가 이 노드 기준 로컬 (행성 위 이펙트 등)
+   * radialGravity: true면 중력이 원점(행성 중심) 방향
+   */
+  constructor({ max = 1000, gravity = [0, -4, 0], drag = 1.5, node = null, radialGravity = false } = {}) {
+    this.max = max;
+    this.node = node;
+    this.radialGravity = radialGravity;
+    this.gravity = gravity;
+    this.drag = drag;
+    this.list = [];
+    this.data = new Float32Array(max * STRIDE);
+    this._gpu = null;
+  }
+
+  /**
+   * position, velocity: [x,y,z]
+   * life: 초, size: 시작 크기(픽셀), sizeEnd: 끝 크기
+   * color / colorEnd: [r,g,b], emissive: 0~1 (블룸)
+   * fadeIn: 0~1 수명 비율만큼 서서히 나타남
+   * update(p, dt): 개별 움직임을 덮어쓰고 싶을 때
+   */
+  emit(o) {
+    if (this.list.length >= this.max) this.list.shift();
+    this.list.push({
+      p: [...o.position], v: [...(o.velocity || [0, 0, 0])],
+      life: o.life ?? 1, age: 0,
+      size: o.size ?? 2, sizeEnd: o.sizeEnd ?? o.size ?? 2,
+      color: o.color || [1, 1, 1], colorEnd: o.colorEnd || o.color || [1, 1, 1],
+      emissive: o.emissive ?? 0, fadeIn: o.fadeIn ?? 0,
+      gravity: o.gravity ?? 1, update: o.update || null, seed: Math.random() * 100,
+    });
+  }
+
+  update(dt) {
+    const g = this.gravity, k = Math.exp(-this.drag * dt);
+    for (let i = this.list.length - 1; i >= 0; i--) {
+      const p = this.list[i];
+      p.age += dt;
+      if (p.age >= p.life) { this.list.splice(i, 1); continue; }
+      if (p.update) p.update(p, dt);
+      let gx = g[0], gy = g[1], gz = g[2];
+      if (this.radialGravity) {
+        const l = Math.hypot(p.p[0], p.p[1], p.p[2]) || 1, gm = Math.hypot(g[0], g[1], g[2]);
+        gx = (-p.p[0] / l) * gm; gy = (-p.p[1] / l) * gm; gz = (-p.p[2] / l) * gm;
+      }
+      p.v[0] = p.v[0] * k + gx * p.gravity * dt;
+      p.v[1] = p.v[1] * k + gy * p.gravity * dt;
+      p.v[2] = p.v[2] * k + gz * p.gravity * dt;
+      p.p[0] += p.v[0] * dt; p.p[1] += p.v[1] * dt; p.p[2] += p.v[2] * dt;
+    }
+  }
+
+  // GPU 버퍼로 패킹, 그릴 개수 반환
+  pack() {
+    const d = this.data;
+    let n = 0;
+    for (const p of this.list) {
+      const t = p.age / p.life, o = n * STRIDE;
+      d[o] = p.p[0]; d[o + 1] = p.p[1]; d[o + 2] = p.p[2];
+      d[o + 3] = lerp(p.color[0], p.colorEnd[0], t);
+      d[o + 4] = lerp(p.color[1], p.colorEnd[1], t);
+      d[o + 5] = lerp(p.color[2], p.colorEnd[2], t);
+      d[o + 6] = p.emissive;
+      const fadeOut = Math.min(1, (1 - t) * 3);
+      const fadeIn = p.fadeIn > 0 ? Math.min(1, t / p.fadeIn) : 1;
+      d[o + 7] = fadeOut * fadeIn;
+      d[o + 8] = lerp(p.size, p.sizeEnd, t);
+      n++;
+    }
+    return n;
+  }
+
+  upload(gl) {
+    if (!this._gpu) {
+      const vao = gl.createVertexArray(), buf = gl.createBuffer();
+      gl.bindVertexArray(vao);
+      gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+      gl.bufferData(gl.ARRAY_BUFFER, this.data.byteLength, gl.DYNAMIC_DRAW);
+      const B = STRIDE * 4;
+      gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, B, 0);
+      gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 4, gl.FLOAT, false, B, 12);
+      gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 2, gl.FLOAT, false, B, 28);
+      gl.bindVertexArray(null);
+      this._gpu = { vao, buf };
+    }
+    const n = this.pack();
+    gl.bindBuffer(gl.ARRAY_BUFFER, this._gpu.buf);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.data, 0, n * STRIDE);
+    return n;
+  }
+}
+
+return { ParticleSystem };
+})();
+
+__m["engine/foliage.js"] = (() => {
+// PixelForge — 잔디(인스턴싱) & 물
+
+const { rng: makeRng, hexColor } = __m["engine/math.js"];
+const { Geometry } = __m["engine/geometry.js"];
+
+const toColor = (c) => (typeof c === 'string' ? hexColor(c) : c);
+
+/**
+ * 수천 개의 잔디 잎을 GPU 인스턴싱으로 한 번에 그린다.
+ * 잎은 항상 카메라를 향하고, 바람에 흔들리며, 플레이어 근처에서 옆으로 눕는다.
+ *
+ * place(x, z) → null(심지 않음) 또는 { y, color:[r,g,b] }
+ */
+class GrassField {
+  constructor({ count = 8000, bounds = [-20, 20, -20, 20], place, height = [0.25, 0.5], width = 0.14, seed = 7 } = {}) {
+    const R = makeRng(seed);
+    const inst = [];
+    let tries = 0;
+    while (inst.length / 8 < count && tries < count * 6) {
+      tries++;
+      const x = R.range(bounds[0], bounds[1]), z = R.range(bounds[2], bounds[3]);
+      const p = place(x, z, R);
+      if (!p) continue;
+      const c = p.color, v = R.range(0.88, 1.12);
+      inst.push(x, p.y, z, c[0] * v, c[1] * v, c[2] * v, R.range(height[0], height[1]) * (p.scale ?? 1), R() * 6.28);
+    }
+    this.instances = new Float32Array(inst);
+    this.count = inst.length / 8;
+    this.width = width;
+    this.interactors = []; // 잔디를 눕힐 위치들 [[x,y,z], ...] (최대 4개)
+    this._gpu = null;
+  }
+  upload(gl) {
+    if (this._gpu) return this._gpu;
+    const vao = gl.createVertexArray();
+    gl.bindVertexArray(vao);
+    const blade = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, blade);
+    // 잎 하나 = 삼각형 (x: 좌우, y: 높이 비율)
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-0.5, 0, 0, 0.5, 0, 0, 0, 1, 0]), gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+    const ib = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, ib);
+    gl.bufferData(gl.ARRAY_BUFFER, this.instances, gl.STATIC_DRAW);
+    const B = 32;
+    gl.enableVertexAttribArray(4); gl.vertexAttribPointer(4, 3, gl.FLOAT, false, B, 0); gl.vertexAttribDivisor(4, 1);
+    gl.enableVertexAttribArray(5); gl.vertexAttribPointer(5, 3, gl.FLOAT, false, B, 12); gl.vertexAttribDivisor(5, 1);
+    gl.enableVertexAttribArray(6); gl.vertexAttribPointer(6, 2, gl.FLOAT, false, B, 24); gl.vertexAttribDivisor(6, 1);
+    gl.bindVertexArray(null);
+    this._gpu = { vao, buffers: [blade, ib] };
+    return this._gpu;
+  }
+}
+
+/**
+ * 툰 스타일 물. 장면의 깊이를 읽어서
+ *  - 얕은 곳은 밝은 청록, 깊은 곳은 짙은 파랑
+ *  - 물가에는 흰 거품 선
+ *  - 물속 지형이 일렁이며 비쳐 보임
+ */
+class Water {
+  constructor({ size = 120, segments = 90, level = 0, shallow = '#5fd3c8', deep = '#1f4f8a', foam = '#eefcff', waveHeight = 0.06, geometry = null, radial = false, emissive = 0 } = {}) {
+    this.level = level;
+    this.radial = radial;     // 구형 바다 (geometry를 구로 넘겼을 때)
+    this.emissive = emissive; // 용암처럼 스스로 빛나는 액체
+    this.node = null;         // 지정하면 이 노드의 월드 행렬을 따라 움직임
+    this.shallow = toColor(shallow);
+    this.deep = toColor(deep);
+    this.foam = toColor(foam);
+    this.waveHeight = waveHeight;
+    this.depthRange = 2.5; // 이 깊이에서 완전히 deep 색
+    this.geometry = geometry || Geometry.grid(size, size, segments, segments, () => 0, null, { y0: level });
+  }
+}
+
+return { GrassField, Water };
+})();
+
+__m["engine/palettes.js"] = (() => {
+// PixelForge — 제한 팔레트 (합성 단계에서 가장 가까운 색으로 치환)
+const { hexColor } = __m["engine/math.js"];
+
+const P = (s) => s.trim().split(/\s+/).map(hexColor);
+
+const PALETTES = {
+  // 따뜻한 들판 32색
+  meadow: P(`
+    #1a1c2c #2b2a45 #3b4a6b #45628f #4d8bb0 #6cc4d6 #a6eef0 #f4f4f4
+    #20352b #2e5a3a #3f7d3c #64a33f #9bc94b #d3e57a #f1f2b5 #c6b38a
+    #7a5a3a #9c7246 #c49a5a #e6c27a #f6e3a4 #8a3b3b #c4523f #ee8a4f
+    #f7b267 #6b3f6b #a35a8a #e08ab0 #5a5e6e #8a8f9e #b9bcc6 #0f0f17`),
+  // DawnBringer 16 (픽셀아트 커뮤니티에서 널리 쓰이는 공개 팔레트)
+  db16: P(`
+    #140c1c #442434 #30346d #4e4a4e #854c30 #346524 #d04648 #757161
+    #597dce #d27d2c #8595a1 #6daa2c #d2aa99 #6dc2ca #dad45e #deeed6`),
+  // 4톤 녹색 휴대용 게임기 느낌
+  handheld: P(`#0f2a1d #2f5a32 #7aa04a #cfe39a`),
+};
+
+return { PALETTES };
+})();
+
+__m["engine/index.js"] = (() => {
+// PixelForge — 공개 API
+
+
+
+
+
+
+
+
+
+
+
+return { Engine: __m["engine/engine.js"].Engine, Renderer: __m["engine/renderer.js"].Renderer, DEFAULT_SETTINGS: __m["engine/renderer.js"].DEFAULT_SETTINGS, Scene: __m["engine/scene.js"].Scene, Node: __m["engine/scene.js"].Node, Mesh: __m["engine/scene.js"].Mesh, Sprite: __m["engine/scene.js"].Sprite, Material: __m["engine/scene.js"].Material, InstancedMesh: __m["engine/scene.js"].InstancedMesh, Geometry: __m["engine/geometry.js"].Geometry, PixelCamera: __m["engine/camera.js"].PixelCamera, ParticleSystem: __m["engine/particles.js"].ParticleSystem, GrassField: __m["engine/foliage.js"].GrassField, Water: __m["engine/foliage.js"].Water, Input: __m["engine/input.js"].Input, PALETTES: __m["engine/palettes.js"].PALETTES, ...__m["engine/math.js"] };
+})();
+
+__m["demo/main.js"] = (() => {
+// PixelForge 데모 — "작은 섬"
+// 로우폴리 도형만으로 만든 섬을 픽셀 파이프라인으로 렌더한다.
+
+const {
+  Engine, Node, Mesh, Material, Geometry, ParticleSystem, GrassField, Water,
+  PALETTES, rng, fbm, noise2, smoothstep, clamp, lerp, damp, dampAngle, v3,
+} = __m["engine/index.js"];
+
+function boot(canvas, ui) {
+  const engine = new Engine(canvas, { pixelSize: 3 });
+  const { scene, camera, input, renderer } = engine;
+  const R = rng(20261026);
+
+  // ------------------------------------------------------------------
+  // 지형
+  // ------------------------------------------------------------------
+  const W = 60, N = 75; // 지형 크기 / 격자 수
+  const HOUSE = [-6, -5];
+  const DOCK = [5, 15.5];
+  const PATH = [[5, 14.5], [4, 10], [0.5, 5.5], [-2.5, 1], [-4.5, -2.4]];
+
+  function distToPath(x, z) {
+    let best = 1e9;
+    for (let i = 0; i < PATH.length - 1; i++) {
+      const [ax, az] = PATH[i], [bx, bz] = PATH[i + 1];
+      const dx = bx - ax, dz = bz - az;
+      const t = clamp(((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz), 0, 1);
+      best = Math.min(best, Math.hypot(x - (ax + dx * t), z - (az + dz * t)));
+    }
+    return best;
+  }
+
+  function baseHeight(x, z) {
+    const d = Math.hypot(x, z * 1.12) / 19;
+    const n = fbm(x * 0.07 + 3.1, z * 0.07 + 7.3, 4);
+    let h = (1 - d * d) * 3.2 + (n - 0.5) * 2.6 - 0.5;
+    h -= smoothstep(0.85, 1.3, d) * 3;
+    // 계단식 지형 (절벽이 생겨서 외곽선이 예쁘게 나옴)
+    if (h > 0.45) {
+      const step = 0.75, t = Math.floor(h / step) * step;
+      const terr = t + smoothstep(0.55, 0.95, (h - t) / step) * step;
+      h = lerp(h, terr, smoothstep(0.45, 0.9, h));
+    }
+    // 집터 평탄화
+    const dh = Math.hypot(x - HOUSE[0], z - HOUSE[1]);
+    h = lerp(h, 2.25, smoothstep(4.8, 2.8, dh));
+    // 길은 살짝 다져서 평평하게
+    const dp = distToPath(x, z);
+    if (h > 0.3) h = lerp(h, Math.max(0.5, h * 0.97), smoothstep(1.4, 0.4, dp));
+    return Math.max(h, -2.5);
+  }
+
+  // 격자 높이 캐시 + 렌더되는 삼각형과 정확히 같은 높이 보간
+  const cell = W / N;
+  const gridH = new Float32Array((N + 1) * (N + 1));
+  for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++) gridH[j * (N + 1) + i] = baseHeight((i / N - 0.5) * W, (j / N - 0.5) * W);
+  const gh = (i, j) => gridH[clamp(j, 0, N) * (N + 1) + clamp(i, 0, N)];
+  function heightAt(x, z) {
+    const fx = (x / W + 0.5) * N, fz = (z / W + 0.5) * N;
+    const i = Math.floor(fx), j = Math.floor(fz), u = fx - i, v = fz - j;
+    if (i < 0 || j < 0 || i >= N || j >= N) return -2.5;
+    const h00 = gh(i, j), h10 = gh(i + 1, j), h01 = gh(i, j + 1), h11 = gh(i + 1, j + 1);
+    if ((i + j) % 2) {
+      return u + v <= 1 ? h00 + (h10 - h00) * u + (h01 - h00) * v : h11 + (h01 - h11) * (1 - u) + (h10 - h11) * (1 - v);
+    }
+    return u >= v ? h00 + (h10 - h00) * u + (h11 - h10) * v : h00 + (h01 - h00) * v + (h11 - h01) * u;
+  }
+  function slopeAt(x, z) {
+    const e = 0.4;
+    const dx = heightAt(x + e, z) - heightAt(x - e, z), dz = heightAt(x, z + e) - heightAt(x, z - e);
+    return Math.hypot(dx, dz) / (2 * e);
+  }
+
+  const GRASS_A = [0.34, 0.6, 0.27], GRASS_B = [0.5, 0.72, 0.3], GRASS_C = [0.66, 0.74, 0.32];
+  function grassColor(x, z) {
+    const n = noise2(x * 0.18, z * 0.18), m = noise2(x * 0.05 + 40, z * 0.05);
+    const c = v3.lerp(GRASS_A, GRASS_B, smoothstep(0.35, 0.65, n));
+    return v3.lerp(c, GRASS_C, smoothstep(0.62, 0.8, m) * 0.7);
+  }
+  const PATH_COL = [0.8, 0.66, 0.44];
+
+  const terrainGeo = Geometry.grid(W, W, N, N, (x, z) => baseHeight(x, z), ([x, y, z], n) => {
+    if (y < -0.1) return v3.lerp([0.74, 0.66, 0.48], [0.5, 0.48, 0.42], smoothstep(-0.1, -1.6, y));
+    if (y < 0.42) return [0.95, 0.85, 0.6];
+    if (n[1] < 0.74) return y > 1.8 ? [0.56, 0.5, 0.48] : [0.62, 0.47, 0.36];
+    if (distToPath(x, z) < 0.85) return PATH_COL;
+    return grassColor(x, z);
+  });
+  scene.add(new Mesh(terrainGeo, new Material(), 'terrain'));
+
+  const water = new Water({ size: 140, segments: 100, level: 0, shallow: '#62d9cf', deep: '#22508f' });
+  scene.water.push(water);
+
+  const colliders = []; // {x, z, r}
+  const blocked = (x, z, pad = 0) => colliders.some((c) => Math.hypot(x - c.x, z - c.z) < c.r + pad);
+
+  // ------------------------------------------------------------------
+  // 집
+  // ------------------------------------------------------------------
+  const nightMats = []; // 밤에 빛나는 머티리얼
+  {
+    const [hx, hz] = HOUSE, y = heightAt(hx, hz);
+    const house = scene.add(new Node('house'));
+    house.position = [hx, y, hz];
+    house.rotation[1] = 0.35;
+    house.add(new Mesh(Geometry.box(3.2, 2.1, 2.6), { color: '#efe3c8' }));
+    house.add(new Mesh(Geometry.box(3.4, 0.25, 2.8), { color: '#9a7b5c' }));
+    const roof = house.add(new Mesh(Geometry.prism(3.9, 1.5, 3.1), { color: '#d0574a' }));
+    roof.position[1] = 2.1;
+    const door = house.add(new Mesh(Geometry.box(0.7, 1.25, 0.12), { color: '#6b4a34' }));
+    door.position = [0.6, 0.15, 1.31];
+    const winMat = new Material({ color: '#ffd77a' });
+    nightMats.push(winMat);
+    const win = house.add(new Mesh(Geometry.box(0.6, 0.55, 0.12), winMat));
+    win.position = [-0.75, 0.95, 1.31];
+    const chimney = house.add(new Mesh(Geometry.box(0.45, 1.2, 0.45), { color: '#8b7f7a' }));
+    chimney.position = [-0.9, 2.5, -0.4];
+    house.chimneyTop = [-0.9, 3.8, -0.4];
+    scene.house = house;
+    colliders.push({ x: hx, z: hz, r: 2.2 });
+  }
+
+  // ------------------------------------------------------------------
+  // 선착장 + 배
+  // ------------------------------------------------------------------
+  {
+    const dock = scene.add(new Node('dock'));
+    dock.position = [DOCK[0], 0, DOCK[1]];
+    for (let i = 0; i < 9; i++) {
+      const plank = dock.add(new Mesh(Geometry.box(1.6, 0.12, 0.5), { color: i % 2 ? '#a77c52' : '#b98b5c' }));
+      plank.position = [0, 0.38, i * 0.55];
+    }
+    for (const sx of [-0.7, 0.7]) for (const z of [0.6, 2.8, 4.6]) {
+      const post = dock.add(new Mesh(Geometry.cylinder(0.1, 0.1, 1.6, 5), { color: '#6e5038' }));
+      post.position = [sx, -1.1, z];
+    }
+  }
+  const boat = scene.add(new Node('boat'));
+  {
+    boat.position = [8.2, 0, 19];
+    boat.rotation[1] = 0.4;
+    const hull = boat.add(new Mesh(Geometry.box(1.2, 0.45, 2.6), { color: '#7a4f36' }));
+    hull.position[1] = -0.15;
+    const rim = boat.add(new Mesh(Geometry.box(1.3, 0.1, 2.7), { color: '#e9dcc0' }));
+    rim.position[1] = 0.3;
+    const mast = boat.add(new Mesh(Geometry.cylinder(0.06, 0.06, 2.4, 5), { color: '#5c4030' }));
+    mast.position = [0, 0.3, 0.2];
+    const sail = boat.add(new Mesh(Geometry.box(0.05, 1.6, 1.1), { color: '#f6f1e6' }));
+    sail.position = [0, 0.9, -0.35];
+    colliders.push({ x: 8.2, z: 19, r: 1.3 });
+  }
+
+  // ------------------------------------------------------------------
+  // 가로등
+  // ------------------------------------------------------------------
+  const lampMat = new Material({ color: '#ffcf6b' });
+  nightMats.push(lampMat);
+  const lamps = [];
+  for (const [x, z] of [[3.2, 11.6], [-0.6, 4.2], [-3.8, -0.4]]) {
+    const y = heightAt(x, z);
+    const lamp = scene.add(new Node('lamp'));
+    lamp.position = [x, y, z];
+    lamp.add(new Mesh(Geometry.box(0.14, 1.7, 0.14), { color: '#3d3a46' }));
+    const cap = lamp.add(new Mesh(Geometry.box(0.42, 0.08, 0.42), { color: '#3d3a46' }));
+    cap.position[1] = 2.15;
+    const glass = lamp.add(new Mesh(Geometry.box(0.3, 0.42, 0.3), lampMat));
+    glass.position[1] = 1.7;
+    lamps.push([x, y + 1.9, z]);
+    scene.lights.push({ position: [x, y + 1.7, z], color: [1, 0.78, 0.45], radius: 5.5, intensity: 0, lamp: true });
+    colliders.push({ x, z, r: 0.3 });
+  }
+
+  // ------------------------------------------------------------------
+  // 나무 / 바위
+  // ------------------------------------------------------------------
+  const trees = [];
+  const okSpot = (x, z, minH = 0.6) => {
+    const h = heightAt(x, z);
+    return h > minH && slopeAt(x, z) < 0.45 && distToPath(x, z) > 1.6 &&
+      Math.hypot(x - HOUSE[0], z - HOUSE[1]) > 3.6 && Math.hypot(x - DOCK[0], z - DOCK[1]) > 2.5;
+  };
+  const FOLIAGE = ['#3f8a3a', '#4f9c3c', '#5aa845', '#367a3a'];
+  const AUTUMN = ['#e0873a', '#d3613b', '#e8b04a'];
+  for (let tries = 0; trees.length < 30 && tries < 2000; tries++) {
+    const x = R.range(-20, 20), z = R.range(-19, 19);
+    if (!okSpot(x, z) || trees.some((t) => Math.hypot(t.x - x, t.z - z) < 2.6)) continue;
+    const y = heightAt(x, z), s = R.range(0.85, 1.25);
+    const tree = scene.add(new Node('tree'));
+    tree.position = [x, y - 0.05, z];
+    tree.rotation[1] = R() * 6.28;
+    tree.setScale(s);
+    const pine = R() < 0.35;
+    const autumn = !pine && R() < 0.18;
+    if (pine) {
+      tree.add(new Mesh(Geometry.cylinder(0.14, 0.2, 0.9, 5), { color: '#6e4b33' }));
+      const g = new Geometry(), col = [0.2 + R() * 0.06, 0.48 + R() * 0.08, 0.32];
+      [[1.0, 1.4, 0.6], [0.78, 1.2, 1.3], [0.55, 1.0, 1.95]].forEach(([r, h, y0]) => g.merge(Geometry.cone(r, h, 7, col), { position: [0, y0, 0] }));
+      tree.add(new Mesh(g, { color: [1, 1, 1], wind: 0.018 }));
+    } else {
+      tree.add(new Mesh(Geometry.cylinder(0.13, 0.22, 1.5, 5), { color: '#7a5236' }));
+      const g = new Geometry();
+      const pal = autumn ? AUTUMN : FOLIAGE;
+      const blobs = 2 + Math.floor(R() * 2);
+      for (let b = 0; b < blobs; b++) {
+        const r = R.range(0.65, 0.95);
+        g.merge(Geometry.icosphere(r, 1, [1, 1, 1], { jitter: 0.12, seed: Math.floor(R() * 1e6), squashY: 0.85 }), {
+          position: [R.range(-0.45, 0.45), 1.75 + b * 0.38 + R.range(-0.1, 0.1), R.range(-0.45, 0.45)],
+          color: (() => { const c = pal[Math.floor(R() * pal.length)]; const n = parseInt(c.slice(1), 16); return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]; })(),
+        });
+      }
+      tree.add(new Mesh(g, { wind: 0.025 }));
+    }
+    trees.push({ x, z, y, s, autumn, pine, node: tree, shake: 0, sdir: [0, 0] });
+    colliders.push({ x, z, r: 0.45 * s });
+  }
+
+  for (let i = 0, tries = 0; i < 16 && tries < 1000; tries++) {
+    const x = R.range(-21, 21), z = R.range(-20, 20);
+    const h = heightAt(x, z);
+    if (h < -0.6 || h > 3.5 || distToPath(x, z) < 1.4 || blocked(x, z, 1)) continue;
+    const r = R.range(0.35, 0.9);
+    const rock = scene.add(new Mesh(Geometry.icosphere(r, 0, [1, 1, 1], { jitter: 0.25, seed: i + 3, squashY: 0.7 }), { color: R() < 0.5 ? '#9a9aa6' : '#8a8f99' }));
+    rock.position = [x, h + r * 0.15, z];
+    rock.rotation = [R() * 0.5, R() * 6.28, 0];
+    colliders.push({ x, z, r: r * 0.85 });
+    i++;
+  }
+
+  // ------------------------------------------------------------------
+  // 2D 스프라이트: 꽃과 고양이 (도트 그림을 문자열로)
+  // ------------------------------------------------------------------
+  const FLOWERS = [
+    { rows: ['.p.p.', 'ppypp', '.ppp.', '..g..', '.gg..', '..g.g', '..gg.'], pal: { p: '#f28ab2', y: '#ffe066', g: '#3f8a3a' } },
+    { rows: ['.r.r.', '.rrr.', '.rrr.', '..g..', 'g.g..', '.gg.g', '..gg.'], pal: { r: '#e5484d', g: '#3f8a3a' } },
+    { rows: ['.w.w.', 'wwyww', '.www.', '..g..', '..gg.', '.gg..', '..g..'], pal: { w: '#fbfbf2', y: '#f5b83d', g: '#3f8a3a' } },
+    { rows: ['..b..', '.bbb.', '..b..', '..g..', '.gg.g', '..gg.', '..g..'], pal: { b: '#7aa7ff', g: '#3f8a3a' } },
+  ];
+  for (let i = 0, tries = 0; i < 46 && tries < 3000; tries++) {
+    const x = R.range(-18, 18), z = R.range(-17, 17);
+    if (!okSpot(x, z, 0.7) || blocked(x, z, 0.4)) continue;
+    const f = FLOWERS[Math.floor(R() * FLOWERS.length)];
+    const s = engine.sprite(f.rows, f.pal, { unitsPerPixel: 0.06 });
+    s.position = [x, heightAt(x, z) - 0.02, z];
+    scene.add(s);
+    i++;
+  }
+
+  const CAT_PAL = { o: '#ec9a45', d: '#c9742e', w: '#fff3dd', k: '#1b1b26', p: '#f08aa0' };
+  const catBase = ['.o......o...', '.oo....oo...', '.oooooooo...', '.owkoowko...', '.oooppooo...', '..oooooo....'];
+  const catFrames = [
+    [...catBase, '..oowwoo..o.', '.odowwodo.o.', '.ooowwooooo.', '.oooooooo...', '..ww..ww....'],
+    [...catBase, '..oowwoo...o', '.odowwodo.o.', '.ooowwoooo..', '.oooooooo...', '..ww..ww....'],
+    [...catBase.slice(0, 3), '.okkookko...', ...catBase.slice(4), '..oowwoo..o.', '.odowwodo.o.', '.ooowwooooo.', '.oooooooo...', '..ww..ww....'],
+  ].map((rows) => engine.texture(rows, CAT_PAL));
+  const cat = engine.sprite(['o'], { o: '#000000' }, { unitsPerPixel: 0.06 });
+  cat.geometry = Geometry.spriteQuad(12 * 0.06, 11 * 0.06);
+  cat.material.texture = catFrames[0];
+  {
+    const cx = HOUSE[0] + 2.4, cz = HOUSE[1] + 2.4;
+    cat.position = [cx, heightAt(cx, cz), cz];
+    scene.add(cat);
+    colliders.push({ x: cx, z: cz, r: 0.35 });
+  }
+
+  // ------------------------------------------------------------------
+  // 잔디 (인스턴싱)
+  // ------------------------------------------------------------------
+  const grass = new GrassField({
+    count: 16000, bounds: [-21, 21, -20, 20], height: [0.28, 0.55], width: 0.13,
+    place: (x, z) => {
+      const y = heightAt(x, z);
+      if (y < 0.5 || slopeAt(x, z) > 0.55 || distToPath(x, z) < 0.95) return null;
+      if (Math.hypot(x - HOUSE[0], z - HOUSE[1]) < 2.3) return null;
+      return { y: y - 0.02, color: v3.scale(grassColor(x, z), 1.06) };
+    },
+  });
+  scene.grass.push(grass);
+
+  // ------------------------------------------------------------------
+  // 플레이어 (도형 조립)
+  // ------------------------------------------------------------------
+  const player = scene.add(new Node('player'));
+  const rig = player.add(new Node('rig'));
+  const mk = (geo, color, parent = rig) => parent.add(new Mesh(geo, { color }));
+  const legL = rig.add(new Node()), legR = rig.add(new Node());
+  legL.position = [-0.12, 0.32, 0]; legR.position = [0.12, 0.32, 0];
+  mk(Geometry.box(0.14, 0.32, 0.16), '#3b3550', legL).position[1] = -0.32;
+  mk(Geometry.box(0.14, 0.32, 0.16), '#3b3550', legR).position[1] = -0.32;
+  const body = mk(Geometry.cylinder(0.2, 0.3, 0.55, 6), '#4a78c2');
+  body.position[1] = 0.28;
+  const scarf = mk(Geometry.cylinder(0.25, 0.25, 0.1, 6), '#ffcf4a');
+  scarf.position[1] = 0.76;
+  const head = mk(Geometry.icosphere(0.27, 1, [1, 1, 1]), '#f6d2b0');
+  head.position[1] = 1.04;
+  for (const sx of [-0.1, 0.1]) {
+    const eye = mk(Geometry.box(0.06, 0.09, 0.04), '#1b1b26');
+    eye.position = [sx, 1.03, 0.25];
+  }
+  const brim = mk(Geometry.cylinder(0.42, 0.42, 0.05, 8), '#c94a4a');
+  brim.position[1] = 1.2;
+  const hat = mk(Geometry.cone(0.27, 0.55, 7), '#c94a4a');
+  hat.position[1] = 1.22; hat.rotation = [-0.22, 0, 0.1];
+  const armL = rig.add(new Node()), armR = rig.add(new Node());
+  armL.position = [-0.27, 0.68, 0]; armR.position = [0.27, 0.68, 0];
+  mk(Geometry.box(0.1, 0.34, 0.12), '#4a78c2', armL).position[1] = -0.34;
+  mk(Geometry.box(0.1, 0.34, 0.12), '#4a78c2', armR).position[1] = -0.34;
+
+  const P = { x: 2.5, z: 8.5, y: 0, vy: 0, vx: 0, vz: 0, facing: Math.PI, grounded: true, walk: 0, dustT: 0 };
+  P.y = heightAt(P.x, P.z);
+
+  // ------------------------------------------------------------------
+  // 파티클
+  // ------------------------------------------------------------------
+  const fx = new ParticleSystem({ max: 1600, gravity: [0, -6, 0], drag: 1.2 });
+  scene.particles.push(fx);
+  const dust = (x, y, z, n, col = [0.86, 0.78, 0.6]) => {
+    for (let i = 0; i < n; i++) fx.emit({
+      position: [x + R.range(-0.15, 0.15), y + 0.05, z + R.range(-0.15, 0.15)],
+      velocity: [R.range(-0.8, 0.8), R.range(0.6, 1.4), R.range(-0.8, 0.8)],
+      life: R.range(0.35, 0.6), size: 2, sizeEnd: 1, color: col, gravity: 0.25,
+    });
+  };
+
+
+  // ------------------------------------------------------------------
+  // 마법 공격: 빛나는 구체 → 폭발 (점광원 + 충격파 + 바닥 고리 + 파티클 + 화면 흔들림)
+  // ------------------------------------------------------------------
+  const orbGeo = Geometry.icosphere(0.2, 1, [1, 1, 1]);
+  const blastGeo = Geometry.icosphere(1, 1, [1, 1, 1]);
+  const ringGeo = (() => {
+    const g = new Geometry(), seg = 28, r0 = 0.82, r1 = 1;
+    for (let i = 0; i < seg; i++) {
+      const a0 = (i / seg) * Math.PI * 2, a1 = ((i + 1) / seg) * Math.PI * 2;
+      const P0 = (r, a) => [Math.cos(a) * r, 0, Math.sin(a) * r];
+      g.quad(P0(r0, a0), P0(r0, a1), P0(r1, a1), P0(r1, a0), [1, 1, 1], null, [0, 1, 0]);
+    }
+    return g;
+  })();
+  const MAGIC = { core: [1, 0.95, 1], hot: [0.86, 0.6, 1], deep: [0.48, 0.28, 0.95], cyan: [0.55, 0.92, 1] };
+  const spells = [], blasts = [];
+  let castCooldown = 0, castAnim = 0, hitstop = 0;
+
+  function groundPointFromScreen(x, y) {
+    const ray = camera.screenRay(x, y, canvas.clientWidth, canvas.clientHeight, engine.scale, engine.dpr);
+    for (let t = 0; t < 220; t += 0.2) {
+      const q = v3.add(ray.origin, v3.scale(ray.dir, t));
+      if (q[1] <= Math.max(heightAt(q[0], q[2]), 0)) return q;
+    }
+    return null;
+  }
+
+  function cast(target = null) {
+    if (castCooldown > 0) return;
+    castCooldown = 0.35;
+    castAnim = 0.35;
+    const fwd = [Math.sin(P.facing), 0, Math.cos(P.facing)];
+    if (target) {
+      const d = [target[0] - P.x, 0, target[2] - P.z];
+      if (Math.hypot(d[0], d[2]) > 0.3) { P.facing = Math.atan2(d[0], d[2]); fwd[0] = Math.sin(P.facing); fwd[2] = Math.cos(P.facing); }
+    }
+    const from = [P.x + fwd[0] * 0.45, P.y + 0.95, P.z + fwd[2] * 0.45];
+    if (!target) target = [P.x + fwd[0] * 6, heightAt(P.x + fwd[0] * 6, P.z + fwd[2] * 6) + 0.4, P.z + fwd[2] * 6];
+    const dir = v3.norm(v3.sub(target, from));
+    const mesh = scene.add(new Mesh(orbGeo, new Material({ color: MAGIC.hot, emissive: 1, outline: false, castShadow: false })));
+    mesh.position = [...from];
+    const light = { position: [...from], color: MAGIC.hot, radius: 3.2, intensity: 0.8 };
+    scene.lights.push(light);
+    spells.push({ mesh, light, pos: [...from], vel: v3.scale(dir, 15), dist: v3.len(v3.sub(target, from)) + 0.3, travelled: 0 });
+    // 손끝에서 튀는 불꽃
+    for (let i = 0; i < 10; i++) fx.emit({ position: from, velocity: [R.range(-2, 2), R.range(-1, 2.5), R.range(-2, 2)], life: R.range(0.2, 0.4), size: 1, color: MAGIC.core, colorEnd: MAGIC.hot, emissive: 1, gravity: 0 });
+  }
+
+  function explode(pos, onWater) {
+    hitstop = 0.05;
+    shake.amp = 0.14;
+    const gy = onWater ? 0.02 : heightAt(pos[0], pos[2]) + 0.04;
+    const ring = scene.add(new Mesh(ringGeo, new Material({ color: MAGIC.hot, emissive: 1, outline: false, castShadow: false })));
+    ring.position = [pos[0], gy, pos[2]];
+    const ball = scene.add(new Mesh(blastGeo, new Material({ color: MAGIC.core, emissive: 1, outline: false, castShadow: false })));
+    ball.position = [...pos];
+    const light = { position: [pos[0], pos[1] + 0.8, pos[2]], color: [0.9, 0.7, 1], radius: 7.5, intensity: 1.3 };
+    scene.lights.push(light);
+    blasts.push({ t: 0, pos: [...pos], ring, ball, light });
+
+    // 불꽃 파편
+    for (let i = 0; i < 110; i++) {
+      const d = v3.norm([R.range(-1, 1), R.range(-0.2, 1), R.range(-1, 1)]), sp = R.range(4, 12);
+      fx.emit({ position: pos, velocity: v3.scale(d, sp), life: R.range(0.5, 1.1), size: R() < 0.4 ? 3 : 2, sizeEnd: 1, color: MAGIC.core, colorEnd: MAGIC.deep, emissive: 1, gravity: 0.9 });
+    }
+    // 떠오르는 잔불
+    for (let i = 0; i < 24; i++) fx.emit({
+      position: v3.add(pos, [R.range(-1, 1), R.range(0, 0.8), R.range(-1, 1)]), velocity: [R.range(-0.6, 0.6), R.range(0.5, 1.6), R.range(-0.6, 0.6)],
+      life: R.range(1, 2), size: 1, color: MAGIC.cyan, colorEnd: MAGIC.hot, emissive: 1, gravity: -0.05, fadeIn: 0.1,
+    });
+    // 연기
+    for (let i = 0; i < 14; i++) fx.emit({
+      position: v3.add(pos, [R.range(-0.5, 0.5), 0.2, R.range(-0.5, 0.5)]), velocity: [R.range(-1.6, 1.6), R.range(0.8, 2), R.range(-1.6, 1.6)],
+      life: R.range(1, 1.7), size: 3, sizeEnd: 6, color: [0.42, 0.36, 0.55], colorEnd: [0.3, 0.28, 0.36], gravity: -0.03, fadeIn: 0.15,
+    });
+    // 튀어오르는 흙/물
+    const debris = onWater ? [0.85, 0.97, 1] : distToPath(pos[0], pos[2]) < 0.9 ? PATH_COL : gy < 0.45 ? [0.95, 0.85, 0.6] : grassColor(pos[0], pos[2]);
+    for (let i = 0; i < (onWater ? 40 : 16); i++) fx.emit({
+      position: [pos[0] + R.range(-0.4, 0.4), gy + 0.1, pos[2] + R.range(-0.4, 0.4)],
+      velocity: [R.range(-2.5, 2.5), R.range(onWater ? 6 : 4, onWater ? 10 : 7), R.range(-2.5, 2.5)],
+      life: R.range(0.6, 1.1), size: 2, sizeEnd: 1, color: debris, gravity: 1.4,
+    });
+    // 주변 나무 흔들기
+    for (const t of trees) {
+      const dx = t.x - pos[0], dz = t.z - pos[2], d = Math.hypot(dx, dz);
+      if (d < 5.5) { t.shake = Math.max(t.shake, 1 - d / 5.5); t.sdir = [dx / (d || 1), dz / (d || 1)]; }
+    }
+  }
+
+  function updateMagic(dt, time) {
+    castCooldown = Math.max(0, castCooldown - dt);
+    castAnim = Math.max(0, castAnim - dt);
+
+    for (let i = spells.length - 1; i >= 0; i--) {
+      const sp = spells[i];
+      const step = v3.scale(sp.vel, dt);
+      sp.pos = v3.add(sp.pos, step);
+      sp.travelled += v3.len(step);
+      sp.mesh.position = [...sp.pos];
+      sp.mesh.rotation = [time * 9, time * 7, 0];
+      sp.light.position = [...sp.pos];
+      for (let k = 0; k < 3; k++) fx.emit({ position: v3.add(sp.pos, [R.range(-0.08, 0.08), R.range(-0.08, 0.08), R.range(-0.08, 0.08)]), velocity: [R.range(-0.4, 0.4), R.range(-0.2, 0.6), R.range(-0.4, 0.4)], life: R.range(0.2, 0.45), size: 2, sizeEnd: 1, color: MAGIC.hot, colorEnd: MAGIC.deep, emissive: 1, gravity: 0 });
+      const g = heightAt(sp.pos[0], sp.pos[2]);
+      const onWater = g < 0 && sp.pos[1] <= 0.05;
+      const hitGround = sp.pos[1] <= g + 0.05;
+      const hitThing = blocked(sp.pos[0], sp.pos[2], 0) && sp.pos[1] < g + 3;
+      if (onWater || hitGround || hitThing || sp.travelled >= sp.dist) {
+        scene.remove(sp.mesh);
+        scene.lights.splice(scene.lights.indexOf(sp.light), 1);
+        spells.splice(i, 1);
+        explode(sp.pos, onWater || (g < 0 && sp.pos[1] < 0.6));
+      }
+    }
+
+    const pushers = [];
+    for (let i = blasts.length - 1; i >= 0; i--) {
+      const b = blasts[i];
+      b.t += dt;
+      const t = b.t;
+      // 충격파 구: 빠르게 커지며 디더링으로 사라짐
+      const k = Math.min(1, t / 0.28);
+      b.ball.setScale(0.3 + (1 - Math.pow(1 - k, 3)) * 1.5);
+      b.ball.material.opacity = 1 - smoothstep(0.12, 0.45, t);
+      b.ball.material.color = k < 0.35 ? MAGIC.core : v3.lerp(MAGIC.hot, MAGIC.deep, (k - 0.35) / 0.65);
+      b.ball.material.emissive = 0.75 - k * 0.35;
+      b.ball.visible = t < 0.46;
+      // 바닥 고리
+      const kr = Math.min(1, t / 0.55);
+      b.ring.setScale([0.4 + (1 - Math.pow(1 - kr, 2)) * 4.6, 1, 0.4 + (1 - Math.pow(1 - kr, 2)) * 4.6]);
+      b.ring.material.opacity = 1 - smoothstep(0.2, 0.6, t);
+      b.ring.visible = t < 0.62;
+      // 빛
+      b.light.intensity = 1.3 * Math.exp(-t * 5.5);
+      b.light.color = v3.lerp([0.95, 0.8, 1], MAGIC.hot, Math.min(1, t * 4));
+      // 잔디가 바깥으로 눕는다
+      if (t < 1.2) pushers.push([b.pos[0], b.pos[1], b.pos[2], Math.min(1, t / 0.25) * 3.6 * (1 - smoothstep(0.5, 1.2, t)) + 0.01]);
+      if (t > 1.3) {
+        scene.remove(b.ring); scene.remove(b.ball);
+        scene.lights.splice(scene.lights.indexOf(b.light), 1);
+        blasts.splice(i, 1);
+      }
+    }
+    grass.interactors = [[P.x, P.y, P.z, 0.85], ...pushers.slice(-3)];
+
+    for (const t of trees) {
+      if (t.shake <= 0.001) { t.node.rotation[0] = 0; t.node.rotation[2] = 0; continue; }
+      t.shake = Math.max(0, t.shake - dt * 1.6);
+      const a = Math.sin(time * 16) * t.shake * 0.14;
+      t.node.rotation[0] = t.sdir[1] * a;
+      t.node.rotation[2] = -t.sdir[0] * a;
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // 시간 / 조명
+  // ------------------------------------------------------------------
+  const KEYS = [
+    { h: 0, sun: [0.45, 0.55, 0.95], i: 0.55, sky: [0.13, 0.16, 0.33], gr: [0.08, 0.08, 0.16], fog: [0.07, 0.09, 0.2], grade: [0.9, 0.95, 1.1] },
+    { h: 4.6, sun: [0.45, 0.55, 0.95], i: 0.55, sky: [0.13, 0.16, 0.33], gr: [0.08, 0.08, 0.16], fog: [0.07, 0.09, 0.2], grade: [0.9, 0.95, 1.1] },
+    { h: 5.5, sun: [0.8, 0.5, 0.5], i: 0.0, sky: [0.3, 0.27, 0.45], gr: [0.16, 0.13, 0.2], fog: [0.38, 0.32, 0.5], grade: [1, 0.97, 1.03] },
+    { h: 6.6, sun: [1.0, 0.62, 0.45], i: 0.85, sky: [0.48, 0.4, 0.52], gr: [0.3, 0.22, 0.25], fog: [0.92, 0.68, 0.62], grade: [1.04, 0.98, 0.96] },
+    { h: 8.5, sun: [1.0, 0.95, 0.85], i: 0.78, sky: [0.46, 0.5, 0.64], gr: [0.33, 0.3, 0.28], fog: [0.56, 0.78, 0.92], grade: [1, 1, 1] },
+    { h: 15.5, sun: [1.0, 0.93, 0.8], i: 0.85, sky: [0.45, 0.48, 0.62], gr: [0.32, 0.28, 0.26], fog: [0.6, 0.78, 0.9], grade: [1, 1, 1] },
+    { h: 17.8, sun: [1.0, 0.64, 0.36], i: 1.0, sky: [0.5, 0.38, 0.5], gr: [0.32, 0.22, 0.2], fog: [0.98, 0.68, 0.5], grade: [1.06, 0.98, 0.92] },
+    { h: 19.2, sun: [0.85, 0.38, 0.38], i: 0.55, sky: [0.32, 0.26, 0.46], gr: [0.18, 0.13, 0.2], fog: [0.46, 0.32, 0.52], grade: [1.02, 0.95, 1.02] },
+    { h: 19.6, sun: [0.6, 0.35, 0.45], i: 0.0, sky: [0.24, 0.22, 0.42], gr: [0.12, 0.1, 0.18], fog: [0.25, 0.2, 0.38], grade: [0.95, 0.95, 1.05] },
+    { h: 20.6, sun: [0.45, 0.55, 0.95], i: 0.55, sky: [0.13, 0.16, 0.33], gr: [0.08, 0.08, 0.16], fog: [0.07, 0.09, 0.2], grade: [0.9, 0.95, 1.1] },
+    { h: 24, sun: [0.45, 0.55, 0.95], i: 0.55, sky: [0.13, 0.16, 0.33], gr: [0.08, 0.08, 0.16], fog: [0.07, 0.09, 0.2], grade: [0.9, 0.95, 1.1] },
+  ];
+  let hour = 16.6;
+  let nightness = 0;
+  function applyTime(h) {
+    let k = 0;
+    while (k < KEYS.length - 2 && KEYS[k + 1].h <= h) k++;
+    const a = KEYS[k], b = KEYS[k + 1], t = smoothstep(a.h, b.h, h);
+    scene.sun.color = v3.lerp(a.sun, b.sun, t);
+    scene.sun.intensity = lerp(a.i, b.i, t);
+    scene.ambientSky = v3.lerp(a.sky, b.sky, t);
+    scene.ambientGround = v3.lerp(a.gr, b.gr, t);
+    scene.fog.color = v3.lerp(a.fog, b.fog, t);
+    renderer.settings.grade = v3.lerp(a.grade, b.grade, t);
+    const sunUp = h >= 5.5 && h < 19.6;
+    let ang;
+    if (sunUp) ang = ((h - 5.5) / 14.1) * Math.PI;
+    else ang = ((((h - 19.6) + 24) % 24) / 9.9) * Math.PI;
+    const elev = Math.max(Math.sin(ang), 0.22);
+    scene.sun.direction = sunUp ? [Math.cos(ang) * 0.9, elev, 0.42] : [Math.cos(ang) * 0.7, Math.max(elev, 0.45), -0.35];
+    nightness = Math.max(smoothstep(18.6, 19.9, h), 1 - smoothstep(5.2, 6.6, h));
+    for (const m of nightMats) m.emissive = nightness;
+    for (const l of scene.lights) if (l.lamp) l.intensity = nightness * 0.9;
+  }
+
+  // ------------------------------------------------------------------
+  // 게임 루프
+  // ------------------------------------------------------------------
+  camera.target = [P.x, P.y + 0.6, P.z];
+  camera.yaw = 0.55; camera.pitch = 0.6;
+  let yawGoal = camera.yaw, zoom = 15, zoomGoal = 15;
+  // 회전: 기본은 45° 단위로 짧게 넘어가기 (도트 깜빡임을 최소화)
+  const STEP = Math.PI / 4, TURN_TIME = 0.32;
+  const rot = { from: camera.yaw, to: camera.yaw, t: 1, acc: 0 };
+  let freeRotate = false;
+  const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+  const turn = (dir) => { rot.from = camera.yaw; rot.to += dir * STEP; rot.t = 0; };
+  const shake = { amp: 0, t: 0 };
+  let autoTime = false, catT = 0, catFrame = 0, smokeT = 0, leafT = 0;
+  const camOffset = [0, 0.6, 0];
+
+  engine.onUpdate = (dt, time) => {
+    // 히트스톱: 폭발 순간 아주 잠깐 멈칫
+    if (hitstop > 0) { hitstop -= dt; dt *= 0.15; }
+    // 시간
+    if (autoTime) { hour = (hour + dt * 0.18) % 24; ui?.onHour?.(hour); }
+    applyTime(hour);
+
+    // 카메라 입력
+    const dragRot = input.takeRotate();
+    if (freeRotate) {
+      yawGoal += dragRot;
+      if (input.down('q')) yawGoal -= dt * 1.6;
+      if (input.down('e')) yawGoal += dt * 1.6;
+    } else {
+      rot.acc += dragRot;
+      if (rot.acc > 0.38) { turn(1); rot.acc = 0; } else if (rot.acc < -0.38) { turn(-1); rot.acc = 0; }
+      if (input.pressed('q')) turn(-1);
+      if (input.pressed('e')) turn(1);
+    }
+    zoomGoal = clamp(zoomGoal * input.takeZoom(), 7, 30);
+
+    // 이동
+    const ax = input.axis();
+    const dir = camera.groundDirection(ax.x, ax.y);
+    const speed = 4.6, mag = Math.hypot(ax.x, ax.y);
+    P.vx = damp(P.vx, dir[0] * speed, 12, dt);
+    P.vz = damp(P.vz, dir[2] * speed, 12, dt);
+    const nx = P.x + P.vx * dt, nz = P.z + P.vz * dt;
+    const onDock = (x, z) => Math.abs(x - DOCK[0]) < 0.8 && z > DOCK[1] - 0.3 && z < DOCK[1] + 4.6;
+    const walkable = (x, z) => (heightAt(x, z) > -0.35 || onDock(x, z)) && !blocked(x, z, 0.25) && Math.hypot(x, z) < 28;
+    if (walkable(nx, P.z)) P.x = nx; else P.vx = 0;
+    if (walkable(P.x, nz)) P.z = nz; else P.vz = 0;
+    const ground = onDock(P.x, P.z) ? Math.max(0.5, heightAt(P.x, P.z)) : heightAt(P.x, P.z);
+    const moving = Math.hypot(P.vx, P.vz) > 0.4;
+
+    if (input.pressed('jump') && P.grounded) { P.vy = 6.2; P.grounded = false; }
+    P.vy -= 18 * dt;
+    P.y += P.vy * dt;
+    if (P.y <= ground) {
+      if (!P.grounded && P.vy < -4) dust(P.x, ground, P.z, 10);
+      P.y = ground; P.vy = 0; P.grounded = true;
+    } else if (P.grounded && P.y - ground < 0.3) {
+      P.y = ground; // 내리막 붙어가기
+    } else P.grounded = false;
+
+    if (mag > 0.1) P.facing = dampAngle(P.facing, Math.atan2(dir[0], dir[2]), 14, dt);
+    P.walk += dt * (moving ? Math.hypot(P.vx, P.vz) * 2.6 : 0);
+    const swing = moving && P.grounded ? Math.sin(P.walk) * 0.7 : 0;
+    legL.rotation[0] = damp(legL.rotation[0], swing, 20, dt);
+    legR.rotation[0] = damp(legR.rotation[0], -swing, 20, dt);
+    armL.rotation[0] = damp(armL.rotation[0], -swing * 0.8, 20, dt);
+    armR.rotation[0] = damp(armR.rotation[0], swing * 0.8, 20, dt);
+    rig.position[1] = moving && P.grounded ? Math.abs(Math.sin(P.walk)) * 0.07 : Math.sin(time * 2.2) * 0.012;
+    rig.rotation[0] = damp(rig.rotation[0], moving ? 0.12 : 0, 8, dt);
+    const inWater = ground < 0.02 && !onDock(P.x, P.z);
+    player.position = [P.x, P.y - (inWater && P.grounded ? Math.min(0.3, -ground + 0.05) : 0), P.z];
+    player.rotation[1] = P.facing;
+
+    // 발자국 먼지 / 물보라
+    P.dustT -= dt;
+    if (moving && P.grounded && P.dustT <= 0) {
+      P.dustT = 0.13;
+      if (inWater) {
+        for (let i = 0; i < 3; i++) fx.emit({ position: [P.x + R.range(-0.2, 0.2), 0.05, P.z + R.range(-0.2, 0.2)], velocity: [R.range(-1, 1), R.range(1.5, 2.6), R.range(-1, 1)], life: 0.45, size: 2, sizeEnd: 1, color: [0.92, 0.99, 1], gravity: 1 });
+      } else dust(P.x, ground, P.z, 2, onDock(P.x, P.z) ? [0.75, 0.6, 0.45] : distToPath(P.x, P.z) < 0.9 ? [0.86, 0.74, 0.54] : [0.62, 0.78, 0.45]);
+    }
+    // 공격 입력: F 키 / 마법 버튼 / 땅을 탭(클릭)하면 그쪽으로
+    if (input.pressed('f') || input.pressed('cast')) cast();
+    for (const tap of input.takeTaps()) { const q = groundPointFromScreen(tap.x, tap.y); if (q) cast([q[0], q[1] + 0.5, q[2]]); }
+    updateMagic(dt, time);
+    if (castAnim > 0) { armR.rotation[0] = -2.3; armR.rotation[2] = 0.2; } else armR.rotation[2] = 0;
+
+    // 굴뚝 연기
+    smokeT -= dt;
+    if (smokeT <= 0) {
+      smokeT = 0.16;
+      const top = scene.house.world;
+      const c = [top[0] * -0.9 + top[8] * -0.4 + top[12], top[13] + 3.8, top[2] * -0.9 + top[10] * -0.4 + top[14]];
+      fx.emit({ position: c, velocity: [R.range(0.1, 0.4), R.range(0.8, 1.2), R.range(-0.1, 0.2)], life: R.range(2.2, 3.2), size: 2, sizeEnd: 4, color: [0.9, 0.9, 0.92], colorEnd: [0.7, 0.72, 0.8], gravity: -0.02, fadeIn: 0.1 });
+    }
+    // 떨어지는 나뭇잎
+    leafT -= dt;
+    if (leafT <= 0 && trees.length) {
+      leafT = 0.35;
+      const t = trees[Math.floor(R() * trees.length)];
+      if (!t.pine) {
+        const col = t.autumn ? R.pick([[0.9, 0.55, 0.22], [0.85, 0.38, 0.23]]) : [0.38, 0.66, 0.3];
+        fx.emit({
+          position: [t.x + R.range(-0.8, 0.8), t.y + 2.2 * t.s, t.z + R.range(-0.8, 0.8)], velocity: [0, -0.4, 0], life: 4.5, size: 1, color: col, gravity: 0.03,
+          update: (p) => { p.v[0] = Math.sin(p.age * 3 + p.seed) * 0.7 + 0.3; p.v[2] = Math.cos(p.age * 2.3 + p.seed) * 0.3; if (p.p[1] < heightAt(p.p[0], p.p[2]) + 0.05) { p.v[1] = 0; p.v[0] = p.v[2] = 0; } },
+        });
+      }
+    }
+    // 반딧불이 (밤)
+    if (nightness > 0.3 && R() < dt * 14 * nightness) {
+      const x = P.x + R.range(-12, 12), z = P.z + R.range(-10, 10), h = heightAt(x, z);
+      if (h > 0.4) fx.emit({
+        position: [x, h + R.range(0.3, 1.4), z], life: R.range(3, 6), size: 2, color: [0.85, 1, 0.45], emissive: 1, gravity: 0, fadeIn: 0.25,
+        update: (p, d) => { p.v[0] += Math.sin(p.age * 1.7 + p.seed) * d * 1.2; p.v[2] += Math.cos(p.age * 1.3 + p.seed) * d * 1.2; p.v[1] += Math.sin(p.age * 2.1 + p.seed * 2) * d * 0.8; },
+      });
+    }
+    // 가로등 주변 불빛 가루
+    if (nightness > 0.5 && R() < dt * 6) {
+      const L = lamps[Math.floor(R() * lamps.length)];
+      fx.emit({ position: [L[0] + R.range(-0.3, 0.3), L[1] - 0.2, L[2] + R.range(-0.3, 0.3)], velocity: [R.range(-0.3, 0.3), R.range(0.1, 0.4), R.range(-0.3, 0.3)], life: 1.6, size: 1, color: [1, 0.85, 0.5], emissive: 1, gravity: 0 });
+    }
+
+    // 고양이 (2D 스프라이트 애니메이션)
+    catT += dt;
+    if (catT > 0.45) { catT = 0; catFrame = (catFrame + 1) % 8; cat.material.texture = catFrames[catFrame === 5 ? 2 : catFrame % 2]; }
+
+    // 배 흔들림
+    boat.position[1] = Math.sin(time * 1.3) * 0.08 - 0.02;
+    boat.rotation[2] = Math.sin(time * 1.1) * 0.06;
+    boat.rotation[0] = Math.sin(time * 0.9 + 1) * 0.04;
+
+    // 카메라 회전
+    let turning;
+    if (freeRotate) {
+      const before = camera.yaw;
+      camera.yaw = dampAngle(camera.yaw, yawGoal, 10, dt);
+      turning = Math.abs(camera.yaw - before) > 1e-4;
+      rot.to = rot.from = camera.yaw;
+    } else {
+      rot.t = Math.min(1, rot.t + dt / TURN_TIME);
+      camera.yaw = rot.from + (rot.to - rot.from) * easeInOut(rot.t);
+      turning = rot.t < 1;
+      yawGoal = rot.to;
+    }
+    // 회전 중에만 직전 프레임을 섞어서 도트 깜빡임을 눌러준다
+    renderer.settings.history = turning ? 0.45 : 0;
+    zoom = damp(zoom, zoomGoal, 8, dt);
+    const aspect = canvas.clientHeight / Math.max(1, canvas.clientWidth);
+    camera.viewHeight = zoom * Math.max(1, aspect * 0.8);
+    const goal = [P.x + camOffset[0], P.y + camOffset[1], P.z + camOffset[2]];
+    scene.fog.near = camera.distance + 8; scene.fog.far = camera.distance + 40;
+    // 땅 위 방향(x,z)은 캐릭터에 딱 붙여서 따라간다.
+    // 카메라가 늦게 따라가면 캐릭터가 화면에서 1픽셀씩 앞뒤로 떨려 보이기 때문.
+    // 점프/언덕 같은 높이 변화만 부드럽게.
+    shake.amp = Math.max(0, shake.amp - dt * 2.2); shake.t += dt;
+    const sx = Math.sin(shake.t * 53) * shake.amp, sz = Math.cos(shake.t * 47) * shake.amp;
+    camera.target = [goal[0] + sx, damp(camera.target[1], goal[1], 6, dt), goal[2] + sz];
+
+    ui?.onFrame?.(engine);
+  };
+
+  applyTime(hour);
+
+  // UI에서 쓰는 조작 함수
+  return {
+    engine,
+    setHour(h) { hour = h; },
+    getHour() { return hour; },
+    setAutoTime(v) { autoTime = v; },
+    setRaw(v) {
+      engine.raw = v;
+    },
+    setPalette(name) { renderer.settings.palette = name && PALETTES[name] ? PALETTES[name] : null; },
+    jump() { input.trigger('jump'); },
+    // 테스트/스크린샷용: 플레이어 순간이동
+    teleport(x, z) { P.x = x; P.z = z; P.y = heightAt(x, z); camera.target = [x, P.y + 0.6, z]; },
+    setYaw(y) { yawGoal = camera.yaw = rot.from = rot.to = y; rot.t = 1; },
+    setFreeRotate(v) { freeRotate = v; rot.from = rot.to = yawGoal = camera.yaw; rot.t = 1; },
+    turn,
+    cast() { input.trigger('cast'); },
+  };
+}
+
+return { boot };
+})();
+
+__m["demo/ui.js"] = (() => {
+// 데모 UI 연결 (설정 패널, 모바일 조이스틱, HUD)
+const { boot } = __m["demo/main.js"];
+
+const $ = (id) => document.getElementById(id);
+const fmtHour = (h) => `${String(Math.floor(h)).padStart(2, '0')}:${String(Math.floor((h % 1) * 60)).padStart(2, '0')}`;
+
+function start() {
+  const canvas = $('view');
+  let game;
+  const stats = $('stats'), stick = $('stick'), knob = $('knob');
+  let statT = 0;
+  try {
+    game = boot(canvas, {
+      onHour: (h) => { $('hour').value = h.toFixed(1); $('hour-label').textContent = fmtHour(h); },
+      onFrame: (engine) => {
+        const s = engine.input.stick;
+        stick.hidden = !s.active;
+        if (s.active) {
+          stick.style.transform = `translate(${s.ox - 56}px, ${s.oy - 56}px)`;
+          knob.style.transform = `translate(${s.x * 40}px, ${-s.y * 40}px)`;
+        }
+        statT += 1;
+        if (statT % 15 === 0) {
+          const st = engine.renderer.stats;
+          stats.textContent = `${st.lowW - 2}×${st.lowH - 2} · ×${st.scale} · ${Math.round(engine.fps)} FPS`;
+        }
+      },
+    });
+  } catch (e) {
+    $('error').hidden = false;
+    $('error-msg').textContent = e.message;
+    console.error(e);
+    return;
+  }
+  window.game = game; // 콘솔에서 만져보기용
+  const { engine } = game;
+  const st = engine.renderer.settings;
+
+  // 픽셀 / 원본 비교
+  const modeBtns = document.querySelectorAll('[data-mode]');
+  let saved = null;
+  const setMode = (raw) => {
+    modeBtns.forEach((b) => b.setAttribute('aria-pressed', String((b.dataset.mode === 'raw') === raw)));
+    if (raw && !saved) {
+      saved = { outline: st.outline, palette: st.palette, dither: st.dither };
+      Object.assign(st, { outline: false, palette: null, dither: 0 });
+    } else if (!raw && saved) { Object.assign(st, saved); saved = null; }
+    game.setRaw(raw);
+  };
+  modeBtns.forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode === 'raw')));
+
+  // 설정 패널
+  const panel = $('panel'), gear = $('gear');
+  const openPanel = (v) => { panel.hidden = !v; gear.setAttribute('aria-expanded', String(v)); };
+  gear.addEventListener('click', () => openPanel(panel.hidden));
+  $('panel-close').addEventListener('click', () => openPanel(false));
+  if (matchMedia('(min-width: 900px)').matches) openPanel(true);
+
+  // 도트 크기: 저해상도 1칸 = 화면(디바이스) 픽셀 몇 칸. 바로 반영됨
+  engine.pixelScale = 4;
+  const showDots = () => { $('dot-val').textContent = `×${engine.pixelScale}`; };
+  const setDots = (v) => { engine.pixelScale = Math.max(1, Math.min(16, v)); showDots(); };
+  $('dot-minus').addEventListener('click', () => setDots(engine.pixelScale - 1));
+  $('dot-plus').addEventListener('click', () => setDots(engine.pixelScale + 1));
+  addEventListener('keydown', (e) => { if (e.key === '[') setDots(engine.pixelScale - 1); if (e.key === ']') setDots(engine.pixelScale + 1); });
+  showDots();
+  $('free-rot').addEventListener('change', (e) => game.setFreeRotate(e.target.checked));
+  const hour = $('hour');
+  hour.value = game.getHour().toFixed(1);
+  $('hour-label').textContent = fmtHour(game.getHour());
+  hour.addEventListener('input', () => { game.setHour(Number(hour.value)); $('hour-label').textContent = fmtHour(Number(hour.value)); });
+  $('auto').addEventListener('change', (e) => game.setAutoTime(e.target.checked));
+  $('outline').addEventListener('change', (e) => { if (saved) saved.outline = e.target.checked; else st.outline = e.target.checked; });
+  $('bloom').addEventListener('change', (e) => { st.bloom = e.target.checked; });
+  $('clouds').addEventListener('change', (e) => { st.clouds = e.target.checked; });
+  $('dither').addEventListener('change', (e) => { const v = e.target.checked ? 0.09 : 0; if (saved) saved.dither = v; else st.dither = v; });
+  $('palette').addEventListener('change', (e) => {
+    game.setPalette(e.target.value);
+    if (saved) { saved.palette = st.palette; st.palette = null; }
+  });
+
+  // 터치 기기: 점프 버튼과 안내 문구
+  const coarse = matchMedia('(pointer: coarse)').matches;
+  $('jump').hidden = !coarse;
+  $('magic').hidden = !coarse;
+  $('magic').addEventListener('pointerdown', (e) => { e.preventDefault(); game.cast(); });
+  $('hint').textContent = coarse
+    ? '왼쪽 드래그 이동 · 오른쪽 탭 마법 · 오른쪽 밀기 회전 · 두 손가락 줌'
+    : 'WASD 이동 · Space 점프 · F/클릭 마법 · 드래그 또는 Q/E 회전 · 휠 줌 · [ ] 도트 크기';
+  $('jump').addEventListener('pointerdown', (e) => { e.preventDefault(); game.jump(); });
+
+  engine.start();
+}
+
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+else start();
+
+return {  };
+})();
+})();
+</script>
