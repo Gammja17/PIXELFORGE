@@ -6,6 +6,7 @@
 - `dist/mecha.html` 더블클릭 (단일 파일, 사운드 포함)
 - `node tools/pack-audio.mjs` (사운드 에셋을 바꿨을 때만) → `node build.mjs`
   - `dist/mecha.html`, `dist/mecha.artifact.html`(아티팩트용), `index.html`(개발용)
+  - node 가 없으면 `powershell -File build.ps1` (같은 결과물)
 
 ## 조작
 | | 데스크톱 | 폰 (가로) |

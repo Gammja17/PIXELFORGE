@@ -281,7 +281,7 @@ export class Player {
     const mag = Math.hypot(dir[0], dir[2]);
     this.moveMag = mag;
     if (mag > 0.2) this.moveYaw = Math.atan2(dir[0], dir[2]);
-    const legs = this.loadout.legs;
+    const legs = this.loadout.legs, anim = LEGS[legs]?.anim || 'walk'; // walk/roll/hover/wheel/jet
 
     // ---- 대시 ----
     if (ctl.dash && this.charges > 0 && this.dashT <= 0) {
@@ -332,7 +332,7 @@ export class Player {
 
     // ---- 방향: 하체는 이동 방향, 상체는 조준 방향 ----
     const spd = Math.hypot(this.vx, this.vz);
-    if (mag > 0.2 && this.dashT <= 0 && this.attackSlow <= 0) this.yaw = dampAngle(this.yaw, this.moveYaw, legs === 'treads' ? 7 : 16, dt);
+    if (mag > 0.2 && this.dashT <= 0 && this.attackSlow <= 0) this.yaw = dampAngle(this.yaw, this.moveYaw, anim === 'roll' ? 7 : anim === 'wheel' ? 10 : 16, dt);
     this.aimHold -= dt;
     if (this.aimHold <= 0) {
       if (this.mouseActive) this.aimGoal = this.mouseYaw;
@@ -349,11 +349,13 @@ export class Player {
 
     // ---- 이동 이펙트 ----
     const moveK = Math.min(1, spd / st.speed);
-    if (legs === 'hover' && Math.random() < 0.6) fx.trail.emit({ position: [this.x + (Math.random() - 0.5) * 0.8, 0.15, this.z + (Math.random() - 0.5) * 0.8], velocity: [-this.vx * 0.2, 0.2, -this.vz * 0.2], life: 0.25, size: 2, sizeEnd: 1, color: [0.6, 0.95, 1], colorEnd: [0.2, 0.5, 1], emissive: 1, gravity: 0 });
-    if (legs === 'treads' && moveK > 0.3 && Math.random() < 0.35) fx.dust(this.x - Math.sin(this.yaw) * 0.7, this.z - Math.cos(this.yaw) * 0.7, 1);
+    // 제트: 등 아래로 추진 화염
+    if (anim === 'jet' && Math.random() < 0.7) fx.trail.emit({ position: [this.x - Math.sin(this.yaw) * 0.5 * this.size + (Math.random() - 0.5) * 0.3, 0.5 * this.size, this.z - Math.cos(this.yaw) * 0.5 * this.size + (Math.random() - 0.5) * 0.3], velocity: [-Math.sin(this.yaw) * 4, -1.5, -Math.cos(this.yaw) * 4], life: 0.18, size: 3, sizeEnd: 1, color: [1, 0.9, 0.6], colorEnd: [1, 0.4, 0.15], emissive: 1, gravity: 0 });
+    if (anim === 'hover' && Math.random() < 0.6) fx.trail.emit({ position: [this.x + (Math.random() - 0.5) * 0.8, 0.15, this.z + (Math.random() - 0.5) * 0.8], velocity: [-this.vx * 0.2, 0.2, -this.vz * 0.2], life: 0.25, size: 2, sizeEnd: 1, color: [0.6, 0.95, 1], colorEnd: [0.2, 0.5, 1], emissive: 1, gravity: 0 });
+    if ((anim === 'roll' || anim === 'wheel') && moveK > 0.3 && Math.random() < 0.35) fx.dust(this.x - Math.sin(this.yaw) * 0.7, this.z - Math.cos(this.yaw) * 0.7, 1);
     const prevPhase = this.anim.phase;
     this.animate(dt, moveK);
-    if ((legs === 'walker' || legs === 'reverse' || legs === 'quad') && Math.floor(prevPhase / Math.PI) !== Math.floor(this.anim.phase / Math.PI) && moveK > 0.3) fx.dust(this.x, this.z, 2);
+    if (anim === 'walk' && Math.floor(prevPhase / Math.PI) !== Math.floor(this.anim.phase / Math.PI) && moveK > 0.3) fx.dust(this.x, this.z, 2);
     this.updateOverdrive(dt);
     this.updateGhosts(dt);
   }
@@ -364,7 +366,6 @@ export class Player {
     this.place();
     const c = Math.cos(this.yaw), s = Math.sin(this.yaw);
     const fwd = (this.vx * s + this.vz * c) / 10, side = (this.vx * c - this.vz * s) / 10;
-    m.body.rotation[0] = m.body.rotation[2] = 0; // 궤도 등은 animateMech 가 기울기를 안 지워서 대시 숙임이 누적됨
     animateMech(m, this.anim, { move: moveK, dt, t: g.time, legs: this.loadout.legs, aimRel: this.aimYaw - this.yaw, lean: [fwd * 0.25, side * 0.25] });
     // 대시: 앞으로 확 숙였다가 복귀 / 사격 반동: 상체가 뒤로 젖혀짐
     this.dashLean = Math.max(0, (this.dashLean || 0) - dt * 4);

@@ -276,7 +276,7 @@ export class Game {
       const W = WEAPONS[id], own = ws.find((w) => w.id === id);
       if (own) return !own.evo && own.level + pending < W.levels.length ? { kind: 'weapon', id, level: own.level + 1, name: W.name } : null;
       const slot = freeSlot(ws, W.prefer);
-      return !pending && slot && ws.filter((w) => w.id !== 'funnel').length < 5 ? { kind: 'weapon', id, level: 1, isNew: true, slot, name: W.name } : null;
+      return !pending && slot && ws.length < MAX_WEAPONS ? { kind: 'weapon', id, level: 1, isNew: true, slot, name: W.name } : null;
     }
     const M = MODULES[id], lv = p.loadout.modules[id] || 0;
     return lv + pending < M.max ? { kind: 'module', id, level: lv + 1, isNew: !lv, name: M.name } : null;
@@ -490,7 +490,7 @@ export class Game {
       weapon(id, lv = 1) {
         let w = g.weapons.get(id);
         if (!w) { const slot = freeSlot(g.weapons.list, WEAPONS[id].prefer); if (!slot) return 'no slot'; w = { id, level: 1, slot, cd: 0.3 }; g.weapons.list.push(w); }
-        if (lv === 'evo') { w.level = MAX_LEVEL; w.evo = true; } else w.level = Math.min(MAX_LEVEL, lv);
+        if (lv === 'evo') { w.level = MAX_LEVEL; w.evo = !!EVOLUTIONS[id]; } else w.level = Math.min(MAX_LEVEL, lv);
         g.player.loadout.weapons = g.weapons.list.map((q) => ({ id: q.id, slot: q.slot, evo: q.evo }));
         g.player.rebuild(true); g.weapons.syncBits();
         return w.slot;

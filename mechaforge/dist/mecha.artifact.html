@@ -367,6 +367,8 @@
     .tab b { font-size: 10px; }
     #tabbody { padding: 0 2px; gap: 4px; }
     #tabdesc b { font-size: 12px; } #tabdesc span { font-size: 11px; }
+    /* 부품이 많아도 높이는 한 줄: 5칸씩 보이고 옆으로 밀어서 넘긴다 */
+    .opts, .opts.four { grid-auto-flow: column; grid-template-columns: none; grid-auto-columns: calc((100% - 16px) / 5); overflow-x: auto; scrollbar-width: thin; }
     .opt img { width: 32px; height: 32px; }
     .opt .sw { width: 20px; height: 20px; margin: 6px 0; }
     .opt b { font-size: 10px; }
@@ -2909,10 +2911,15 @@ const PAINTS = {
   midnight: { name: '미드나이트', main: [0.2, 0.2, 0.27], sub: [0.36, 0.33, 0.48], trim: [0.92, 0.7, 0.25], acc: [0.98, 0.82, 0.35], eye: [0.4, 0.9, 1] },
   sakura:   { name: '사쿠라', main: [0.96, 0.87, 0.9], sub: [0.9, 0.42, 0.6], trim: [0.36, 0.3, 0.46], acc: [1, 0.95, 0.6], eye: [0.5, 1, 0.8] },
   transcend: { name: '초월', main: [0.95, 0.94, 0.9], sub: [0.85, 0.7, 0.3], trim: [0.3, 0.32, 0.5], acc: [1, 0.9, 0.5], eye: [0.6, 1, 1] },
+  desert:   { name: '사막 위장', main: [0.8, 0.7, 0.5], sub: [0.56, 0.46, 0.3], trim: [0.34, 0.31, 0.26], acc: [0.92, 0.42, 0.2], eye: [1, 0.6, 0.2] },
+  ace:      { name: '에이스 블루', main: [0.36, 0.56, 0.86], sub: [0.9, 0.92, 0.95], trim: [0.16, 0.2, 0.34], acc: [1, 0.84, 0.2], eye: [0.5, 1, 1] },
+  stealth:  { name: '스텔스', main: [0.17, 0.18, 0.21], sub: [0.31, 0.33, 0.37], trim: [0.1, 0.1, 0.12], acc: [0.86, 0.16, 0.2], eye: [1, 0.2, 0.25] },
+  toxic:    { name: '독성 네온', main: [0.26, 0.28, 0.26], sub: [0.56, 0.95, 0.2], trim: [0.68, 0.22, 0.84], acc: [0.95, 1, 0.3], eye: [0.7, 1, 0.2] },
+  gold:     { name: '황금', main: [0.96, 0.76, 0.3], sub: [0.62, 0.42, 0.16], trim: [0.26, 0.21, 0.18], acc: [1, 0.95, 0.7], eye: [0.4, 1, 0.9] },
   boss:     { name: '타이탄', main: [0.3, 0.27, 0.36], sub: [0.55, 0.12, 0.2], trim: [0.16, 0.15, 0.19], acc: [0.95, 0.6, 0.2], eye: [1, 0.2, 0.3] },
 };
-const HANGAR_PAINTS = ['rx', 'crimson', 'olive', 'midnight', 'sakura'];
-const DARK = [0.24, 0.25, 0.3], GREY = [0.55, 0.58, 0.63], STEEL = [0.36, 0.38, 0.44];
+const HANGAR_PAINTS = ['rx', 'crimson', 'olive', 'midnight', 'sakura', 'desert', 'ace', 'stealth', 'toxic', 'gold'];
+const DARK = [0.24, 0.25, 0.3], GREY = [0.55, 0.58, 0.63], STEEL = [0.36, 0.38, 0.44], GLASS = [0.26, 0.44, 0.64], BONE = [0.9, 0.87, 0.78];
 
 // ---- 조립 헬퍼 ----
 const add = (g, part, position = [0, 0, 0], rotation = [0, 0, 0], scale = [1, 1, 1]) => g.merge(part, { position, rotation, scale });
@@ -2925,14 +2932,31 @@ function seg(g, a, b, w, d, c) {
   const dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2], len = Math.hypot(dx, dy, dz);
   add(g, box(w, len, d, c), a, [Math.atan2(dz, dy), 0, Math.asin(-dx / len)]);
 }
+// 얇은 판 (날개/꼬리날개): pts = XZ 평면 볼록 다각형, t = 두께, 원점 높이가 판 중심
+function slab(pts, t, c) {
+  const g = new Geometry(), n = pts.length;
+  let a = 0;
+  for (let i = 0; i < n; i++) { const p = pts[i], q = pts[(i + 1) % n]; a += p[0] * q[1] - q[0] * p[1]; }
+  const ps = a > 0 ? [...pts].reverse() : pts, U = (p) => [p[0], t / 2, p[1]], D = (p) => [p[0], -t / 2, p[1]];
+  for (let i = 1; i < n - 1; i++) { g.tri(U(ps[0]), U(ps[i]), U(ps[i + 1]), c); g.tri(D(ps[0]), D(ps[i + 1]), D(ps[i]), c); }
+  for (let i = 0; i < n; i++) { const p = ps[i], q = ps[(i + 1) % n]; g.quad(D(p), D(q), U(q), U(p), c); }
+  return g;
+}
+const mirror = (pts, s) => pts.map(([x, z]) => [s * x, z]);
 
-// ---- 다리 (이동 방식) ----
+// ---- 다리 (이동 방식) ----  anim: 애니메이션 종류(walk 걷기 / roll 궤도 / wheel 바퀴 / hover / jet), upperY: 허리 위 상체 높이
+//  walk 는 step(걸음 속도), swing(다리 흔들림), bob(몸 들썩임)
 const LEGS = {
-  walker:  { name: '2족 보행', tag: 'BIPED', desc: '균형형. 대시 2회.', hip: 0.95, stats: { maxHp: 100, speed: 6.6, accel: 22, dashCharges: 2, dashCd: 1.1, armor: 0 } },
-  reverse: { name: '역관절', tag: 'RAPTOR', desc: '민첩. 대시 거리가 길다.', hip: 1.0, stats: { maxHp: 85, speed: 7.4, accel: 26, dashCharges: 2, dashCd: 0.9, armor: 0, dashSpeed: 31 } },
-  treads:  { name: '무한궤도', tag: 'TANK', desc: '튼튼. 대시로 들이받아 피해.', hip: 0.78, stats: { maxHp: 150, speed: 5.1, accel: 16, dashCharges: 1, dashCd: 1.3, armor: 2, ram: 30, dashSpeed: 19 } },
-  quad:    { name: '4족 보행', tag: 'QUAD', desc: '안정적. 넉백을 덜 받는다.', hip: 0.85, stats: { maxHp: 130, speed: 5.9, accel: 20, dashCharges: 2, dashCd: 1.2, armor: 1, knockResist: 0.5 } },
-  hover:   { name: '호버', tag: 'HOVER', desc: '빠르고 미끄러진다. 대시 3회.', hip: 0.82, stats: { maxHp: 75, speed: 8.2, accel: 7, dashCharges: 3, dashCd: 0.85, armor: 0 } },
+  walker:  { name: '2족 보행', tag: 'BIPED', desc: '균형형. 대시 2회.', hip: 0.95, anim: 'walk', step: 6, swing: 0.65, bob: 0.07, stats: { maxHp: 100, speed: 6.6, accel: 22, dashCharges: 2, dashCd: 1.1, armor: 0 } },
+  reverse: { name: '역관절', tag: 'RAPTOR', desc: '민첩. 대시 거리가 길다.', hip: 1.0, anim: 'walk', step: 8, swing: 0.65, bob: 0.07, stats: { maxHp: 85, speed: 7.4, accel: 26, dashCharges: 2, dashCd: 0.9, armor: 0, dashSpeed: 31 } },
+  treads:  { name: '무한궤도', tag: 'TANK', desc: '튼튼. 대시로 들이받아 피해.', hip: 0.78, anim: 'roll', stats: { maxHp: 150, speed: 5.1, accel: 16, dashCharges: 1, dashCd: 1.3, armor: 2, ram: 30, dashSpeed: 19 } },
+  quad:    { name: '4족 보행', tag: 'QUAD', desc: '안정적. 넉백을 덜 받는다.', hip: 0.85, anim: 'walk', step: 6, swing: 0.4, bob: 0.03, upperY: 0.18, stats: { maxHp: 130, speed: 5.9, accel: 20, dashCharges: 2, dashCd: 1.2, armor: 1, knockResist: 0.5 } },
+  hover:   { name: '호버', tag: 'HOVER', desc: '빠르고 미끄러진다. 대시 3회.', hip: 0.82, anim: 'hover', stats: { maxHp: 75, speed: 8.2, accel: 7, dashCharges: 3, dashCd: 0.85, armor: 0 } },
+  wheels:  { name: '바이크', tag: 'BIKE', desc: '빠르게 질주. 대시로 들이받아 피해.', hip: 0.86, anim: 'wheel', stats: { maxHp: 90, speed: 8.0, accel: 15, dashCharges: 2, dashCd: 1.0, armor: 0, ram: 18, dashSpeed: 30 } },
+  stomper: { name: '중역관절', tag: 'STOMP', desc: '육중한 새 다리. 들이받기, 넉백 저항.', hip: 1.08, anim: 'walk', step: 4.5, swing: 0.5, bob: 0.1, stats: { maxHp: 140, speed: 5.6, accel: 18, dashCharges: 2, dashCd: 1.25, armor: 2, ram: 20, knockResist: 0.4, dashSpeed: 22 } },
+  spider:  { name: '6족 거미', tag: 'SPIDER', desc: '방향 전환이 빠르다. 대시 3회.', hip: 0.78, anim: 'walk', step: 10, swing: 0.35, bob: 0.02, upperY: 0.2, stats: { maxHp: 115, speed: 6.3, accel: 32, dashCharges: 3, dashCd: 1.15, armor: 1, knockResist: 0.3 } },
+  tankbase: { name: '중전차', tag: 'MBT', desc: '최고 내구. 넉백을 거의 안 받는다.', hip: 0.9, anim: 'roll', stats: { maxHp: 175, speed: 4.7, accel: 14, dashCharges: 1, dashCd: 1.4, armor: 3, ram: 45, dashSpeed: 18, knockResist: 0.7 } },
+  jet:     { name: '제트 추진', tag: 'JET', desc: '가장 빠르다. 대시 3회, 멀리 돌진.', hip: 0.6, anim: 'jet', stats: { maxHp: 70, speed: 8.8, accel: 11, dashCharges: 3, dashCd: 0.8, armor: 0, dashSpeed: 34 } },
 };
 
 // ---- 상체 프레임 ----  mods: 능력치 보정, slots: 무기 장착 위치, headY: 목 높이
@@ -2945,6 +2969,17 @@ const FRAMES = {
     slots: { armR: [0.8, 0.16, 0.08], armL: [-0.8, 0.16, 0.08], shR: [0.78, 1.06, -0.04], shL: [-0.78, 1.06, -0.04], back: [0, 0.8, -0.48] } },
   sniper: { name: '저격형', tag: 'SNIPE', desc: '피해 +8%, 치명타 +8%, 체력 -10', mods: { hp: -10, dmgMul: 0.08, crit: 0.08 }, headY: 0.94,
     slots: { armR: [0.58, 0.2, 0.08], armL: [-0.58, 0.2, 0.08], shR: [0.56, 0.98, -0.04], shL: [-0.56, 0.98, -0.04], back: [0, 0.75, -0.38] } },
+  // fist: 빈 팔 슬롯에 붙는 모양 (기본 주먹 / pylon 날개 아래 미사일 / sponson 측면 기관총)
+  egg: { name: '에그', tag: 'EGG', desc: '체력 +20, 대시 재충전 -5%', mods: { hp: 20, dashCdMul: 0.95 }, headY: 1.06,
+    slots: { armR: [0.6, 0.24, 0.08], armL: [-0.6, 0.24, 0.08], shR: [0.54, 1.02, -0.04], shL: [-0.54, 1.02, -0.04], back: [0, 0.7, -0.46] } },
+  ninja: { name: '닌자', tag: 'NINJA', desc: '속도 +15%, 치명타 +6%, 체력 -25', mods: { hp: -25, speedMul: 1.15, crit: 0.06 }, headY: 0.86,
+    slots: { armR: [0.44, 0.26, 0.08], armL: [-0.44, 0.26, 0.08], shR: [0.42, 0.9, -0.04], shL: [-0.42, 0.9, -0.04], back: [0, 0.72, -0.3] } },
+  tank: { name: '전차 포탑', tag: 'TURRET', desc: '체력 +30, 방어 +1, 피해 +5%, 속도 -8%', mods: { hp: 30, armor: 1, dmgMul: 0.05, speedMul: 0.92 }, headY: 0.82, fist: 'sponson',
+    slots: { armR: [0.66, 0.34, 0.1], armL: [-0.66, 0.34, 0.1], shR: [0.36, 0.84, -0.14], shL: [-0.36, 0.84, -0.14], back: [0, 0.62, -0.84] } },
+  fighter: { name: '전투기', tag: 'JET', desc: '속도 +12%, 대시 재충전 -15%, 체력 -20', mods: { hp: -20, speedMul: 1.12, dashCdMul: 0.85 }, headY: 0.68, fist: 'pylon',
+    slots: { armR: [0.62, 0.3, 0.0], armL: [-0.62, 0.3, 0.0], shR: [0.82, 0.5, -0.3], shL: [-0.82, 0.5, -0.3], back: [0, 0.74, -0.55] } },
+  fortress: { name: '요새', tag: 'FORT', desc: '체력 +70, 방어 +2, 속도 -20%', mods: { hp: 70, armor: 2, speedMul: 0.8 }, headY: 1.06,
+    slots: { armR: [0.92, 0.12, 0.1], armL: [-0.92, 0.12, 0.1], shR: [0.92, 1.28, -0.04], shL: [-0.92, 1.28, -0.04], back: [0, 0.9, -0.62] } },
 };
 
 // ---- 머리 ----
@@ -2953,6 +2988,11 @@ const HEADS = {
   mono:   { name: '모노아이', tag: 'MONO', desc: '치명타 +5%', mods: { crit: 0.05 } },
   visor:  { name: '고글 바이저', tag: 'VISOR', desc: '회수 범위 +30%', mods: { magnetMul: 1.3 } },
   horned: { name: '뿔', tag: 'HORN', desc: '피해 +8%', mods: { dmgMul: 0.08 } },
+  dome:   { name: '돔 센서', tag: 'DOME', desc: '회수 범위 +50%', mods: { magnetMul: 1.5 } },
+  periscope: { name: '잠망경', tag: 'SCOPE', desc: '치명타 +8%', mods: { crit: 0.08 } },
+  canopy: { name: '캐노피', tag: 'CANOPY', desc: '치명타 +3%, 대시 재충전 -6%', mods: { crit: 0.03, dashCdMul: 0.94 } },
+  samurai: { name: '투구', tag: 'KABUTO', desc: '피해 +5%, 치명타 +3%', mods: { dmgMul: 0.05, crit: 0.03 } },
+  skull:  { name: '해골', tag: 'SKULL', desc: '피해 +10%', mods: { dmgMul: 0.1 } },
 };
 
 // ---- 몸통 모듈 (레벨업으로 장착) ----
@@ -3021,6 +3061,109 @@ function hoverGeo(P) {
   cbox(g, 0.5, 0.2, 0.5, STEEL, [0, 0.76, 0]);
   return g;
 }
+function hipsGeo(P, big) {
+  const g = new Geometry();
+  if (!big) { cbox(g, 0.6, 0.22, 0.42, STEEL, [0, 0.08, 0]); cbox(g, 0.24, 0.2, 0.12, P.trim, [0, 0.06, 0.22]); return g; }
+  cbox(g, 0.78, 0.28, 0.5, STEEL, [0, 0.08, 0]);
+  cbox(g, 0.3, 0.22, 0.14, P.trim, [0, 0.06, 0.26]);
+  for (const s of [-1, 1]) cbox(g, 0.14, 0.3, 0.42, P.sub, [s * 0.5, 0.06, 0]);
+  return g;
+}
+// 중역관절: 굵은 허벅지 + 뒤쪽 피스톤 + 세 발가락
+function stomperLeg(P, hip) {
+  const g = new Geometry();
+  const knee = [0, -0.42, 0.36], ankle = [0, -hip + 0.28, -0.22];
+  seg(g, [0, 0.08, -0.02], knee, 0.36, 0.4, P.main);
+  add(g, Geometry.icosphere(0.2, 0, STEEL), knee);
+  seg(g, knee, ankle, 0.26, 0.28, P.sub);
+  seg(g, [0, -0.06, -0.2], [0, ankle[1] + 0.1, ankle[2] - 0.1], 0.08, 0.08, GREY);
+  cbox(g, 0.3, 0.2, 0.16, P.acc, [0, knee[1] + 0.04, knee[2] + 0.16]);
+  add(g, Geometry.icosphere(0.14, 0, STEEL), ankle);
+  seg(g, ankle, [0, -hip + 0.1, ankle[2] + 0.06], 0.2, 0.2, P.main);
+  for (const s of [-1, 0, 1]) add(g, box(0.12, 0.12, 0.46, P.trim), [s * 0.13, -hip, ankle[2] + 0.18], [0, s * 0.35, 0]);
+  add(g, box(0.12, 0.1, 0.26, DARK), [0, -hip, ankle[2] - 0.16], [0, Math.PI, 0]);
+  return g;
+}
+// 6족: 높이 솟은 무릎 + 뾰족한 발끝
+function spiderLeg(P, hip, sx, sz) {
+  const g = new Geometry();
+  const knee = [sx * 0.5, 0.36, sz * 0.3], foot = [sx * 0.82, -hip + 0.04, sz * 0.5];
+  seg(g, [0, 0, 0], knee, 0.14, 0.16, P.main);
+  add(g, Geometry.icosphere(0.1, 0, P.acc), knee);
+  seg(g, knee, foot, 0.11, 0.12, P.sub);
+  cbox(g, 0.1, 0.1, 0.1, DARK, [foot[0], foot[1] + 0.02, foot[2]]);
+  return g;
+}
+function spiderBodyGeo(P) {
+  const g = new Geometry();
+  cbox(g, 0.66, 0.28, 0.76, STEEL, [0, 0.04, 0]);
+  cbox(g, 0.5, 0.1, 0.6, P.sub, [0, 0.22, 0]);
+  add(g, Geometry.icosphere(0.36, 1, P.main), [0, 0.12, -0.62], [0.2, 0, 0], [1, 0.8, 1.1]);
+  cbox(g, 0.12, 0.06, 0.24, P.acc, [0, 0.42, -0.62]);
+  for (const s of [-1, 1]) add(g, Geometry.cone(0.05, 0.22, 4, P.trim), [s * 0.12, -0.04, 0.38], [Math.PI / 2 + 0.6, 0, 0]);
+  return g;
+}
+// 바이크: 앞뒤 바퀴는 따로 돌아가는 다리 노드, 차체는 몸통에
+function wheelGeo(P, rear) {
+  const g = new Geometry(), w = rear ? 0.3 : 0.2;
+  xcyl(g, 0.34, w, DARK, [0, 0, 0], 10);
+  xcyl(g, 0.21, w + 0.04, GREY, [0, 0, 0], 8);
+  for (let i = 0; i < 2; i++) add(g, box(w + 0.06, 0.06, 0.4, P.sub), [0, -0.03, 0], [i * Math.PI / 2, 0, 0]);
+  xcyl(g, 0.07, w + 0.1, P.acc, [0, 0, 0], 6);
+  return g;
+}
+function bikeGeo(P) {
+  const g = new Geometry();
+  cbox(g, 0.36, 0.3, 0.9, P.main, [0, 0.7, -0.02]);
+  add(g, box(0.42, 0.34, 0.3, P.sub), [0, 0.52, 0.42], [-0.5, 0, 0]);         // 앞 카울
+  cbox(g, 0.14, 0.1, 0.06, P.acc, [0, 0.76, 0.6]);                              // 전조등
+  cbox(g, 0.4, 0.2, 0.36, STEEL, [0, 0.9, 0]);                                  // 상체 연결
+  for (const s of [-1, 1]) {
+    seg(g, [s * 0.14, 0.72, 0.4], [s * 0.14, 0.34, 0.62], 0.06, 0.06, STEEL);  // 앞 포크
+    seg(g, [s * 0.18, 0.6, -0.2], [s * 0.18, 0.34, -0.6], 0.07, 0.1, GREY);   // 뒤 스윙암
+    zcyl(g, 0.05, 0.5, DARK, [s * 0.24, 0.5, -0.82]);                           // 배기관
+  }
+  cbox(g, 0.26, 0.05, 0.4, P.sub, [0, 0.72, 0.64]);
+  cbox(g, 0.36, 0.05, 0.44, P.sub, [0, 0.74, -0.6]);
+  cbox(g, 0.3, 0.08, 0.06, P.trim, [0, 0.66, -0.84]);
+  return g;
+}
+// 중전차 차체: 넓은 궤도 + 측면 스커트 + 경사 장갑
+function tankBaseGeo(P) {
+  const g = new Geometry();
+  for (const s of [-1, 1]) {
+    cbox(g, 0.4, 0.62, 1.8, DARK, [s * 0.6, 0.38, 0]);
+    for (let i = -2; i <= 2; i++) xcyl(g, 0.16, 0.46, GREY, [s * 0.6, 0.22, i * 0.36]);
+    xcyl(g, 0.13, 0.46, STEEL, [s * 0.6, 0.5, 0.86]);
+    cbox(g, 0.08, 0.32, 1.7, P.sub, [s * 0.84, 0.6, 0]);
+    cbox(g, 0.09, 0.06, 1.5, P.acc, [s * 0.85, 0.56, 0]);
+  }
+  cbox(g, 0.86, 0.36, 1.5, P.main, [0, 0.74, -0.04]);
+  add(g, box(0.86, 0.42, 0.12, P.main), [0, 0.5, 0.82], [-1.0, 0, 0]);
+  cbox(g, 0.6, 0.06, 0.5, DARK, [0, 0.94, -0.5]);
+  for (const s of [-1, 1]) cbox(g, 0.1, 0.08, 0.06, P.acc, [s * 0.32, 0.82, 0.72]);
+  return g;
+}
+// 제트 추진: 다리 대신 배 밑 추진 포드 + 아래로 뿜는 노즐 2개
+function jetGeo(P) {
+  const g = new Geometry();
+  cbox(g, 0.44, 0.26, 0.9, P.sub, [0, 0.5, -0.05]);
+  add(g, Geometry.cone(0.16, 0.3, 6, P.sub), [0, 0.5, 0.4], [Math.PI / 2, 0, 0]);
+  cbox(g, 0.3, 0.16, 0.3, STEEL, [0, 0.7, 0]);
+  for (const s of [-1, 1]) {
+    cbox(g, 0.14, 0.1, 0.46, STEEL, [s * 0.3, 0.56, -0.12]);
+    add(g, Geometry.cylinder(0.1, 0.15, 0.3, 8, DARK), [s * 0.3, 0.22, -0.12]);
+    cbox(g, 0.32, 0.05, 0.08, P.acc, [s * 0.3, 0.5, 0.1]);
+    add(g, slab([[0, -0.1], [0.28, -0.3], [0.28, -0.48], [0, -0.5]], 0.05, P.trim), [s * 0.16, 0.4, 0], [0, 0, -Math.PI / 2 + s * 0.4]);
+  }
+  return g;
+}
+function jetGlowGeo() {
+  const g = new Geometry(), c = [1, 0.66, 0.26];
+  for (const s of [-1, 1]) add(g, Geometry.cone(0.12, 0.34, 6, c), [s * 0.3, 0.21, -0.12], [Math.PI, 0, 0]);
+  add(g, Geometry.cone(0.1, 0.3, 6, c), [0, 0.5, -0.5], [-Math.PI / 2, 0, 0]);
+  return g;
+}
 
 // ===== 상체 프레임 지오메트리 (원점 = 허리) =====
 function frameGeo(id, P) {
@@ -3057,6 +3200,79 @@ function frameGeo(id, P) {
     cbox(g, 0.12, 0.12, 0.6, DARK, [0.56, 0.98, 0.1]);
     cbox(g, 0.14, 0.14, 0.06, P.acc, [0.56, 0.98, 0.42]);
     for (const s of [-1, 1]) add(g, box(0.3, 0.5, 0.06, P.sub), [s * 0.2, -0.25, -0.24], [0.25, 0, 0]);
+  } else if (id === 'fighter') {
+    // 전투기: 앞뒤로 긴 동체 + 후퇴익 + 카나드 + 흡입구 + 쌍수직꼬리날개 (머리 자리 = 조종석)
+    cbox(g, 0.3, 0.3, 0.3, STEEL, [0, 0.15, 0]);
+    cbox(g, 0.5, 0.36, 1.3, P.main, [0, 0.5, -0.05]);
+    add(g, Geometry.cone(0.22, 0.55, 6, P.main), [0, 0.5, 0.6], [Math.PI / 2, 0, 0]);
+    add(g, Geometry.cone(0.09, 0.2, 6, P.trim), [0, 0.5, 1.06], [Math.PI / 2, 0, 0]);
+    cbox(g, 0.22, 0.1, 1.0, P.sub, [0, 0.72, -0.3]);
+    for (const s of [-1, 1]) {
+      add(g, slab(mirror([[0.2, 0.3], [1.15, -0.38], [1.15, -0.6], [0.2, -0.58]], s), 0.07, P.main), [0, 0.46, 0]);
+      add(g, slab(mirror([[0.6, -0.04], [1.15, -0.42], [1.15, -0.48], [0.6, -0.12]], s), 0.08, P.sub), [0, 0.47, 0]);
+      cbox(g, 0.06, 0.1, 0.4, P.acc, [s * 1.16, 0.5, -0.46]);
+      add(g, slab(mirror([[0.2, 0.62], [0.5, 0.42], [0.5, 0.34], [0.2, 0.38]], s), 0.05, P.sub), [0, 0.54, 0]);
+      cbox(g, 0.16, 0.24, 0.42, DARK, [s * 0.33, 0.44, 0.22]);
+      cbox(g, 0.18, 0.05, 0.08, P.trim, [s * 0.33, 0.58, 0.44]);
+      add(g, slab([[0, -0.5], [0.46, -0.82], [0.46, -0.98], [0, -0.98]], 0.06, P.sub), [s * 0.16, 0.66, 0], [0, 0, Math.PI / 2 - s * 0.35]);
+      zcyl(g, 0.12, 0.32, DARK, [s * 0.13, 0.48, -0.98]);
+      cbox(g, 0.12, 0.04, 0.04, P.acc, [s * 0.13, 0.5, -0.99]);
+    }
+  } else if (id === 'tank') {
+    // 전차 포탑: 낮고 넓은 포탑 + 경사 장갑 + 긴 주포 (조준 방향으로 포탑이 돈다)
+    cbox(g, 0.6, 0.2, 0.5, STEEL, [0, 0.12, 0]);
+    add(g, Geometry.cylinder(0.5, 0.52, 0.12, 8, P.trim), [0, 0.2, 0]);
+    cbox(g, 1.0, 0.4, 0.9, P.main, [0, 0.52, -0.05]);
+    add(g, box(0.9, 0.45, 0.12, P.main), [0, 0.3, 0.52], [-0.85, 0, 0]);
+    cbox(g, 0.72, 0.1, 0.62, P.sub, [0, 0.77, -0.08]);
+    cbox(g, 0.84, 0.3, 0.32, P.trim, [0, 0.5, -0.64]);
+    cbox(g, 0.36, 0.3, 0.2, STEEL, [0, 0.5, 0.5]);
+    zcyl(g, 0.08, 1.1, DARK, [0, 0.5, 0.55]);
+    zcyl(g, 0.12, 0.18, STEEL, [0, 0.5, 1.5]);
+    for (const s of [-1, 1]) {
+      cbox(g, 0.1, 0.36, 0.86, P.sub, [s * 0.53, 0.5, -0.05]);
+      for (let i = 0; i < 3; i++) zcyl(g, 0.035, 0.14, P.acc, [s * (0.26 + i * 0.07), 0.66, 0.34], 4);
+    }
+  } else if (id === 'egg') {
+    // 에그: 달걀 모양 몸통 + 공 관절
+    cbox(g, 0.4, 0.2, 0.36, STEEL, [0, 0.12, 0]);
+    add(g, Geometry.icosphere(0.5, 1, P.main), [0, 0.62, 0], [0, 0, 0], [1, 1.12, 0.92]);
+    add(g, Geometry.cylinder(0.51, 0.51, 0.1, 10, P.sub), [0, 0.5, 0]);
+    add(g, Geometry.icosphere(0.12, 0, P.acc), [0, 0.72, 0.42]);
+    for (const s of [-1, 1]) {
+      add(g, Geometry.icosphere(0.2, 1, P.sub), [s * 0.52, 0.86, 0]);
+      add(g, Geometry.icosphere(0.14, 0, STEEL), [s * 0.58, 0.45, 0.04]);
+    }
+  } else if (id === 'ninja') {
+    // 곤충 닌자: 가는 허리 + 뒤로 뻗은 배 + 잠자리 날개 + 목도리
+    add(g, Geometry.cylinder(0.09, 0.14, 0.4, 6, STEEL), [0, 0.02, 0]);
+    add(g, Geometry.icosphere(0.3, 1, P.main), [0, 0.62, 0.02], [0, 0, 0], [1, 0.95, 0.8]);
+    cbox(g, 0.34, 0.12, 0.08, P.sub, [0, 0.58, 0.25]);
+    add(g, Geometry.icosphere(0.26, 1, P.sub), [0, 0.38, -0.42], [-0.4, 0, 0], [0.9, 0.8, 1.5]);
+    add(g, Geometry.cone(0.06, 0.26, 4, P.trim), [0, 0.24, -0.76], [-Math.PI / 2 - 0.4, 0, 0]);
+    cbox(g, 0.32, 0.1, 0.3, P.trim, [0, 0.86, 0]);
+    add(g, box(0.16, 0.04, 0.6, P.trim), [0.1, 0.84, -0.3], [0.35, 0.3, 0]);
+    arms(0.42, 0.74, 0.18, 0.2, 0.24);
+    const WING = [0.78, 0.9, 0.96];
+    for (const s of [-1, 1]) {
+      add(g, Geometry.cone(0.05, 0.35, 4, P.acc), [s * 0.42, 0.84, -0.06], [-0.6, 0, -s * 0.5]);
+      add(g, slab(mirror([[0.05, 0.05], [0.9, -0.1], [0.95, -0.22], [0.1, -0.12]], s), 0.03, WING), [0, 0.8, -0.24], [0, 0, s * 0.5]);
+      add(g, slab(mirror([[0.05, -0.05], [0.75, -0.3], [0.78, -0.42], [0.08, -0.18]], s), 0.03, WING), [0, 0.74, -0.26], [0, 0, s * 0.2]);
+    }
+  } else if (id === 'fortress') {
+    // 요새: 성벽 같은 몸통 + 총안 + 성가퀴 + 굴뚝
+    cbox(g, 0.7, 0.24, 0.56, STEEL, [0, 0.12, 0]);
+    cbox(g, 0.6, 0.2, 0.6, P.trim, [0, 0.34, 0.02]);
+    cbox(g, 1.3, 0.72, 0.92, P.main, [0, 0.7, 0]);
+    cbox(g, 1.0, 0.36, 0.1, P.sub, [0, 0.64, 0.48]);
+    for (let i = -1; i <= 1; i++) cbox(g, 0.14, 0.1, 0.06, DARK, [i * 0.3, 0.68, 0.54]);
+    for (let i = -2; i <= 2; i++) cbox(g, 0.16, 0.14, 0.16, P.trim, [i * 0.28, 1.12, 0.38]);
+    arms(0.92, 0.88, 0.56, 0.52, 0.72);
+    for (const s of [-1, 1]) {
+      for (let i = -1; i <= 1; i++) cbox(g, 0.14, 0.12, 0.14, P.trim, [s * 0.92, 1.2, i * 0.24]);
+      add(g, Geometry.cylinder(0.09, 0.1, 0.5, 6, DARK), [s * 0.36, 0.95, -0.38]);
+      add(g, Geometry.cylinder(0.12, 0.12, 0.06, 6, P.acc), [s * 0.36, 1.45, -0.38]);
+    }
   } else {
     cbox(g, 0.46, 0.2, 0.4, STEEL, [0, 0.12, 0]);
     cbox(g, 0.42, 0.16, 0.44, P.trim, [0, 0.26, 0.02]);
@@ -3093,6 +3309,51 @@ function headGeo(id, P) {
     cbox(g, 0.14, 0.08, 0.06, P.trim, [0, 0.02, 0.16]);
     glowColor = [1, 0.3, 0.3];
     for (const s of [-1, 1]) cbox(glow, 0.08, 0.04, 0.04, glowColor, [s * 0.07, 0.14, 0.16]);
+  } else if (id === 'canopy') {
+    // 전투기 조종석: 길쭉한 유리 덮개 + 틀
+    cbox(g, 0.3, 0.08, 0.66, P.main, [0, 0.04, 0.08]);
+    add(g, Geometry.icosphere(0.17, 1, GLASS), [0, 0.08, 0.1], [0, 0, 0], [0.95, 0.95, 2]);
+    cbox(g, 0.28, 0.05, 0.05, P.trim, [0, 0.2, -0.02]);
+    cbox(g, 0.1, 0.08, 0.2, P.sub, [0, 0.06, -0.3]);
+    glowColor = [0.7, 1, 1];
+    cbox(glow, 0.07, 0.04, 0.14, glowColor, [0.04, 0.24, 0.14]);
+  } else if (id === 'periscope') {
+    // 전차장 큐폴라: 둥근 해치 + 잠망경 + 기관총
+    add(g, Geometry.cylinder(0.2, 0.22, 0.16, 8, P.main), [0, 0, 0]);
+    add(g, Geometry.cylinder(0.14, 0.2, 0.06, 8, P.sub), [0, 0.16, 0]);
+    cbox(g, 0.08, 0.32, 0.08, DARK, [0.06, 0.36, -0.04]);
+    cbox(g, 0.14, 0.12, 0.2, STEEL, [0.06, 0.54, 0]);
+    zcyl(g, 0.03, 0.34, DARK, [-0.12, 0.24, -0.02], 4);
+    glowColor = [0.5, 1, 0.6];
+    cbox(glow, 0.1, 0.06, 0.03, glowColor, [0.06, 0.55, 0.11]);
+    cbox(glow, 0.2, 0.04, 0.03, glowColor, [0, 0.1, 0.215]);
+  } else if (id === 'samurai') {
+    // 사무라이 투구: 정수리 + 목가리개 + 볼가리개 + 금색 초승달 장식
+    cbox(g, 0.3, 0.26, 0.3, P.main, [0, 0.13, 0.02]);
+    add(g, Geometry.cylinder(0.12, 0.2, 0.12, 8, P.sub), [0, 0.22, 0]);
+    add(g, box(0.5, 0.06, 0.26, P.sub), [0, 0.06, -0.16], [-0.5, 0, 0]);
+    for (const s of [-1, 1]) add(g, box(0.06, 0.2, 0.3, P.sub), [s * 0.2, 0.06, 0.0], [0, 0, -s * 0.6]);
+    cbox(g, 0.2, 0.1, 0.05, DARK, [0, 0.06, 0.18]);
+    for (const s of [-1, 1]) add(g, box(0.05, 0.44, 0.04, P.acc), [s * 0.03, 0.24, 0.17], [0, 0, -s * 0.8]);
+    add(g, Geometry.icosphere(0.05, 0, P.trim), [0, 0.25, 0.19]);
+    glowColor = [1, 0.85, 0.35];
+    for (const s of [-1, 1]) cbox(glow, 0.08, 0.04, 0.04, glowColor, [s * 0.07, 0.15, 0.17]);
+  } else if (id === 'dome') {
+    // 돔 센서: 반구 + 빙 둘러 빛나는 감지띠 + 작은 접시
+    add(g, Geometry.cylinder(0.24, 0.26, 0.1, 10, P.main), [0, 0, 0]);
+    add(g, Geometry.icosphere(0.24, 1, P.sub, { squashY: 0.8 }), [0, 0.14, 0]);
+    add(g, Geometry.cylinder(0.02, 0.02, 0.2, 4, GREY), [0.1, 0.28, -0.06]);
+    add(g, Geometry.cylinder(0.08, 0.02, 0.04, 6, P.acc), [0.1, 0.46, -0.06], [0.5, 0, 0]);
+    add(glow, Geometry.cylinder(0.25, 0.25, 0.05, 10, glowColor, { caps: false }), [0, 0.11, 0]);
+  } else if (id === 'skull') {
+    // 해골: 뼈색 두개골 + 이빨 + 붉게 빛나는 눈구멍
+    add(g, Geometry.icosphere(0.2, 1, BONE), [0, 0.2, -0.01], [0, 0, 0], [1, 0.95, 1.1]);
+    cbox(g, 0.24, 0.1, 0.2, BONE, [0, 0.06, 0.06]);
+    for (let i = -2; i <= 2; i++) cbox(g, 0.035, 0.05, 0.03, [1, 0.97, 0.9], [i * 0.045, 0.06, 0.17]);
+    for (const s of [-1, 1]) cbox(g, 0.08, 0.07, 0.04, DARK, [s * 0.07, 0.19, 0.2]);
+    cbox(g, 0.04, 0.05, 0.03, DARK, [0, 0.12, 0.2]);
+    glowColor = [1, 0.25, 0.2];
+    for (const s of [-1, 1]) cbox(glow, 0.04, 0.04, 0.02, glowColor, [s * 0.07, 0.19, 0.225]);
   } else {
     cbox(g, 0.3, 0.26, 0.32, P.main, [0, 0.13, 0.02]);
     cbox(g, 0.14, 0.08, 0.06, P.trim, [0, 0.0, 0.18]);
@@ -3101,7 +3362,21 @@ function headGeo(id, P) {
   }
   return { geo: g, glow, glowColor };
 }
-const fistGeo = (P) => { const g = new Geometry(); cbox(g, 0.26, 0.34, 0.32, P.main, [0, 0.1, 0.02]); cbox(g, 0.2, 0.14, 0.2, STEEL, [0, -0.1, 0.05]); return g; };
+// 빈 팔 슬롯: 주먹 / 날개 아래 미사일(pylon) / 측면 기관총 포대(sponson)
+function fistGeo(P, kind) {
+  const g = new Geometry();
+  if (kind === 'pylon') {
+    cbox(g, 0.08, 0.16, 0.3, STEEL, [0, 0.1, 0]);
+    zcyl(g, 0.06, 0.6, P.sub, [0, -0.02, -0.28]);
+    add(g, Geometry.cone(0.06, 0.16, 6, P.acc), [0, -0.02, 0.32], [Math.PI / 2, 0, 0]);
+    for (const s of [-1, 1]) cbox(g, 0.18, 0.02, 0.1, P.trim, [0, -0.02, -0.24], [0, 0, s * 0.8]);
+  } else if (kind === 'sponson') {
+    cbox(g, 0.22, 0.24, 0.34, STEEL, [0, 0, 0.04]);
+    zcyl(g, 0.04, 0.3, DARK, [0, 0, 0.2], 4);
+    cbox(g, 0.24, 0.05, 0.36, P.sub, [0, 0.14, 0.04]);
+  } else { cbox(g, 0.26, 0.34, 0.32, P.main, [0, 0.1, 0.02]); cbox(g, 0.2, 0.14, 0.2, STEEL, [0, -0.1, 0.05]); }
+  return g;
+}
 
 // ===== 무기 외형 (원점 = 손/어깨 장착점, 앞 = +Z) =====
 const WEAPON_MODELS = {
@@ -3160,6 +3435,108 @@ const WEAPON_MODELS = {
     cbox(g, 0.5, 0.36, 0.2, STEEL, [0, 0.2, 0]);
     return { geo: g, muzzle: [0, 0.5, 0] };
   },
+  // ---- 시작 무기 (추가) ----
+  flamer: (P) => {
+    const g = new Geometry();
+    cbox(g, 0.26, 0.26, 0.5, STEEL, [0, 0, 0.1]);
+    zcyl(g, 0.12, 0.42, [0.75, 0.3, 0.2], [-0.02, 0.2, -0.08], 6);           // 연료 탱크
+    zcyl(g, 0.07, 0.5, DARK, [0, 0, 0.55], 6);
+    zcyl(g, 0.11, 0.1, P.acc, [0, 0, 0.82], 6);
+    const glow = new Geometry();
+    zcyl(glow, 0.05, 0.06, [1, 0.6, 0.2], [0, 0, 0.9], 5);
+    return { geo: g, glow, muzzle: [0, 0, 0.92] };
+  },
+  rod: (P) => {
+    const g = new Geometry();
+    cbox(g, 0.26, 0.3, 0.3, P.main, [0, 0.06, 0.02]);
+    zcyl(g, 0.07, 0.3, GREY, [0, 0, 0.2]);
+    const glow = new Geometry();
+    for (let i = 0; i < 4; i++) add(glow, box(0.08, 0.08, 0.22, [1, 0.55, 0.15]), [0, -0.04 - i * 0.02, 0.42 + i * 0.2], [0.12 * i, 0, 0]);  // 늘어진 마디
+    return { geo: g, glow, muzzle: [0, 0, 0.5] };
+  },
+  // ---- 런 무기 ----
+  saw: (P) => {
+    const g = new Geometry();
+    cbox(g, 0.24, 0.24, 0.3, STEEL, [0, 0, 0]);
+    add(g, Geometry.cylinder(0.3, 0.3, 0.05, 10, GREY), [0, 0.13, 0.1]);
+    for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; add(g, box(0.1, 0.05, 0.12, [0.85, 0.87, 0.9]), [Math.sin(a) * 0.3, 0.13, 0.1 + Math.cos(a) * 0.3], [0, a + 0.5, 0]); }
+    cbox(g, 0.12, 0.08, 0.12, P.acc, [0, 0.2, 0.1]);
+    return { geo: g, muzzle: [0, 0.15, 0.1] };
+  },
+  tesla: (P) => {
+    const g = new Geometry();
+    cbox(g, 0.34, 0.16, 0.34, DARK, [0, 0.08, 0]);
+    for (let i = 0; i < 3; i++) add(g, Geometry.cylinder(0.14 - i * 0.02, 0.14 - i * 0.02, 0.06, 8, [0.8, 0.55, 0.3]), [0, 0.18 + i * 0.12, 0]); // 구리 코일
+    add(g, Geometry.cylinder(0.04, 0.05, 0.5, 5, GREY), [0, 0.16, 0]);
+    const glow = new Geometry();
+    add(glow, Geometry.icosphere(0.1, 0, [0.6, 0.9, 1]), [0, 0.7, 0]);
+    return { geo: g, glow, muzzle: [0, 0.7, 0] };
+  },
+  mine: (P) => {
+    const g = new Geometry();
+    cbox(g, 0.3, 0.34, 0.4, P.sub, [0, 0, -0.02]);
+    for (let i = 0; i < 3; i++) add(g, Geometry.cylinder(0.11, 0.11, 0.05, 6, [0.36, 0.38, 0.32]), [0.16, -0.12 + i * 0.1, -0.02], [0, 0, -Math.PI / 2]);
+    cbox(g, 0.2, 0.1, 0.12, DARK, [0, -0.18, 0.18]);
+    cbox(g, 0.32, 0.05, 0.42, P.acc, [0, 0.18, -0.02]);
+    return { geo: g, muzzle: [0, -0.2, 0.2] };
+  },
+  disc: (P) => {
+    const g = new Geometry();
+    cbox(g, 0.18, 0.4, 0.3, STEEL, [0, 0.1, -0.05]);
+    add(g, Geometry.cylinder(0.32, 0.32, 0.05, 10, [0.55, 0.95, 1]), [0.1, 0.1, 0], [0, 0, Math.PI / 2]);
+    add(g, Geometry.cylinder(0.12, 0.12, 0.07, 6, DARK), [0.12, 0.1, 0], [0, 0, Math.PI / 2]);
+    cbox(g, 0.2, 0.06, 0.32, P.trim, [0, 0.33, -0.05]);
+    return { geo: g, muzzle: [0.1, 0.1, 0.3] };
+  },
+  stomp: (P) => {
+    const g = new Geometry();
+    cbox(g, 0.3, 0.26, 0.34, P.main, [0, 0.05, 0]);
+    add(g, Geometry.cylinder(0.08, 0.08, 0.5, 6, GREY), [0, -0.5, 0.04]);                 // 피스톤
+    add(g, Geometry.cylinder(0.2, 0.22, 0.12, 6, DARK), [0, -0.6, 0.04]);
+    cbox(g, 0.32, 0.06, 0.36, P.acc, [0, 0.2, 0]);
+    return { geo: g, muzzle: [0, -0.6, 0.04] };
+  },
+  gravity: (P) => {
+    const g = new Geometry();
+    cbox(g, 0.5, 0.3, 0.24, STEEL, [0, 0.15, 0]);
+    for (const s of [-1, 1]) add(g, box(0.06, 0.5, 0.06, P.sub), [s * 0.22, 0.3, 0], [0, 0, -s * 0.35]);
+    const glow = new Geometry();
+    add(glow, Geometry.icosphere(0.14, 1, [0.75, 0.45, 1]), [0, 0.7, 0]);
+    return { geo: g, glow, muzzle: [0, 0.7, 0] };
+  },
+  gauss: (P) => {
+    const g = new Geometry();
+    cbox(g, 0.3, 0.26, 0.5, P.sub, [0, 0.12, -0.1]);
+    for (const s of [-1, 1]) cbox(g, 0.06, 0.08, 1.2, STEEL, [s * 0.09, 0.14, 0.6]);       // 레일 2줄
+    for (let i = 0; i < 3; i++) cbox(g, 0.28, 0.04, 0.06, P.acc, [0, 0.2, 0.25 + i * 0.3]);
+    const glow = new Geometry();
+    cbox(glow, 0.06, 0.04, 1.0, [1, 0.85, 0.35], [0, 0.14, 0.62]);
+    return { geo: g, glow, muzzle: [0, 0.14, 1.2] };
+  },
+  turret: (P) => {
+    const g = new Geometry();
+    add(g, Geometry.cylinder(0.28, 0.32, 0.18, 8, STEEL), [0, 0.2, 0]);
+    cbox(g, 0.3, 0.2, 0.34, P.main, [0, 0.48, 0]);
+    zcyl(g, 0.06, 0.4, DARK, [0, 0.48, 0.32], 6);
+    const glow = new Geometry();
+    zcyl(glow, 0.05, 0.06, [1, 0.4, 0.55], [0, 0.48, 0.53], 5);
+    return { geo: g, glow, muzzle: [0, 0.48, 0.55] };
+  },
+  cluster: (P) => {
+    const g = new Geometry();
+    cbox(g, 0.36, 0.22, 0.36, P.sub, [0, 0.1, -0.05]);
+    for (const s of [-1, 1]) add(g, Geometry.cylinder(0.11, 0.11, 0.6, 6, DARK), [s * 0.09, 0.15, -0.05], [0.35, 0, 0]);  // 위로 선 포신 2개
+    cbox(g, 0.38, 0.05, 0.38, P.acc, [0, 0.22, -0.05]);
+    return { geo: g, muzzle: [0, 0.7, 0.16] };
+  },
+  ricochet: (P) => {
+    const g = new Geometry();
+    cbox(g, 0.18, 0.24, 0.4, STEEL, [0, 0, 0.05]);
+    xcyl(g, 0.12, 0.2, P.sub, [0.1, 0.02, 0.18]);                                          // 실린더
+    zcyl(g, 0.05, 0.4, DARK, [0, 0.04, 0.45], 6);
+    cbox(g, 0.12, 0.2, 0.1, [0.5, 0.35, 0.25], [0, -0.16, -0.06]);
+    return { geo: g, muzzle: [0, 0.04, 0.66] };
+  },
 };
 const funnelBitGeo = (P) => cached('bit' + P.name, () => {
   const g = new Geometry();
@@ -3215,8 +3592,10 @@ function moduleGeo(id, level, P, F = FRAMES.standard) {
   return { geo: g, glow, glowColor };
 }
 
-const SLOT_IDS = ['armR', 'armL', 'shR', 'shL', 'back'];
-const SLOT_KIND = { armR: 'arm', armL: 'arm', shR: 'shoulder', shL: 'shoulder', back: 'back' };
+const SLOT_IDS = ['armR', 'armL', 'shR', 'shL', 'back', 'hpR', 'hpL'];
+const SLOT_KIND = { armR: 'arm', armL: 'arm', shR: 'shoulder', shL: 'shoulder', back: 'back', hpR: 'hip', hpL: 'hip' };
+// 허리 무기 자리: 프레임 표에 없으면 팔 위치에서 계산 (허리 옆, 약간 뒤)
+const slotPos = (F, s) => F.slots[s] || (s === 'hpR' || s === 'hpL' ? [(s === 'hpR' ? 1 : -1) * F.slots.armR[0] * 0.78, 0.16, -0.32] : [0, 0, 0]);
 
 /**
  * 로드아웃으로 메카를 조립한다.
@@ -3240,26 +3619,30 @@ function buildMech(loadout) {
   };
 
   // 다리
+  // 다리 노드(legNodes)는 animateMech 가 매 프레임 rotation[0] 을 새로 정한다 (걷기 = 흔들기, 바퀴 = 굴리기)
   const legNodes = [];
-  const hip = L.hip;
-  if (loadout.legs === 'walker' || loadout.legs === 'reverse') {
-    for (const s of [-1, 1]) {
-      const n = body.add(new Node('leg'));
-      n.position = [s * 0.26, hip, 0];
-      mk(n, cached(key(loadout.legs + 'leg'), () => (loadout.legs === 'walker' ? walkerLeg(P, hip) : reverseLeg(P, hip))));
-      legNodes.push(n);
-    }
-    mk(body, cached(key('hips'), () => { const g = new Geometry(); cbox(g, 0.6, 0.22, 0.42, STEEL, [0, 0.08, 0]); cbox(g, 0.24, 0.2, 0.12, P.trim, [0, 0.06, 0.22]); return g; })).position = [0, hip, 0];
-  } else if (loadout.legs === 'quad') {
-    for (const [sx, sz] of [[-1, 1], [1, 1], [-1, -1], [1, -1]]) {
-      const n = body.add(new Node('leg'));
-      n.position = [sx * 0.34, hip, sz * 0.3];
-      mk(n, cached(key(`quad${sx}${sz}`), () => quadLeg(P, hip, sx, sz)));
-      legNodes.push(n);
-    }
+  const hip = L.hip, lid = LEGS[loadout.legs] ? loadout.legs : 'walker';
+  const leg = (pos, k, fn) => { const n = body.add(new Node('leg')); n.position = pos; mk(n, cached(key(k), fn)); legNodes.push(n); };
+  if (lid === 'walker' || lid === 'reverse' || lid === 'stomper') {
+    const big = lid === 'stomper';
+    for (const s of [-1, 1]) leg([s * (big ? 0.36 : 0.26), hip, 0], lid + 'leg', () => (lid === 'walker' ? walkerLeg(P, hip) : big ? stomperLeg(P, hip) : reverseLeg(P, hip)));
+    mk(body, cached(key(big ? 'hips-big' : 'hips'), () => hipsGeo(P, big))).position = [0, hip, 0];
+  } else if (lid === 'quad') {
+    for (const [sx, sz] of [[-1, 1], [1, 1], [-1, -1], [1, -1]]) leg([sx * 0.34, hip, sz * 0.3], `quad${sx}${sz}`, () => quadLeg(P, hip, sx, sz));
     mk(body, cached(key('quadbody'), () => { const g = new Geometry(); cbox(g, 0.8, 0.32, 0.9, STEEL, [0, 0.04, 0]); cbox(g, 0.6, 0.12, 0.7, P.sub, [0, 0.24, 0]); cbox(g, 0.3, 0.14, 0.12, P.trim, [0, 0.02, 0.48]); return g; })).position = [0, hip, 0];
-  } else if (loadout.legs === 'treads') {
+  } else if (lid === 'spider') {
+    for (const [sx, sz] of [[-1, 1], [1, 1], [-1, 0], [1, 0], [-1, -1], [1, -1]]) leg([sx * 0.3, hip, sz * 0.3], `spider${sx}${sz}`, () => spiderLeg(P, hip, sx, sz));
+    mk(body, cached(key('spiderbody'), () => spiderBodyGeo(P))).position = [0, hip, 0];
+  } else if (lid === 'wheels') {
+    for (const z of [0.62, -0.6]) leg([0, 0.34, z], 'wheel' + (z > 0 ? 'F' : 'R'), () => wheelGeo(P, z < 0));
+    mk(body, cached(key('bike'), () => bikeGeo(P)));
+  } else if (lid === 'treads') {
     mk(body, cached(key('treads'), () => treadGeo(P)));
+  } else if (lid === 'tankbase') {
+    mk(body, cached(key('tankbase'), () => tankBaseGeo(P)));
+  } else if (lid === 'jet') {
+    mk(body, cached(key('jet'), () => jetGeo(P)));
+    mk(body, cached('jetglow', jetGlowGeo), 0.95);
   } else {
     mk(body, cached(key('hover'), () => hoverGeo(P)));
     mk(body, cached('hoverglow', () => { const g = new Geometry(); add(g, Geometry.cylinder(0.5, 0.5, 0.05, 8, [0.5, 0.9, 1]), [0, 0.12, 0]); return g; }), 0.9);
@@ -3267,7 +3650,7 @@ function buildMech(loadout) {
 
   // 상체 (조준 방향으로 따로 회전)
   const upper = body.add(new Node('upper'));
-  upper.position = [0, hip + (loadout.legs === 'quad' ? 0.18 : 0.1), 0];
+  upper.position = [0, hip + (L.upperY ?? 0.1), 0];
   mk(upper, cached(key('frame-' + (loadout.frame || 'standard')), () => frameGeo(loadout.frame, P)));
   const head = upper.add(new Node('head'));
   head.position = [0, F.headY, 0];
@@ -3285,7 +3668,7 @@ function buildMech(loadout) {
 
   // 무기 슬롯
   const slotNodes = {}, slotInfo = {};
-  for (const s of SLOT_IDS) { const n = upper.add(new Node(s)); n.position = [...F.slots[s]]; slotNodes[s] = n; }
+  for (const s of SLOT_IDS) { const n = upper.add(new Node(s)); n.position = [...slotPos(F, s)]; slotNodes[s] = n; }
   const used = new Set();
   for (const w of loadout.weapons || []) {
     const model = cached(key('w-' + w.id), () => WEAPON_MODELS[w.id](P));
@@ -3299,7 +3682,7 @@ function buildMech(loadout) {
     const blade = model.glow ? mk(inner, model.glow, 0.9, 'w:' + w.slot) : null;
     slotInfo[w.slot] = { node: n, inner, muzzle: model.muzzle, blade };
   }
-  for (const s of ['armR', 'armL']) if (!used.has(s)) mk(slotNodes[s], cached(key('fist'), () => fistGeo(P)));
+  for (const s of ['armR', 'armL']) if (!used.has(s)) mk(slotNodes[s], cached(key('fist-' + (F.fist || '')), () => fistGeo(P, F.fist)));
 
   // 세트 각성 / 초월 장식
   for (const sid of loadout.sets || []) {
@@ -3350,20 +3733,30 @@ function partPreview(kind, id, paint = 'rx') {
  * st: { phase }, o: { move(0~1), dt, t, legs, aimRel, lean:[x,z] }
  */
 function animateMech(m, st, o) {
-  const k = o.move, legs = o.legs;
-  if (legs === 'walker' || legs === 'reverse' || legs === 'quad') {
-    st.phase = (st.phase || 0) + o.dt * (4 + (legs === 'reverse' ? 8 : 6) * k) * (k > 0.05 ? 1 : 0);
-    const sw = Math.sin(st.phase) * (legs === 'quad' ? 0.4 : 0.65) * k;
-    const n = m.legNodes;
-    if (n.length === 2) { n[0].rotation[0] = sw; n[1].rotation[0] = -sw; }
-    else if (n.length === 4) { n[0].rotation[0] = n[3].rotation[0] = sw; n[1].rotation[0] = n[2].rotation[0] = -sw; }
-    m.body.position[1] = Math.abs(Math.cos(st.phase)) * (legs === 'quad' ? 0.03 : 0.07) * k;
-    m.body.rotation[0] = m.body.rotation[2] = 0;
-  } else if (legs === 'treads') {
+  const k = o.move, L = LEGS[o.legs] || LEGS.walker, ln = o.lean || [0, 0];
+  const lim = (v, a) => Math.max(-a, Math.min(a, v));
+  // 몸 기울기는 매 프레임 새로 정한다 (대시 숙임이 += 로 더해지므로 누적 방지)
+  m.body.rotation[0] = m.body.rotation[2] = 0;
+  if (L.anim === 'walk') {
+    st.phase = (st.phase || 0) + o.dt * (4 + L.step * k) * (k > 0.05 ? 1 : 0);
+    const sw = Math.sin(st.phase) * L.swing * k, n = m.legNodes;
+    // 2족: 좌우 번갈아 / 4족: 대각선 짝 / 6족: 삼각 보행
+    const grp = n.length === 2 ? [1, -1] : n.length === 4 ? [1, -1, -1, 1] : [1, -1, -1, 1, 1, -1];
+    n.forEach((l, i) => { l.rotation[0] = sw * grp[i]; });
+    m.body.position[1] = Math.abs(Math.cos(st.phase)) * L.bob * k;
+  } else if (L.anim === 'roll') {
     m.body.position[1] = Math.sin(o.t * 30) * 0.015 * k;
+  } else if (L.anim === 'wheel') {
+    st.roll = ((st.roll || 0) + o.dt * k * 22) % (Math.PI * 2);
+    for (const l of m.legNodes) l.rotation[0] = st.roll;
+    m.body.position[1] = Math.sin(o.t * 24) * 0.01 * k;
+    m.body.rotation[2] = lim(ln[1] * 1.8, 0.35);
+  } else if (L.anim === 'jet') {
+    // 떠서 기수를 숙이고 옆으로 뱅크
+    m.body.position[1] = 0.24 + Math.sin(o.t * 4) * 0.05;
+    m.body.rotation[0] = lim(ln[0] * 1.2, 0.4); m.body.rotation[2] = lim(ln[1] * 2.4, 0.6);
   } else {
     m.body.position[1] = 0.12 + Math.sin(o.t * 3) * 0.06;
-    const ln = o.lean || [0, 0];
     m.body.rotation[0] = ln[0]; m.body.rotation[2] = ln[1];
   }
   m.upper.rotation[1] = o.aimRel || 0;
@@ -3377,8 +3770,10 @@ __m["game/weapons.js"] = (() => {
 //
 //  새 무기 추가:
 //   1) parts.js WEAPON_MODELS 에 외형 함수 추가
-//   2) 아래 WEAPONS 에 { name, prefer, levels:[...], fire(ctx) } 추가
+//   2) 아래 WEAPONS 에 { name, prefer, levels:[...] } 추가 + fire() 에 발사 분기
 //   3) upgrades.js 는 WEAPONS 를 자동으로 읽어서 카드에 넣는다
+//  starter: 격납고에서 고르는 시작 무기. 런 중 카드에는 내가 고른 시작 무기만 나온다 (강화/진화용)
+//  prefer: arm(직접 조작) / shoulder / hip / back (자동 사격)
 
 const { Geometry, InstancedMesh, Material, Mesh, m4 } = __m["engine/index.js"];
 const { funnelBitGeo } = __m["game/parts.js"];
@@ -3388,7 +3783,7 @@ const R = Math.random, rr = (a, b) => a + (b - a) * R();
 // levels[i] = 레벨 i+1 의 수치. up = 그 레벨로 올릴 때 카드 설명
 const WEAPONS = {
   mg: {
-    name: '머신건', tag: 'MG', prefer: 'arm', desc: '누르고 있으면 연사. 특수기: 부채꼴 탄막.',
+    name: '머신건', tag: 'MG', starter: true, prefer: 'arm', desc: '누르고 있으면 연사. 특수기: 부채꼴 탄막.',
     levels: [
       { dmg: 7, cd: 0.16, count: 1, pierce: 0 },
       { dmg: 9, cd: 0.15, count: 1, pierce: 0, up: '피해 +30%' },
@@ -3399,7 +3794,7 @@ const WEAPONS = {
     range: 13,
   },
   shotgun: {
-    name: '샷건', tag: 'SG', prefer: 'arm', desc: '근거리 산탄, 강한 넉백. 특수기: 슬러그 폭발.',
+    name: '샷건', tag: 'SG', starter: true, prefer: 'arm', desc: '근거리 산탄, 강한 넉백. 특수기: 슬러그 폭발.',
     levels: [
       { dmg: 6, cd: 0.95, pellets: 6 },
       { dmg: 7, cd: 0.9, pellets: 7, up: '산탄 +1, 피해 증가' },
@@ -3410,7 +3805,7 @@ const WEAPONS = {
     range: 7.5,
   },
   missile: {
-    name: '미사일 포드', tag: 'MSL', prefer: 'shoulder', desc: '어깨에 달려 자동으로 유도 미사일 발사.',
+    name: '미사일 포드', tag: 'MSL', starter: true, prefer: 'shoulder', desc: '어깨에 달려 자동으로 유도 미사일 발사.',
     levels: [
       { dmg: 16, cd: 1.7, count: 2, aoe: 1.8 },
       { dmg: 20, cd: 1.55, count: 2, aoe: 2.0, up: '피해, 폭발 범위 증가' },
@@ -3421,7 +3816,7 @@ const WEAPONS = {
     range: 17,
   },
   laser: {
-    name: '빔 라이플', tag: 'BEAM', prefer: 'arm', desc: '모든 적을 관통하는 빔. 특수기: 메가 빔.',
+    name: '빔 라이플', tag: 'BEAM', starter: true, prefer: 'arm', desc: '모든 적을 관통하는 빔. 특수기: 메가 빔.',
     levels: [
       { dmg: 28, cd: 2.2, width: 0.55 },
       { dmg: 36, cd: 2.0, width: 0.65, up: '피해 증가, 빔 굵기 +' },
@@ -3432,7 +3827,7 @@ const WEAPONS = {
     range: 18,
   },
   saber: {
-    name: '빔 사벨', tag: 'SABER', prefer: 'arm', desc: '3단 콤보 베기, 마지막 타격이 적을 띄운다. 특수기: 회전 베기.',
+    name: '빔 사벨', tag: 'SABER', starter: true, prefer: 'arm', desc: '3단 콤보 베기, 마지막 타격이 적을 띄운다. 특수기: 회전 베기.',
     levels: [
       { dmg: 26, cd: 1.1, radius: 2.7, arc: 2.6 },
       { dmg: 33, cd: 1.0, radius: 2.9, arc: 2.8, up: '피해 증가, 범위 +' },
@@ -3441,6 +3836,141 @@ const WEAPONS = {
       { dmg: 60, cd: 0.75, radius: 3.7, arc: 6.3, up: '회전 베기 (360°)' },
     ],
     range: 3.4,
+  },
+  flamer: {
+    name: '화염 방사기', tag: 'FLAME', starter: true, prefer: 'arm', desc: '누르고 있으면 부채꼴로 불길을 뿜는다. 불붙은 적은 계속 탄다. 특수기: 화염 폭풍.',
+    levels: [
+      { dmg: 5, cd: 0.1, cone: 0.75, burn: 6 },
+      { dmg: 6, cd: 0.1, cone: 0.8, burn: 8, up: '피해, 화상 증가' },
+      { dmg: 7, cd: 0.09, cone: 0.9, burn: 9, up: '불길 폭 +' },
+      { dmg: 9, cd: 0.085, cone: 0.95, burn: 12, up: '피해, 화상 증가' },
+      { dmg: 11, cd: 0.08, cone: 1.1, burn: 15, far: 1.2, up: '고압 노즐 (불길 폭, 사거리 +)' },
+    ],
+    range: 6,
+  },
+  rod: {
+    name: '히트 로드', tag: 'ROD', starter: true, prefer: 'arm', desc: '중거리를 휩쓰는 채찍. 맞은 적을 끌어당긴다. 특수기: 회전 채찍.',
+    levels: [
+      { dmg: 17, cd: 0.7, reach: 6, arc: 1.3 },
+      { dmg: 21, cd: 0.65, reach: 6.4, arc: 1.4, up: '피해 증가, 길이 +' },
+      { dmg: 25, cd: 0.6, reach: 6.8, arc: 1.6, up: '휘두르는 각도 증가' },
+      { dmg: 30, cd: 0.55, reach: 7.2, arc: 1.8, up: '피해, 길이 증가' },
+      { dmg: 36, cd: 0.5, reach: 7.8, arc: 2.1, double: true, up: '이중 채찍 (왕복 2회)' },
+    ],
+    range: 7,
+  },
+
+  // ===== 런 무기: 레벨업 카드로만 얻는다. 전부 자동 사격 =====
+  //  passive: 쿨다운 없이 계속 도는 무기 (auto() 에서 건너뜀)
+  saw: {
+    name: '회전 톱날', tag: 'SAW', prefer: 'hip', passive: true, desc: '톱날이 기체 주위를 돌며 닿는 적을 갈아버린다.',
+    levels: [
+      { dmg: 10, blades: 2, radius: 2.4, spin: 3.2 },
+      { dmg: 13, blades: 2, radius: 2.6, spin: 3.4, up: '피해 증가, 회전 반경 +' },
+      { dmg: 14, blades: 3, radius: 2.7, spin: 3.6, up: '톱날 +1' },
+      { dmg: 18, blades: 4, radius: 2.9, spin: 3.9, up: '톱날 +1, 피해 증가' },
+      { dmg: 22, blades: 5, radius: 3.2, spin: 4.3, up: '톱날 5개 (반경, 회전 증가)' },
+    ],
+    range: 4,
+  },
+  tesla: {
+    name: '테슬라 코일', tag: 'TESLA', prefer: 'shoulder', desc: '번개가 적에서 적으로 튀며 연쇄 감전시킨다.',
+    levels: [
+      { dmg: 18, cd: 1.4, chains: 3, jump: 4 },
+      { dmg: 22, cd: 1.3, chains: 4, jump: 4.2, up: '피해 증가, 연쇄 +1' },
+      { dmg: 26, cd: 1.2, chains: 5, jump: 4.5, up: '연쇄 +1, 충전 단축' },
+      { dmg: 31, cd: 1.1, chains: 6, jump: 4.8, up: '피해 증가, 연쇄 +1' },
+      { dmg: 38, cd: 0.9, chains: 8, jump: 5.2, up: '과부하 (연쇄 8회)' },
+    ],
+    range: 10,
+  },
+  mine: {
+    name: '지뢰 살포기', tag: 'MINE', prefer: 'hip', desc: '주위에 지뢰를 뿌린다. 적이 밟으면 폭발.',
+    levels: [
+      { dmg: 30, cd: 2.2, count: 1, aoe: 2.2 },
+      { dmg: 36, cd: 2.0, count: 2, aoe: 2.3, up: '지뢰 +1' },
+      { dmg: 44, cd: 1.9, count: 2, aoe: 2.6, up: '피해, 폭발 범위 증가' },
+      { dmg: 50, cd: 1.7, count: 3, aoe: 2.8, up: '지뢰 +1' },
+      { dmg: 62, cd: 1.5, count: 4, aoe: 3.2, up: '살포량 증가 (4개)' },
+    ],
+    range: 12,
+  },
+  disc: {
+    name: '부메랑 디스크', tag: 'DISC', prefer: 'shoulder', desc: '날아갔다 돌아오는 원반. 오가는 길의 적을 모두 벤다.',
+    levels: [
+      { dmg: 14, cd: 1.6, count: 1, size: 1 },
+      { dmg: 18, cd: 1.5, count: 1, size: 1.15, up: '피해 증가, 크기 +' },
+      { dmg: 20, cd: 1.4, count: 2, size: 1.15, up: '디스크 +1' },
+      { dmg: 25, cd: 1.3, count: 2, size: 1.3, up: '피해 증가, 크기 +' },
+      { dmg: 30, cd: 1.1, count: 3, size: 1.45, up: '디스크 3개' },
+    ],
+    range: 11,
+  },
+  stomp: {
+    name: '충격파 발생기', tag: 'QUAKE', prefer: 'hip', desc: '땅을 내려찍어 주위의 적을 날려 보낸다.',
+    levels: [
+      { dmg: 22, cd: 2.6, radius: 3.6, waves: 1 },
+      { dmg: 28, cd: 2.4, radius: 3.9, waves: 1, up: '피해 증가, 범위 +' },
+      { dmg: 34, cd: 2.2, radius: 4.3, waves: 1, up: '범위 +, 재충전 단축' },
+      { dmg: 42, cd: 2.0, radius: 4.7, waves: 1, up: '피해, 범위 증가' },
+      { dmg: 52, cd: 1.7, radius: 5.2, waves: 2, up: '이중 충격파' },
+    ],
+    range: 5,
+  },
+  gravity: {
+    name: '중력 우물', tag: 'GRAV', prefer: 'back', desc: '적이 몰린 곳에 중력장을 열어 빨아들이며 짓누른다.',
+    levels: [
+      { dmg: 14, cd: 5.5, radius: 3.2, dur: 2.5 },
+      { dmg: 18, cd: 5.2, radius: 3.4, dur: 2.7, up: '피해 증가' },
+      { dmg: 22, cd: 4.8, radius: 3.8, dur: 3.0, up: '범위, 지속 시간 증가' },
+      { dmg: 27, cd: 4.4, radius: 4.1, dur: 3.2, up: '피해 증가, 재충전 단축' },
+      { dmg: 34, cd: 3.8, radius: 4.6, dur: 3.6, pop: 4, up: '붕괴: 끝날 때 대폭발' },
+    ],
+    range: 13,
+  },
+  gauss: {
+    name: '가우스 캐논', tag: 'GAUSS', prefer: 'shoulder', desc: '가장 튼튼한 적을 노려 방 끝까지 꿰뚫는 탄을 쏜다.',
+    levels: [
+      { dmg: 42, cd: 3.2, width: 0.45 },
+      { dmg: 52, cd: 3.0, width: 0.5, up: '피해 증가' },
+      { dmg: 64, cd: 2.8, width: 0.55, up: '충전 단축, 피해 증가' },
+      { dmg: 78, cd: 2.5, width: 0.65, up: '피해 증가, 탄 굵기 +' },
+      { dmg: 100, cd: 2.2, width: 0.75, crit: 0.3, up: '치명타 확률 +30%' },
+    ],
+    range: 22,
+  },
+  turret: {
+    name: '회전 레이저 포탑', tag: 'TURRET', prefer: 'back', passive: true, desc: '등의 포탑이 빔을 켠 채 빙글빙글 돈다.',
+    levels: [
+      { dmg: 12, beams: 1, len: 5, spin: 3 },
+      { dmg: 15, beams: 1, len: 5.5, spin: 3.2, up: '피해 증가, 길이 +' },
+      { dmg: 16, beams: 2, len: 5.5, spin: 3.2, up: '빔 +1 (반대쪽)' },
+      { dmg: 21, beams: 2, len: 6.2, spin: 3.4, up: '피해, 길이 증가' },
+      { dmg: 26, beams: 3, len: 7, spin: 3.6, up: '빔 3줄' },
+    ],
+    range: 7,
+  },
+  cluster: {
+    name: '집속탄 박격포', tag: 'CLUSTER', prefer: 'shoulder', desc: '포탄을 높이 쏘아 올린다. 떨어지면 자탄이 흩어져 연달아 터진다.',
+    levels: [
+      { dmg: 24, cd: 2.6, bomblets: 4, aoe: 1.6, shells: 1 },
+      { dmg: 30, cd: 2.4, bomblets: 5, aoe: 1.7, shells: 1, up: '피해 증가, 자탄 +1' },
+      { dmg: 34, cd: 2.2, bomblets: 6, aoe: 1.9, shells: 1, up: '자탄 +1, 범위 증가' },
+      { dmg: 40, cd: 2.0, bomblets: 8, aoe: 2.0, shells: 1, up: '자탄 +2' },
+      { dmg: 48, cd: 1.7, bomblets: 9, aoe: 2.2, shells: 2, up: '이중 포격 (포탄 2발)' },
+    ],
+    range: 15,
+  },
+  ricochet: {
+    name: '도탄 리볼버', tag: 'BOUNCE', prefer: 'hip', desc: '맞으면 다음 적에게 튕겨 가는 탄. 튕길 때마다 강해진다.',
+    levels: [
+      { dmg: 12, cd: 0.9, count: 1, bounce: 3 },
+      { dmg: 15, cd: 0.85, count: 1, bounce: 4, up: '피해 증가, 도탄 +1' },
+      { dmg: 16, cd: 0.8, count: 2, bounce: 4, up: '탄 +1' },
+      { dmg: 20, cd: 0.75, count: 2, bounce: 6, up: '도탄 +2, 피해 증가' },
+      { dmg: 24, cd: 0.6, count: 3, bounce: 7, up: '탄 3발, 도탄 +1' },
+    ],
+    range: 11,
   },
   // 노획 무기: 카드로는 안 나오고 적에게서 뜯어내야 얻는다
   cannon: {
@@ -3476,6 +4006,18 @@ const EVOLUTIONS = {
   laser:   { need: 'booster', name: '하이퍼 메가 빔', tag: 'HYPER', desc: '빔 3줄을 부채꼴로 쏜다.', stats: { dmg: 95, cd: 1.05, width: 1.5, fan: 3 } },
   saber:   { need: 'shield', name: '광자 대검', tag: 'PHOTON', desc: '거대한 칼날, 휘두를 때마다 참격파가 날아간다.', stats: { dmg: 88, cd: 0.6, radius: 5.0, arc: 6.3, wave: true } },
   funnel:  { need: 'reactor', name: '판넬 폭풍', tag: 'STORM', desc: '비트 8기가 폭풍처럼 쏟아붓는다.', stats: { dmg: 19, cd: 0.32, bits: 8 } },
+  flamer:  { need: 'reactor', name: '지옥불', tag: 'INFERNO', desc: '푸른 불길이 두 배 멀리 뻗고, 화상이 훨씬 오래 탄다.', stats: { dmg: 17, cd: 0.065, cone: 1.3, burn: 26, far: 1.7 } },
+  rod:     { need: 'antenna', name: '뇌룡 채찍', tag: 'THUNDER', desc: '길이 10, 왕복 2회. 맞은 적을 감전시켜 멈춘다.', stats: { dmg: 60, cd: 0.42, reach: 10, arc: 2.5, double: true, stun: 0.7 } },
+  saw:     { need: 'armor', name: '분쇄 톱니', tag: 'GRINDER', desc: '거대한 톱날 8개가 두 겹으로 돈다.', stats: { dmg: 34, blades: 8, radius: 3.8, spin: 5, big: 1.5, ring2: true } },
+  tesla:   { need: 'antenna', name: '뇌신 코일', tag: 'ZEUS', desc: '번개 두 줄기가 14번씩 튀며 적을 굳힌다.', stats: { dmg: 52, cd: 0.7, chains: 14, jump: 6, forks: 2, stun: 0.6 } },
+  mine:    { need: 'booster', name: '연쇄 지뢰원', tag: 'FIELD', desc: '지뢰 6개씩 살포. 하나가 터지면 주변 지뢰도 따라 터진다.', stats: { dmg: 85, cd: 1.1, count: 6, aoe: 3.4, chain: true } },
+  disc:    { need: 'shield', name: '광륜', tag: 'HALO', desc: '빛나는 대형 원반 4개를 던진다.', stats: { dmg: 46, cd: 0.8, count: 4, size: 1.9 } },
+  stomp:   { need: 'armor', name: '지진 발생기', tag: 'TREMOR', desc: '충격파 3겹이 연달아 퍼지며 적을 띄운다.', stats: { dmg: 80, cd: 1.4, radius: 6.2, waves: 3 } },
+  gravity: { need: 'reactor', name: '블랙홀', tag: 'HOLE', desc: '거대한 블랙홀이 모든 걸 빨아들인 뒤 터진다.', stats: { dmg: 52, cd: 3.2, radius: 6.2, dur: 4, pop: 6 } },
+  gauss:   { need: 'antenna', name: '초전자포', tag: 'RAILGUN', desc: '굵은 탄 3발을 부채꼴로. 치명타 확률 +40%.', stats: { dmg: 150, cd: 1.6, width: 1.2, crit: 0.4, fan: 3 } },
+  turret:  { need: 'shield', name: '광자 등대', tag: 'LIGHTHOUSE', desc: '긴 빔 4줄이 빠르게 돈다.', stats: { dmg: 40, beams: 4, len: 9.5, spin: 4.2 } },
+  cluster: { need: 'booster', name: '융단 폭격', tag: 'CARPET', desc: '포탄 3발, 자탄 14개가 방을 덮는다.', stats: { dmg: 62, cd: 1.3, bomblets: 14, aoe: 2.4, shells: 3 } },
+  ricochet: { need: 'reactor', name: '무한 도탄', tag: 'PINBALL', desc: '탄 4발이 12번씩 튕겨 다닌다.', stats: { dmg: 34, cd: 0.45, count: 4, bounce: 12 } },
 };
 const lvOf = (w) => (w.evo ? EVOLUTIONS[w.id].stats : WEAPONS[w.id].levels[w.level - 1]);
 const weaponName = (w) => (w.evo ? EVOLUTIONS[w.id].name : WEAPONS[w.id].name);
@@ -3489,6 +4031,35 @@ function rodGeo() {
 function beamGeo() {
   const g = new Geometry();
   g.merge(Geometry.box(1, 1, 1), { position: [0, -0.5, 0.5] }); // z 0~1
+  return g;
+}
+// ---- 필드 오브젝트 외형 (톱날, 지뢰, 원반, 중력 우물, 박격포탄) ----
+const ring = (g, n, r, fn) => { for (let i = 0; i < n; i++) fn((i / n) * Math.PI * 2, r); };
+function sawGeo() {
+  const g = new Geometry();
+  g.merge(Geometry.cylinder(0.42, 0.42, 0.06, 10, [0.75, 0.77, 0.8]));
+  ring(g, 8, 0.42, (a, r) => g.merge(Geometry.box(0.16, 0.06, 0.2, [0.9, 0.92, 0.95]), { position: [Math.sin(a) * r, 0, Math.cos(a) * r], rotation: [0, a + 0.5, 0] }));
+  g.merge(Geometry.cylinder(0.14, 0.14, 0.12, 6, [0.95, 0.6, 0.2]), { position: [0, -0.03, 0] });
+  return g;
+}
+function mineGeo() {
+  const g = new Geometry();
+  g.merge(Geometry.cylinder(0.3, 0.34, 0.12, 8, [0.32, 0.34, 0.3]));
+  g.merge(Geometry.cylinder(0.18, 0.2, 0.06, 6, [0.5, 0.5, 0.45]), { position: [0, 0.12, 0] });
+  g.merge(Geometry.box(0.1, 0.06, 0.1, [1, 0.25, 0.2]), { position: [0, 0.18, 0] });
+  return g;
+}
+function discGeo() {
+  const g = new Geometry();
+  g.merge(Geometry.cylinder(0.5, 0.5, 0.05, 10, [0.55, 0.95, 1]));
+  ring(g, 3, 0.5, (a, r) => g.merge(Geometry.box(0.12, 0.07, 0.36, [1, 1, 1]), { position: [Math.sin(a) * r, -0.01, Math.cos(a) * r], rotation: [0, a + 1.2, 0] }));
+  g.merge(Geometry.cylinder(0.16, 0.16, 0.08, 6, [0.25, 0.3, 0.4]), { position: [0, -0.015, 0] });
+  return g;
+}
+function shellGeo() {
+  const g = new Geometry();
+  g.merge(Geometry.icosphere(0.22, 1, [0.35, 0.36, 0.32], { squashY: 1.3 }));
+  g.merge(Geometry.cylinder(0.23, 0.23, 0.08, 8, [1, 0.75, 0.25]), { position: [0, -0.04, 0] });
   return g;
 }
 
@@ -3518,7 +4089,18 @@ class Shots {
       m.visible = core.visible = false;
       this.beams.push({ m, core, t: 0, life: 0 });
     }
+    // 필드 오브젝트: 지뢰 / 부메랑 원반 / 중력 우물 / 박격포탄 (방을 옮기면 clear 로 사라짐)
+    this.mines = []; this.discs = []; this.wells = []; this.lobs = [];
+    this.mineMesh = sc.add(new InstancedMesh(mineGeo(), new Material(), 40));
+    this.discMesh = sc.add(new InstancedMesh(discGeo(), new Material({ emissive: 0.6, castShadow: false }), 16));
+    this.wellMesh = sc.add(new InstancedMesh(Geometry.icosphere(0.5, 1, [1, 1, 1]), new Material({ emissive: 1, castShadow: false, rim: 0.8 }), 8));
+    this.wellCore = sc.add(new InstancedMesh(Geometry.icosphere(0.32, 1, [0.04, 0.02, 0.08]), new Material({ castShadow: false, outline: false }), 8));
+    this.lobMesh = sc.add(new InstancedMesh(shellGeo(), new Material({ castShadow: false }), 16));
   }
+  mine(o) { if (this.mines.length >= 36) this.mines.shift(); this.mines.push({ t: 0, life: 14, fuse: -1, ...o }); }
+  disc(o) { if (this.discs.length < 16) this.discs.push({ t: 0, back: false, hits: new Map(), ...o }); }
+  well(o) { if (this.wells.length < 8) this.wells.push({ t: 0, tick: 0, ...o }); }
+  lob(o) { if (this.lobs.length < 16) this.lobs.push({ t: 0, ...o }); }
 
   // ---- 플레이어 탄 ----
   add(o) { if (this.list.length < 480) this.list.push({ pierce: 0, knock: 2, r: 0.25, life: 1, hit: null, ...o }); }
@@ -3568,13 +4150,26 @@ class Shots {
       const RM = g.rooms;
       let dead = s.life <= 0 || Math.abs(s.x) > RM.hx + 4 || Math.abs(s.z) > RM.hz + 4;
       if (!dead) {
+        let bounced = false;
         en.each(s.x, s.z, s.r, (e) => {
-          if (dead || (s.hit && s.hit.has(e))) return;
+          if (dead || bounced || (s.hit && s.hit.has(e))) return;
           if (s.aoe) { dead = true; return; }
           const len = Math.hypot(s.vx, s.vz) || 1;
           en.hit(e, s.dmg, s.vx / len, s.vz / len, s.knock, { crit: s.crit, quiet: s.quiet });
           fx.hitSpark([s.x, s.y, s.z], s.color, 3);
           g.sfx.play('tink');
+          // 도탄: 아직 안 맞은 가장 가까운 적에게 튕겨 간다 (튕길 때마다 피해 +10%)
+          if (s.bounce > 0) {
+            (s.hit ||= new Set()).add(e);
+            let nx = null, bd = 49;
+            en.each(e.x, e.z, 7, (o) => { if (s.hit.has(o)) return; const d = (o.x - e.x) ** 2 + (o.z - e.z) ** 2; if (d < bd) { bd = d; nx = o; } });
+            if (nx) {
+              const dx = nx.x - s.x, dz = nx.z - s.z, d = Math.hypot(dx, dz) || 1;
+              s.vx = (dx / d) * len; s.vz = (dz / d) * len; s.life = 0.6; s.bounce--; s.dmg *= 1.1; bounced = true;
+              fx.sparks.emit({ position: [s.x, s.y, s.z], velocity: [rr(-2, 2), rr(1, 3), rr(-2, 2)], life: 0.2, size: 2, sizeEnd: 1, color: [1, 1, 0.8], colorEnd: s.color, emissive: 1, gravity: 0.3 });
+              return;
+            }
+          }
           if (s.pierce-- > 0) { (s.hit ||= new Set()).add(e); } else dead = true;
         });
         if (dead && s.aoe) this.explodeAt(s);
@@ -3616,6 +4211,105 @@ class Shots {
       if (b.t >= b.life) { b.m.visible = b.core.visible = false; continue; }
       this.updateBeam(b);
     }
+    this.updateField(dt);
+  }
+
+  // ---- 필드 오브젝트 ----
+  updateField(dt) {
+    const g = this.game, en = g.enemies, fx = g.fx, p = g.player;
+    // 지뢰: 던져져 날아가 박힌 뒤(0.5초) 적이 밟으면 폭발. chain 이면 주변 지뢰도 따라 터진다
+    let n = 0;
+    for (let i = this.mines.length - 1; i >= 0; i--) {
+      const m = this.mines[i];
+      m.t += dt; m.life -= dt;
+      const k = Math.min(1, m.t / 0.35), x = m.x0 + (m.x - m.x0) * k, z = m.z0 + (m.z - m.z0) * k, y = k < 1 ? m.y0 * (1 - k) + Math.sin(k * Math.PI) * 1.4 : 0.02;
+      if (m.t > 0.5 && m.fuse < 0) en.each(m.x, m.z, 0.9, () => { m.fuse = 0.05; });
+      if (m.fuse >= 0 && (m.fuse -= dt) < 0) {
+        en.blast(m.x, m.z, m.aoe, m.dmg, false, 0);
+        if (m.chain) for (const o of this.mines) if (o !== m && o.fuse < 0 && o.t > 0.5 && (o.x - m.x) ** 2 + (o.z - m.z) ** 2 < 16) o.fuse = 0.12;
+        this.mines.splice(i, 1); continue;
+      }
+      if (m.life <= 0) { fx.pop(m.x, 0.2, m.z, [0.6, 0.6, 0.55]); this.mines.splice(i, 1); continue; }
+      const armed = m.t > 0.5, blink = armed && Math.floor(m.t * (m.fuse >= 0 ? 30 : 3)) % 2 === 0;
+      this.mineMesh.setAt(n++, m4.fromTRS([x, y, z], [0, m.t * (k < 1 ? 14 : 0), 0], [1, 1, 1]), blink ? [1.6, 0.7, 0.6] : [1, 1, 1], blink ? 0.6 : 0);
+    }
+    this.mineMesh.count = n; this.mineMesh.dirty = true;
+
+    // 부메랑 원반: 감속하며 날아갔다가 기체로 돌아온다. 같은 적은 0.3초에 한 번만
+    n = 0;
+    for (let i = this.discs.length - 1; i >= 0; i--) {
+      const d = this.discs[i];
+      d.t += dt;
+      if (!d.back) { const k = Math.exp(-2.6 * dt); d.vx *= k; d.vz *= k; if (d.t > 0.55) d.back = true; }
+      else {
+        const dx = p.x - d.x, dz = p.z - d.z, l = Math.hypot(dx, dz) || 1, sp = Math.min(24, Math.hypot(d.vx, d.vz) + 40 * dt);
+        d.vx += ((dx / l) * sp - d.vx) * Math.min(1, dt * 8); d.vz += ((dz / l) * sp - d.vz) * Math.min(1, dt * 8);
+        if (l < 1 || d.t > 3.5) { this.discs.splice(i, 1); continue; }
+      }
+      d.x += d.vx * dt; d.z += d.vz * dt;
+      en.each(d.x, d.z, 0.5 * d.size, (e) => {
+        if ((d.hits.get(e) || 0) > d.t) return;
+        d.hits.set(e, d.t + 0.3);
+        const c = Math.random() < p.stats.crit, l = Math.hypot(d.vx, d.vz) || 1;
+        en.hit(e, c ? d.dmg * 2 : d.dmg, d.vx / l, d.vz / l, 3, { crit: c, quiet: !c });
+        fx.hitSpark([e.x, 1, e.z], [0.6, 1, 1], 3);
+        g.sfx.play('tink', { pitch: 1.4 });
+      });
+      if (Math.random() < 0.5) fx.trail.emit({ position: [d.x + rr(-0.3, 0.3) * d.size, 1, d.z + rr(-0.3, 0.3) * d.size], velocity: [0, 0, 0], life: 0.15, size: 2, sizeEnd: 1, color: [0.8, 1, 1], colorEnd: [0.3, 0.7, 1], emissive: 1, gravity: 0 });
+      this.discMesh.setAt(n++, m4.fromTRS([d.x, 1, d.z], [0, d.t * 22, 0], [d.size, 1, d.size]), d.evo ? [1.2, 1, 0.6] : [1, 1, 1], 0.6);
+    }
+    this.discMesh.count = n; this.discMesh.dirty = true;
+
+    // 중력 우물: 반경 안의 적을 끌어당기고 0.25초마다 피해. pop 이 있으면 끝에 폭발
+    n = 0;
+    for (let i = this.wells.length - 1; i >= 0; i--) {
+      const w = this.wells[i];
+      w.t += dt; w.tick -= dt;
+      const tick = w.tick <= 0;
+      if (tick) w.tick = 0.25;
+      en.each(w.x, w.z, w.r, (e) => {
+        const dx = w.x - e.x, dz = w.z - e.z, d = Math.hypot(dx, dz) || 1;
+        if (!e.boss && !e.ctrl && !e.guard && d > 0.4) { const f = 42 * (1 - (d / w.r) * 0.5) * dt; e.kx += (dx / d) * f; e.kz += (dz / d) * f; }
+        if (tick) en.hit(e, w.dps * 0.25, 0, 0, 0, { quiet: true });
+      });
+      for (let k = 0; k < 3; k++) {
+        const a = Math.random() * Math.PI * 2, r = w.r * rr(0.6, 1);
+        fx.trail.emit({ position: [w.x + Math.cos(a) * r, rr(0.2, 1.2), w.z + Math.sin(a) * r], velocity: [-Math.cos(a) * r * 2.4 - Math.sin(a) * 3, 0.3, -Math.sin(a) * r * 2.4 + Math.cos(a) * 3], life: 0.4, size: 2, sizeEnd: 1, color: [0.85, 0.6, 1], colorEnd: [0.3, 0.1, 0.6], emissive: 1, gravity: 0 });
+      }
+      if (w.t >= w.dur) {
+        if (w.pop) { en.blast(w.x, w.z, w.r * 0.85, w.dps * w.pop, false, 0); fx.light([w.x, 2, w.z], [0.8, 0.5, 1], w.r + 3, 2, 0.3); fx.addTrauma(0.2); }
+        else fx.pop(w.x, 1, w.z, [0.7, 0.4, 1]);
+        fx.ring(w.x, 0.12, w.z, w.r, [0.7, 0.45, 1], 0.3);
+        this.wells.splice(i, 1); continue;
+      }
+      const grow = Math.min(1, w.t * 4) * (1 - Math.max(0, (w.t - w.dur + 0.2) * 5)), s = (0.7 + w.r * 0.14) * grow * (1 + Math.sin(w.t * 20) * 0.06);
+      this.wellMesh.setAt(n, m4.fromTRS([w.x, 1, w.z], [0, w.t * 3, 0], [s, s, s]), [0.6, 0.3, 1], 1);
+      this.wellCore.setAt(n++, m4.fromTRS([w.x, 1, w.z], [0, 0, 0], [s, s, s]), [1, 1, 1], 0);
+      if (Math.random() < 0.15) fx.light([w.x, 1.4, w.z], [0.7, 0.4, 1], w.r + 1, 0.8, 0.2);
+    }
+    this.wellMesh.count = this.wellCore.count = n; this.wellMesh.dirty = this.wellCore.dirty = true;
+
+    // 박격포탄: 포물선으로 날아가 떨어지면 본탄 + 자탄이 흩어져 연달아 폭발
+    n = 0;
+    for (let i = this.lobs.length - 1; i >= 0; i--) {
+      const L = this.lobs[i];
+      L.t += dt;
+      const k = Math.min(1, L.t / L.T);
+      const x = L.x + (L.tx - L.x) * k, z = L.z + (L.tz - L.z) * k, y = L.y + (0.3 - L.y) * k + Math.sin(k * Math.PI) * 5.5;
+      if (k >= 1) {
+        en.blast(L.tx, L.tz, L.aoe * 1.3, L.dmg * 1.4, false, 0);
+        for (let j = 0; j < L.bomblets; j++) {
+          const a = Math.random() * Math.PI * 2, r = rr(1, 3.2) * L.spread;
+          en.blast(L.tx + Math.cos(a) * r, L.tz + Math.sin(a) * r, L.aoe, L.dmg, false, rr(0.15, 0.5));
+          fx.sparks.emit({ position: [L.tx, 0.6, L.tz], velocity: [Math.cos(a) * r * 2.5, rr(5, 8), Math.sin(a) * r * 2.5], life: 0.45, size: 2, sizeEnd: 1, color: [1, 0.9, 0.5], colorEnd: [1, 0.4, 0.15], emissive: 1, gravity: 1.4 });
+        }
+        fx.addTrauma(0.08);
+        this.lobs.splice(i, 1); continue;
+      }
+      if (Math.random() < 0.6) fx.smoke.emit({ position: [x, y, z], velocity: [0, 0.2, 0], life: 0.4, size: 2, sizeEnd: 3, color: [0.6, 0.58, 0.6], colorEnd: [0.3, 0.3, 0.33] });
+      this.lobMesh.setAt(n++, m4.fromTRS([x, y, z], [L.t * 7, L.t * 5, 0], [1, 1, 1]), [1, 1, 1], 0);
+    }
+    this.lobMesh.count = n; this.lobMesh.dirty = true;
   }
 
   explodeAt(s) {
@@ -3633,7 +4327,7 @@ class Shots {
     g.fx.explosion(s.x, 0.6, s.z, 0.75 * (s.aoe / 2), { scorch: true });
   }
 
-  clear() { this.list = []; this.enemyList = []; for (const b of this.beams) b.m.visible = b.core.visible = false; this.update(0); }
+  clear() { this.list = []; this.enemyList = []; this.mines = []; this.discs = []; this.wells = []; this.lobs = []; for (const b of this.beams) b.m.visible = b.core.visible = false; this.update(0); }
 }
 
 // ---- 베기 잔상 (초승달 모양 칼날 궤적) ----
@@ -3662,13 +4356,27 @@ function smearGeo(span, col, thick) {
 //  팔(armR/armL)에 단 무기 = 직접 조작 (공격 버튼), 어깨/등 무기 = 자동 사격
 //  팔에 무기가 없으면 주먹 콤보. 특수기(K)는 주무장(armR)에 따라 달라진다.
 const FIST = { radius: 1.9, arc: 1.9, dmg: 12 };
-const SPECIAL_NAMES = { mg: '탄막 사격', shotgun: '슬러그 폭발', laser: '메가 빔', saber: '회전 베기', fist: '로켓 펀치' };
+const SPECIAL_NAMES = { mg: '탄막 사격', shotgun: '슬러그 폭발', laser: '메가 빔', saber: '회전 베기', flamer: '화염 폭풍', rod: '회전 채찍', fist: '로켓 펀치' };
+// 직접 조작 무기 = 팔에 단 arm 무기. 나머지는 팔에 달려도 자동 사격
+const isManual = (w) => w.slot.startsWith('arm') && WEAPONS[w.id].prefer === 'arm';
+const wrapA = (a) => ((a + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
 
 class WeaponSystem {
   constructor(game) {
     this.game = game; this.list = []; this.bits = []; this.bitT = 0; this.combo = 0; this.comboT = 0; this.swingLock = 0; this.specialT = 0; this.barrage = 0;
     this.smears = [];
     for (let i = 0; i < 14; i++) { const m = game.scene.add(new Mesh(smearGeo(1, [1, 1, 1], 0.4), new Material({ emissive: 0.85, outline: false, castShadow: false }))); m.visible = false; this.smears.push({ m, t: 1, life: 0.1 }); }
+    // 회전 톱날 + 회전 포탑 빔 (기체를 따라다니는 무기)
+    this.sawMesh = game.scene.add(new InstancedMesh(sawGeo(), new Material({ emissive: 0.15 }), 16));
+    this.turretBeams = [];
+    const bg = beamGeo();
+    for (let i = 0; i < 4; i++) {
+      const m = game.scene.add(new Mesh(bg, new Material({ color: [1, 0.35, 0.5], emissive: 1, outline: false, castShadow: false, opacity: 0.85 })));
+      const core = game.scene.add(new Mesh(bg, new Material({ color: [1, 1, 1], emissive: 1, outline: false, castShadow: false })));
+      m.visible = core.visible = false;
+      this.turretBeams.push({ m, core });
+    }
+    this.burns = new Map(); this.waves = [];
   }
   // 칼날 궤적 하나 찍기
   smear(x, y, z, yaw, radius, span, dir, col, thick, life = 0.12) {
@@ -3688,7 +4396,7 @@ class WeaponSystem {
     }
   }
 
-  reset() { this.list = []; this.combo = 0; this.comboT = 0; this.swingLock = 0; this.specialT = 0; this.barrage = 0; this.syncBits(); }
+  reset() { this.list = []; this.combo = 0; this.comboT = 0; this.swingLock = 0; this.specialT = 0; this.barrage = 0; this.burns.clear(); this.waves = []; this.syncBits(); }
   get(id) { return this.list.find((w) => w.id === id); }
   get primary() { return this.list.find((w) => w.slot === 'armR') || null; }
   get primaryKind() { const p = this.primary; return p ? p.id : 'fist'; }
@@ -3702,6 +4410,7 @@ class WeaponSystem {
       if (w.pump > 0) { w.pump = Math.max(0, w.pump - dt); const si = this.game.player.mech.slotInfo[w.slot]; if (si) si.inner.rotation[0] = -Math.sin((1 - w.pump / 0.35) * Math.PI) * 0.6; }
       w.cd -= dt * st.rateMul;
       if (w.swing !== undefined) this.animSwing(w, dt);
+      if (w.again > 0 && (w.again -= dt) <= 0) this.whip(w, w.swingYaw, lvOf(w), w.againD, -w.dir);
     }
     if (this.fistSwing) this.animSwing(this.fistSwing, dt);
     this.comboT -= dt;
@@ -3714,13 +4423,16 @@ class WeaponSystem {
     if (this.barrage > 0) this.updateBarrage(dt);
     this.auto(dt);
     this.updateSetFx(dt);
+    this.updateBurns(dt);
+    this.updateWaves(dt);
     this.updateBits(dt);
+    this.updateOrbitals(dt);
   }
 
   // ---------- 직접 조작 ----------
   manual(dt, ctl) {
     const g = this.game, p = g.player;
-    const arms = this.list.filter((w) => w.slot.startsWith('arm'));
+    const arms = this.list.filter(isManual);
     const melee = !arms.length || arms[0].id === 'saber';
     // 섬멸 모드: 공격 버튼 없이도 근처에 적이 있으면 자동으로 쏘고 벤다
     const auto = p.stats.autoFire && g.enemies.nearest(p.x, p.z, 11);
@@ -3793,7 +4505,7 @@ class WeaponSystem {
     const SS = st.sets || new Set(), art = SS.has('artillery') && (w.id === 'cannon' || w.id === 'missile');
     w.cd = L.cd * (art ? 0.6 : 1);
     w.kick = 0.25;
-    if (w.slot.startsWith('arm')) p.lookAt(yaw, 0.35);
+    if (isManual(w)) p.lookAt(yaw, 0.35);
     if (w.id === 'mg') {
       for (let k = 0; k < L.count; k++) {
         const off = (k - (L.count - 1) / 2) * 0.22, a = yaw + rr(-0.04, 0.04), c = crit();
@@ -3841,7 +4553,159 @@ class WeaponSystem {
       for (let k = 0; k < fan; k++) this.beam(mz, yaw + (k - (fan - 1) / 2) * 0.22, W.range * st.rangeMul, L.width * st.areaMul * (rail ? 1.5 : 1), D, fan > 1 ? [1, 0.55, 1] : [0.45, 1, 1]);
       p.kick(-dir[0] * 4, -dir[2] * 4);
       p.recoil = Math.max(p.recoil || 0, 1);
+    } else if (w.id === 'flamer') this.flame(w, yaw, L, D, mz);
+    else if (w.id === 'rod') { this.whip(w, yaw, L, D, w.dir === 1 ? -1 : 1); if (L.double) { w.again = 0.17; w.againD = D; } }
+    else if (w.id === 'tesla') {
+      // 가까운 적부터 연쇄. forks 면 서로 다른 적에서 번개 여러 줄기
+      const starts = [], R0 = W.range * st.rangeMul;
+      for (let k = 0; k < (L.forks || 1); k++) { const t = en.nearest(mz[0], mz[2], R0, starts[0]); if (t && !starts.includes(t)) starts.push(t); }
+      for (const t of starts) this.zap(mz, t, L, D);
+      fx.light(mz, [0.6, 0.85, 1], 4, 1.2, 0.12);
+      g.sfx.play('beam', { vol: 0.4, pitch: 1.7 });
+    } else if (w.id === 'mine') {
+      for (let k = 0; k < L.count; k++) {
+        const a = Math.random() * Math.PI * 2, d = rr(1.4, 3.8) * Math.sqrt(st.areaMul), c = crit();
+        g.shots.mine({ x0: mz[0], z0: mz[2], y0: mz[1], x: p.x + Math.cos(a) * d, z: p.z + Math.sin(a) * d, dmg: c ? D * 2 : D, aoe: L.aoe * st.areaMul, chain: !!L.chain });
+      }
+      g.sfx.play('clank', { vol: 0.35, pitch: 1.5 });
+    } else if (w.id === 'disc') {
+      for (let k = 0; k < L.count; k++) {
+        const a = yaw + (k - (L.count - 1) / 2) * 0.45;
+        g.shots.disc({ x: mz[0], z: mz[2], vx: Math.sin(a) * 21 * st.rangeMul, vz: Math.cos(a) * 21 * st.rangeMul, dmg: D, size: L.size * st.areaMul, evo: w.evo });
+      }
+      g.sfx.play('swing', { pitch: 1.4, vol: 0.6 });
+    } else if (w.id === 'stomp') {
+      this.quake(L.radius * st.areaMul, D);
+      for (let k = 1; k < L.waves; k++) this.waves.push({ t: k * 0.28, r: L.radius * st.areaMul * (1 + k * 0.3), D });
+    } else if (w.id === 'gravity') {
+      // 적이 가장 많이 몰린 곳 (무작위 후보 10개 중)
+      let best = this.autoTarget, bn = 0;
+      for (let k = 0; k < 10 && en.list.length; k++) {
+        const e = en.list[(Math.random() * en.list.length) | 0];
+        if (e.dead || e.spawnT < 0.3 || Math.hypot(e.x - p.x, e.z - p.z) > W.range * st.rangeMul) continue;
+        let c = 0; en.each(e.x, e.z, 3, () => c++);
+        if (c > bn) { bn = c; best = e; }
+      }
+      if (!best) return;
+      g.shots.well({ x: best.x, z: best.z, r: L.radius * st.areaMul, dps: D, dur: L.dur, pop: L.pop || 0 });
+      fx.ring(best.x, 0.12, best.z, L.radius * st.areaMul, [0.7, 0.45, 1], 0.35);
+      g.sfx.play('beam', { vol: 0.5, pitch: 0.5 });
+    } else if (w.id === 'gauss') {
+      // 사거리 안에서 체력이 가장 많은 적 (정예, 수호자 우선)
+      let t = this.autoTarget, hp = 0;
+      en.each(p.x, p.z, W.range * st.rangeMul, (e) => { if (e.hp > hp) { hp = e.hp; t = e; } });
+      const a0 = t ? Math.atan2(t.x - mz[0], t.z - mz[2]) : yaw, fan = L.fan || 1;
+      for (let k = 0; k < fan; k++) this.beam(mz, a0 + (k - (fan - 1) / 2) * 0.12, 30 * st.rangeMul, L.width * st.areaMul, D, w.evo ? [1, 0.5, 0.3] : [1, 0.85, 0.35], 2, L.crit || 0);
+      p.kick(-Math.sin(a0) * 3, -Math.cos(a0) * 3);
+      w.kick = 0.8;
+    } else if (w.id === 'cluster') {
+      const t = this.autoTarget;
+      for (let k = 0; k < L.shells; k++) {
+        const tx = (t ? t.x : p.x) + (k ? rr(-3, 3) : 0), tz = (t ? t.z : p.z) + (k ? rr(-3, 3) : 0);
+        g.shots.lob({ x: mz[0], y: mz[1], z: mz[2], tx, tz, T: 0.75 + k * 0.12, dmg: D, aoe: L.aoe * st.areaMul, bomblets: L.bomblets, spread: Math.sqrt(st.areaMul) });
+        fx.ring(tx, 0.1, tz, L.aoe * 1.3 * st.areaMul, [1, 0.45, 0.25], 0.75 + k * 0.12);
+      }
+      for (let k = 0; k < 4; k++) fx.smoke.emit({ position: mz, velocity: [rr(-1, 1), rr(2, 3), rr(-1, 1)], life: 0.6, size: 3, sizeEnd: 5, color: [0.6, 0.58, 0.6], colorEnd: [0.3, 0.3, 0.33] });
+      fx.muzzle(mz, [0, 1, 0], [1, 0.6, 0.25], 2);
+      g.sfx.play('shotgun', { pitch: 0.5, vol: 0.6 });
+    } else if (w.id === 'ricochet') {
+      for (let k = 0; k < L.count; k++) {
+        const a = yaw + (k - (L.count - 1) / 2) * 0.14, c = crit();
+        g.shots.add({ x: mz[0], y: mz[1], z: mz[2], vx: Math.sin(a) * 28, vz: Math.cos(a) * 28, dmg: c ? D * 2 : D, crit: c, bounce: L.bounce, life: 0.6 * st.rangeMul, color: w.evo ? [1, 0.5, 1] : [0.75, 1, 0.45], scale: [0.2, 0.2, 0.75], knock: 2.5, quiet: !c });
+      }
+      fx.muzzle(mz, dir, [0.8, 1, 0.5], 1);
+      g.sfx.play('mg', { pitch: 0.8, vol: 0.5 });
     }
+  }
+
+  // ---- 새 무기 공용 동작 ----
+  // 화염: 부채꼴 안의 적에게 짧은 피해 + 화상
+  flame(w, yaw, L, D, mz) {
+    const g = this.game, p = g.player, en = g.enemies, fx = g.fx, st = p.stats;
+    const reach = WEAPONS.flamer.range * st.rangeMul * (L.far || 1), half = (L.cone * st.areaMul) / 2;
+    en.each(p.x, p.z, reach, (e) => {
+      const dx = e.x - p.x, dz = e.z - p.z, d = Math.hypot(dx, dz) || 1;
+      if (Math.abs(wrapA(Math.atan2(dx, dz) - yaw)) > half + e.r / d) return;
+      const c = Math.random() < st.crit;
+      en.hit(e, c ? D * 2 : D, dx / d, dz / d, 1.2, { crit: c, quiet: !c });
+      this.ignite(e, L.burn * st.dmgMul);
+    });
+    const blue = w.evo;
+    for (let k = 0; k < 7; k++) {
+      const a = yaw + rr(-half, half) * 0.9, sp = reach * rr(2.6, 3.4);
+      fx.trail.emit({ position: [mz[0], mz[1], mz[2]], velocity: [Math.sin(a) * sp, rr(0, 1.2), Math.cos(a) * sp], life: rr(0.3, 0.45), size: 3, sizeEnd: 7, color: blue ? [0.8, 0.95, 1] : [1, 0.95, 0.55], colorEnd: blue ? [0.2, 0.4, 1] : [1, 0.25, 0.05], emissive: 1, gravity: -0.6 });
+    }
+    if (Math.random() < 0.4) fx.smoke.emit({ position: [mz[0] + Math.sin(yaw) * reach * 0.7, 1, mz[2] + Math.cos(yaw) * reach * 0.7], velocity: [0, 1, 0], life: 0.7, size: 3, sizeEnd: 6, color: [0.4, 0.36, 0.36], colorEnd: [0.2, 0.2, 0.22] });
+    fx.light([mz[0] + Math.sin(yaw) * 2, 1, mz[2] + Math.cos(yaw) * 2], blue ? [0.5, 0.7, 1] : [1, 0.55, 0.2], 5, 0.9, 0.1);
+    g.sfx.play('missile', { vol: 0.3, pitch: 0.55 });
+  }
+  ignite(e, dps) { const b = this.burns.get(e); if (b) { b.t = 2; b.dps = Math.max(b.dps, dps); } else this.burns.set(e, { t: 2, dps, tick: 0.3 }); }
+  updateBurns(dt) {
+    const en = this.game.enemies, fx = this.game.fx;
+    for (const [e, b] of this.burns) {
+      if (e.dead || (b.t -= dt) <= 0) { this.burns.delete(e); continue; }
+      if ((b.tick -= dt) <= 0) { b.tick = 0.3; en.hit(e, b.dps * 0.3, 0, 0, 0, { quiet: true }); }
+      if (Math.random() < 0.3) fx.trail.emit({ position: [e.x + rr(-0.3, 0.3), 0.6 + (e.y || 0), e.z + rr(-0.3, 0.3)], velocity: [0, rr(1, 2), 0], life: 0.3, size: 2, sizeEnd: 3, color: [1, 0.8, 0.3], colorEnd: [1, 0.2, 0.05], emissive: 1, gravity: 0 });
+    }
+  }
+  // 채찍: 중거리 부채꼴을 휩쓸고 맞은 적을 끌어당긴다
+  whip(w, yaw, L, D, dir) {
+    const g = this.game, p = g.player, en = g.enemies, fx = g.fx, st = p.stats;
+    const reach = L.reach * st.areaMul, arc = L.arc;
+    let n = 0;
+    en.each(p.x, p.z, reach, (e) => {
+      const dx = e.x - p.x, dz = e.z - p.z, d = Math.hypot(dx, dz) || 1;
+      if (Math.abs(wrapA(Math.atan2(dx, dz) - yaw)) > arc / 2 + e.r / d) return;
+      const c = Math.random() < st.crit;
+      en.hit(e, c ? D * 2 : D, -dx / d, -dz / d, Math.min(9, d * 1.5), { crit: c, stun: L.stun || 0.2 });
+      fx.hitSpark([e.x, 1, e.z], w.evo ? [0.6, 0.8, 1] : [1, 0.6, 0.2], 4);
+      n++;
+    });
+    p.lookAt(yaw, 0.35);
+    Object.assign(w, { swing: 0, swingYaw: yaw, swingArc: arc, swingR: reach, dir, fist: false, fin: false, T: 0.13, col: w.evo ? [0.5, 0.75, 1] : [1, 0.5, 0.12], thick: 0.13 });
+    g.sfx.play('swing', { pitch: 1.25 });
+    if (n) { g.sfx.play('hit', { pitch: 1.15 }); fx.addTrauma(0.05); if (n >= 4) g.hitStop(0.03); }
+  }
+  // 번개 연쇄: 맞은 적에서 아직 안 맞은 가장 가까운 적으로 튄다 (튈 때마다 피해 -10%)
+  zap(from, start, L, D) {
+    const g = this.game, en = g.enemies, st = g.player.stats, hit = new Set();
+    let cur = start, dmg = D;
+    for (let i = 0; i < L.chains && cur; i++) {
+      hit.add(cur);
+      const c = Math.random() < st.crit;
+      en.hit(cur, c ? dmg * 2 : dmg, 0, 0, 2, { crit: c, stun: L.stun || 0.25, quiet: !c && i > 0 });
+      const to = [cur.x, 1 + (cur.y || 0), cur.z];
+      this.bolt(from, to, L.forks ? [0.85, 0.6, 1] : [0.55, 0.85, 1]);
+      from = to; dmg *= 0.9;
+      const J = L.jump * st.areaMul, c0 = cur;
+      let bd = J * J; cur = null;
+      en.each(c0.x, c0.z, J, (e) => { if (hit.has(e)) return; const d = (e.x - c0.x) ** 2 + (e.z - c0.z) ** 2; if (d < bd) { bd = d; cur = e; } });
+    }
+  }
+  bolt(a, b, col) {
+    const fx = this.game.fx, n = Math.max(3, Math.ceil(Math.hypot(b[0] - a[0], b[2] - a[2]) / 0.3));
+    for (let i = 0; i <= n; i++) {
+      const k = i / n, j = i && i < n ? 0.28 : 0;
+      fx.trail.emit({ position: [a[0] + (b[0] - a[0]) * k + rr(-j, j), a[1] + (b[1] - a[1]) * k + rr(-j, j), a[2] + (b[2] - a[2]) * k + rr(-j, j)], velocity: [0, 0, 0], life: 0.13, size: 3, sizeEnd: 1, color: [1, 1, 1], colorEnd: col, emissive: 1, gravity: 0 });
+    }
+    this.game.fx.light(b, col, 3, 0.8, 0.1);
+  }
+  // 충격파: 기체 주위를 쳐서 날려 보낸다
+  quake(r, D) {
+    const g = this.game, p = g.player, en = g.enemies, fx = g.fx, st = p.stats;
+    en.each(p.x, p.z, r, (e) => {
+      const dx = e.x - p.x, dz = e.z - p.z, d = Math.hypot(dx, dz) || 1, c = Math.random() < st.crit;
+      en.hit(e, c ? D * 2 : D, dx / d, dz / d, 13, { crit: c, quiet: !c, launch: 5, stun: 0.4 });
+    });
+    fx.ring(p.x, 0.12, p.z, r, [1, 0.8, 0.45], 0.4);
+    fx.ring(p.x, 0.14, p.z, r * 0.6, [1, 0.95, 0.8], 0.25);
+    for (let k = 0; k < 14; k++) { const a = (k / 14) * Math.PI * 2; fx.dust(p.x + Math.cos(a) * r * 0.8, p.z + Math.sin(a) * r * 0.8, 1); }
+    fx.addTrauma(0.14);
+    p.recoil = Math.max(p.recoil || 0, 0.5);
+    g.sfx.play('bigboom', { vol: 0.45, pitch: 1.3 });
+  }
+  updateWaves(dt) {
+    for (let i = this.waves.length - 1; i >= 0; i--) { const q = this.waves[i]; if ((q.t -= dt) <= 0) { this.quake(q.r, q.D); this.waves.splice(i, 1); } }
   }
 
   // ---- 세트 각성 / 초월 효과 ----
@@ -3891,7 +4755,7 @@ class WeaponSystem {
     fx.sparks.emit({ position: [mz[0] - Math.sin(yaw) * 0.4, mz[1] + 0.05, mz[2] - Math.cos(yaw) * 0.4], velocity: [sx * rr(2, 4) - Math.sin(yaw), rr(2.5, 4), sz * rr(2, 4) - Math.cos(yaw)], life: rr(0.35, 0.55), size: big ? 3 : 2, sizeEnd: big ? 2 : 1, color: big ? [0.9, 0.25, 0.2] : [1, 0.85, 0.4], colorEnd: big ? [0.6, 0.15, 0.1] : [0.8, 0.6, 0.2], emissive: 0.4, gravity: 2.2 });
   }
 
-  beam(mz, yaw, len, width, D, color, launch = 0) {
+  beam(mz, yaw, len, width, D, color, launch = 0, critAdd = 0) {
     const g = this.game, en = g.enemies, fx = g.fx, st = g.player.stats;
     const dir = [Math.sin(yaw), 0, Math.cos(yaw)];
     const hitList = [];
@@ -3900,7 +4764,7 @@ class WeaponSystem {
       if (t < -0.5 || t > len) return;
       if (Math.abs(rx * dir[2] - rz * dir[0]) < width / 2 + e.r) hitList.push(e);
     });
-    for (const e of hitList) { const c = Math.random() < st.crit; en.hit(e, c ? D * 2 : D, dir[0], dir[2], 6 + launch, { crit: c, launch }); }
+    for (const e of hitList) { const c = Math.random() < st.crit + critAdd; en.hit(e, c ? D * 2 : D, dir[0], dir[2], 6 + launch, { crit: c, launch }); }
     g.shots.beam(mz, yaw, len, width, color);
     g.sfx.play('beam', { pitch: width > 2 ? 0.7 : 1 });
     fx.light(mz, color, 5, 1.3, 0.25);
@@ -3941,6 +4805,32 @@ class WeaponSystem {
       this.beam(p.mech.muzzle('armR'), yaw, 26, 2.4 * st.areaMul, L.dmg * 3 * st.dmgMul, [1, 0.5, 1], 5);
       p.kick(-Math.sin(yaw) * 10, -Math.cos(yaw) * 10);
       fx.addTrauma(0.5); g.hitStop(0.1);
+    } else if (kind === 'flamer') {
+      // 화염 폭풍: 360° 로 불길이 터져 나가 주위를 모두 태운다
+      const L = lvOf(w), r = 5.2 * st.areaMul * (L.far || 1), D = L.dmg * 9 * st.dmgMul;
+      en.each(p.x, p.z, r, (e) => {
+        const d = Math.hypot(e.x - p.x, e.z - p.z) || 1;
+        en.hit(e, D, (e.x - p.x) / d, (e.z - p.z) / d, 12, { stun: 0.4 });
+        this.ignite(e, L.burn * 2 * st.dmgMul);
+      });
+      for (let k = 0; k < 70; k++) {
+        const a = (k / 70) * Math.PI * 2 + rr(-0.05, 0.05), sp = r * rr(2.6, 3.4);
+        fx.trail.emit({ position: [p.x, 1, p.z], velocity: [Math.sin(a) * sp, rr(0, 1.5), Math.cos(a) * sp], life: rr(0.35, 0.5), size: 4, sizeEnd: 8, color: w.evo ? [0.8, 0.95, 1] : [1, 0.95, 0.55], colorEnd: w.evo ? [0.2, 0.4, 1] : [1, 0.25, 0.05], emissive: 1, gravity: -0.6 });
+      }
+      fx.ring(p.x, 0.15, p.z, r, [1, 0.55, 0.2], 0.35);
+      fx.light([p.x, 1.5, p.z], [1, 0.55, 0.2], r + 3, 2, 0.3);
+      g.sfx.play('bigboom', { vol: 0.6 }); fx.addTrauma(0.3); g.hitStop(0.06);
+    } else if (kind === 'rod') {
+      // 회전 채찍: 360° 로 휘둘러 주위 적을 끌어당기며 굳힌다
+      const L = lvOf(w), r = L.reach * 1.15 * st.areaMul, D = L.dmg * 2.4 * st.dmgMul;
+      en.each(p.x, p.z, r, (e) => {
+        const d = Math.hypot(e.x - p.x, e.z - p.z) || 1;
+        en.hit(e, D, -(e.x - p.x) / d, -(e.z - p.z) / d, Math.min(14, d * 2), { stun: 0.8 });
+      });
+      Object.assign(w, { swing: 0, swingYaw: yaw + Math.PI, swingArc: 6.28, swingR: r, dir: 1, fist: false, fin: true, T: 0.3, col: w.evo ? [0.5, 0.75, 1] : [1, 0.5, 0.12], thick: 0.16 });
+      fx.ring(p.x, 0.15, p.z, r, [1, 0.6, 0.2], 0.35);
+      g.sfx.play('swing', { pitch: 0.8 }); g.sfx.play('hit', { pitch: 0.8 });
+      fx.addTrauma(0.3); g.hitStop(0.07);
     } else {
       // 회전 베기 / 로켓 펀치: 주변 360° 를 크게 쓸어 띄운다
       const L = w ? lvOf(w) : FIST;
@@ -3990,16 +4880,16 @@ class WeaponSystem {
     const moved = Math.abs(ease(k1) - ease(Math.max(0, k0))) * w.swingArc;
     // 칼날 궤적: 현재 칼끝까지의 꼬리 (최대 1.7rad)
     const span = Math.min(w.swingArc * ease(k1), w.fist ? 1.1 : 1.7) + 0.05;
-    const col = w.fist ? [1, 0.6, 0.2] : w.evo ? [0.7, 0.4, 1] : [1, 0.3, 0.75];
+    const col = w.col || (w.fist ? [1, 0.6, 0.2] : w.evo ? [0.7, 0.4, 1] : [1, 0.3, 0.75]);
     const sz = p.size || 1;
-    if (moved > 0.01 || k0 <= 0) this.smear(p.x, 1.05 * sz, p.z, aNow, w.swingR * (w.fist ? 0.85 : 1), span, w.dir, col, w.fin ? 0.55 : w.fist ? 0.35 : 0.42, w.fin ? 0.16 : 0.11);
+    if (moved > 0.01 || k0 <= 0) this.smear(p.x, 1.05 * sz, p.z, aNow, w.swingR * (w.fist ? 0.85 : 1), span, w.dir, col, w.thick || (w.fin ? 0.55 : w.fist ? 0.35 : 0.42), w.fin ? 0.16 : 0.11);
     // 칼끝 불꽃 몇 개
     if (!w.fist && Math.random() < 0.7) fx.sparks.emit({ position: [p.x + Math.sin(aNow) * w.swingR, 1.05 * sz, p.z + Math.cos(aNow) * w.swingR], velocity: [Math.sin(aNow + w.dir * 1.57) * 4, 1.5, Math.cos(aNow + w.dir * 1.57) * 4], life: 0.2, size: 2, sizeEnd: 1, color: [1, 1, 1], colorEnd: col, emissive: 1, gravity: 0.5 });
     // 상체가 칼을 따라 비틀림
     p.aimYaw = aNow; p.aimGoal = aNow; p.aimHold = 0.12;
     if (si && !w.fist) {
       si.inner.rotation[1] = aNow - p.mech.upper.rotation[1] - p.yaw;
-      const b = w.evo ? 1.45 : 1; si.inner.scale = [b, b, b * 1.6];
+      const b = w.evo ? 1.45 : 1; si.inner.scale = [b, b, w.id === 'saber' ? b * 1.6 : b];
     }
   }
 
@@ -4007,15 +4897,76 @@ class WeaponSystem {
   auto(dt) {
     const g = this.game, p = g.player, en = g.enemies;
     for (const w of this.list) {
-      if (w.slot.startsWith('arm') || w.id === 'funnel' || w.cd > 0) continue;
       const W = WEAPONS[w.id];
+      if (isManual(w) || w.id === 'funnel' || W.passive || w.cd > 0) continue;
       const mz = p.mech.muzzle(w.slot);
       const target = en.nearest(p.x, p.z, W.range * p.stats.rangeMul);
       if (!target) continue;
-      if (w.id === 'saber') { w.cd = 0.5; continue; }
-      this.fire(w, Math.atan2(target.x - mz[0], target.z - mz[2]), 0.85);
+      if (w.id === 'saber' || w.id === 'rod') { w.cd = 0.5; continue; }
+      // 팔 무기를 어깨에 달면 85% 위력, 원래 자동 무기는 그대로
+      this.autoTarget = target;
+      this.fire(w, Math.atan2(target.x - mz[0], target.z - mz[2]), W.prefer === 'arm' ? 0.85 : 1);
     }
+    this.autoTarget = null;
   }
+
+  // ---- 기체를 따라다니는 무기: 회전 톱날, 회전 포탑 ----
+  //  update 와 장착 연출 중에 매 프레임, 격납고에선 syncBits 로 한 번 (가진 무기가 없으면 숨김)
+  updateOrbitals(dt, live = true) {
+    const g = this.game, p = g.player, en = g.enemies, fx = g.fx, st = p.stats, now = g.time;
+    if (!p.mech) return;
+    const saw = this.get('saw'), tur = this.get('turret');
+    let n = 0;
+    if (saw && p.mech.root.visible) {
+      const L = lvOf(saw), R0 = L.radius * st.areaMul, big = L.big || 1;
+      saw.ang = (saw.ang || 0) + L.spin * Math.sqrt(st.rateMul) * dt;
+      const rings = L.ring2 ? [[L.blades / 2, R0, 1], [L.blades / 2, R0 * 0.55, -1.4]] : [[L.blades, R0, 1]];
+      for (const [cnt, r, sp] of rings) for (let i = 0; i < cnt; i++) {
+        const a = saw.ang * sp + (i / cnt) * Math.PI * 2, x = p.x + Math.sin(a) * r, z = p.z + Math.cos(a) * r;
+        if (live) en.each(x, z, 0.45 * big, (e) => {
+          if ((e._saw || 0) > now) return;
+          e._saw = now + 0.3;
+          const c = Math.random() < st.crit, D = L.dmg * st.dmgMul;
+          en.hit(e, c ? D * 2 : D, Math.sin(a + 1.57 * sp), Math.cos(a + 1.57 * sp), 4, { crit: c, quiet: !c });
+          for (let j = 0; j < 3; j++) fx.sparks.emit({ position: [x, 1, z], velocity: [rr(-4, 4), rr(1, 3), rr(-4, 4)], life: 0.18, size: 2, sizeEnd: 1, color: [1, 1, 0.8], colorEnd: [1, 0.5, 0.2], emissive: 1, gravity: 0.4 });
+          g.sfx.play('tink', { pitch: 0.7 });
+        });
+        if (n < this.sawMesh.capacity) this.sawMesh.setAt(n++, m4.fromTRS([x, 1, z], [0, now * 18 * sp, 0], [big, 1, big]), saw.evo ? [1.3, 1.05, 0.7] : [1, 1, 1], 0.15);
+      }
+    }
+    this.sawMesh.count = n; this.sawMesh.dirty = true;
+
+    const nb = tur && p.mech.root.visible ? lvOf(tur).beams : 0;
+    if (nb) {
+      const L = lvOf(tur), len = L.len * st.rangeMul, mz = p.mech.muzzle(tur.slot);
+      tur.ang = (tur.ang || 0) + L.spin * Math.sqrt(st.rateMul) * dt;
+      if (live) en.each(p.x, p.z, len, (e) => {
+        if ((e._tur || 0) > now) return;
+        const dx = e.x - p.x, dz = e.z - p.z, d = Math.hypot(dx, dz) || 1, ea = Math.atan2(dx, dz);
+        for (let i = 0; i < nb; i++) {
+          if (Math.abs(wrapA(ea - tur.ang - (i / nb) * Math.PI * 2)) * d > 0.35 + e.r) continue;
+          e._tur = now + 0.22;
+          const c = Math.random() < st.crit, D = L.dmg * st.dmgMul;
+          en.hit(e, c ? D * 2 : D, dx / d, dz / d, 2, { crit: c, quiet: !c });
+          fx.hitSpark([e.x, 1, e.z], [1, 0.4, 0.55], 3);
+          break;
+        }
+      });
+      if (live && Math.random() < 0.15) g.sfx.play('beam', { vol: 0.12, pitch: 2 });
+      this.turretBeams.forEach((b, i) => {
+        const on = i < nb;
+        b.m.visible = b.core.visible = on;
+        if (!on) return;
+        const a = tur.ang + (i / nb) * Math.PI * 2, w = 0.32 + Math.sin(now * 40 + i) * 0.04;
+        b.m.position = b.core.position = mz;
+        b.m.rotation = b.core.rotation = [0, a, 0];
+        b.m.scale = [w, w, len]; b.core.scale = [w * 0.4, w * 0.4, len];
+        b.m.material.color = tur.evo ? [0.6, 0.85, 1] : [1, 0.35, 0.5];
+      });
+      if (live && Math.random() < 0.3) fx.light([mz[0], 1.5, mz[2]], tur.evo ? [0.6, 0.85, 1] : [1, 0.35, 0.5], len, 0.5, 0.1);
+    } else for (const b of this.turretBeams) b.m.visible = b.core.visible = false;
+  }
+  hideOrbitals() { this.sawMesh.count = 0; this.sawMesh.dirty = true; for (const b of this.turretBeams) b.m.visible = b.core.visible = false; }
 
   // 판넬 비트
   syncBits() {
@@ -4027,6 +4978,7 @@ class WeaponSystem {
       const mesh = g.scene.add(new Mesh(funnelBitGeo(P), new Material()));
       this.bits.push({ mesh, cd: R(), x: g.player.x, y: 2, z: g.player.z });
     }
+    this.updateOrbitals(0, false);
   }
   updateBits(dt) {
     const g = this.game, p = g.player, fx = g.fx, w = this.get('funnel');
@@ -4144,7 +5096,7 @@ class Guardian {
   constructor(game, kind) {
     this.game = game; this.kind = kind; this.t = 0; this.state = 'intro'; this.st = 0; this.dead = false;
     const en = game.enemies, d = Math.max(1, game.rooms.depth);
-    const pw = 0.6 + game.level * 0.12; // 플레이어 성장에 맞춰 체력 보정
+    const pw = (0.6 + game.level * 0.1) * Math.pow(en.k.pw, 0.55); // 플레이어 성장(레벨 + 무기 전력)에 맞춰 체력 보정
     const mk = (type, hp, x, z) => { const e = en.spawn(type, x, z, { force: true }); e.ctrl = true; e.hp = e.maxHp = hp; e.guard = this; e.spawnT = 1; return e; };
     if (kind === 'worm') {
       this.name = '샌드웜';
@@ -4217,15 +5169,22 @@ class Guardian {
   updateWorm(dt) {
     const g = this.game, p = g.player, fx = g.fx, en = g.enemies, H = this.head;
     const dx = p.x - this.hx, dz = p.z - this.hz, d = Math.hypot(dx, dz) || 1;
-    let speed = 4.4, targetY = 0;
+    if (!this.rage && (this.segs.filter((s) => s.dead).length >= this.total / 2 || H.hp < H.maxHp * 0.5)) { this.rage = true; g.ui.banner('샌드웜 분노!', true); g.sfx.play('alarm'); }
+    let speed = this.rage ? 5.2 : 4.4, targetY = 0;
     if (this.state === 'swim') {
       // 지그재그로 다가오며 마디에서 탄을 뿌린다
       const want = Math.atan2(dx, dz) + Math.sin(this.t * 1.3) * 0.9;
       this.hyaw += Math.max(-2.2 * dt, Math.min(2.2 * dt, angDiff(want, this.hyaw)));
       if (this.st <= 0) { this.state = 'dive'; this.st = 0.9; g.sfx.play('door'); }
       if ((this.shotT = (this.shotT || 2.5) - dt) <= 0) {
-        this.shotT = 3;
-        for (const s of this.segs) if (!s.dead && R() < 0.35) for (let k = 0; k < 4; k++) { const a = (k / 4) * Math.PI * 2 + this.t; g.shots.enemyShot(s.x, 1.2, s.z, Math.sin(a) * 5.5, Math.cos(a) * 5.5, 8, 'orb'); }
+        this.shotT = this.rage ? 2.2 : 3;
+        for (const s of this.segs) if (!s.dead && R() < 0.35) en.ring(s.x, s.z, 4, 5.5, 8, 'orb', this.t, 1.2);
+      }
+      // 머리: 조준 부채꼴 (반 이상 부서지면 더 넓게)
+      if ((this.fanT = (this.fanT ?? 1.5) - dt) <= 0) {
+        this.fanT = this.rage ? 1.4 : 2.2;
+        en.fan(this.hx, this.hz, Math.atan2(dx, dz), this.rage ? 7 : 5, 0.2, 7, 10, 'shell', 1);
+        fx.muzzle([this.hx, 1, this.hz], [Math.sin(this.hyaw), 0, Math.cos(this.hyaw)], [1, 0.5, 0.2], 2);
       }
     } else if (this.state === 'dive') {
       targetY = -3.2; speed = 7;
@@ -4247,7 +5206,10 @@ class Guardian {
         this.erupted = true;
         fx.explosion(this.hx, 0.5, this.hz, 2.2, { color: [1, 0.7, 0.4], debris: [0.6, 0.5, 0.35] });
         g.sfx.play('bigboom'); fx.addTrauma(0.6);
-        if (Math.hypot(p.x - this.hx, p.z - this.hz) < 3.2) p.hurt(H.T.dmg * 1.3, p.x - this.hx, p.z - this.hz);
+        if (Math.hypot(p.x - this.hx, p.z - this.hz) < 3.2) p.hurt(H.T.dmg * 1.3 * en.k.dmg, p.x - this.hx, p.z - this.hz);
+        // 솟구칠 때 모래 파편 고리 (분노 상태는 두 겹)
+        en.ring(this.hx, this.hz, 16, 4.5, 9, 'shell', R(), 0.8);
+        if (this.rage) en.ring(this.hx, this.hz, 16, 3, 9, 'orb', R(), 0.8);
       }
       if (this.hy <= 0 && this.vy < 0) { this.hy = 0; this.state = 'swim'; this.st = 4 + R() * 2; fx.dust(this.hx, this.hz, 6); }
     }
@@ -4275,7 +5237,7 @@ class Guardian {
       prev = q;
     }
     // 접촉 피해
-    for (const s of [H, ...alive]) if (!s.under && s.y < 1.5 && Math.hypot(p.x - s.x, p.z - s.z) < s.r + p.r) p.hurt(s.T.dmg, p.x - s.x, p.z - s.z);
+    for (const s of [H, ...alive]) if (!s.under && s.y < 1.5 && Math.hypot(p.x - s.x, p.z - s.z) < s.r + p.r) p.hurt(s.T.dmg * en.k.dmg, p.x - s.x, p.z - s.z);
   }
 
   // ---------- 크레인 워커 ----------
@@ -4283,13 +5245,14 @@ class Guardian {
     const g = this.game, p = g.player, fx = g.fx, en = g.enemies;
     const C = this.core, dx = p.x - this.x, dz = p.z - this.z, d = Math.hypot(dx, dz) || 1;
     const exposed = this.gun.dead && this.claw.dead;
+    this.rage = this.gun.dead || this.claw.dead || C.hp < C.maxHp * 0.6; // 팔 하나를 잃으면 남은 팔이 사나워진다
     if (this.state === 'drop') {
       this.vy -= 50 * dt; this.y += this.vy * dt;
       en.warn.material.opacity = 0.35 + 0.35 * Math.sin(this.t * 30);
       if (this.y <= 0) {
         this.y = 0; en.warn.visible = false; this.state = 'walk'; this.st = 2;
         fx.explosion(this.x, 0.3, this.z, 2.6, { color: [1, 0.6, 0.3] }); fx.addTrauma(0.8); g.sfx.play('bigboom'); g.hitStop(0.1);
-        if (d < 4.5) p.hurt(C.T.dmg, dx, dz);
+        if (d < 4.5) p.hurt(C.T.dmg * en.k.dmg, dx, dz);
       }
     } else {
       // 천천히 플레이어 쪽으로 돌고 걷는다
@@ -4303,7 +5266,8 @@ class Guardian {
         const opts = [];
         if (!this.gun.dead) opts.push('volley');
         if (!this.claw.dead && d < 9) opts.push('slam');
-        if (exposed) opts.push('ring', 'ring');
+        if (exposed) opts.push('ring', 'spiral');
+        else if (R() < 0.4) opts.push('ring'); // 팔이 있어도 가끔 몸통 고리탄
         if (!opts.length) opts.push('ring');
         this.state = opts[(R() * opts.length) | 0]; this.st = 0; this.shots = 0;
       }
@@ -4312,7 +5276,7 @@ class Guardian {
         this.st += dt * 2;
         if (this.st > 0.5 + this.shots * 0.45 && this.shots < 3) {
           const m = [this.gun.x + Math.sin(this.yaw) * 1.3, 2.8, this.gun.z + Math.cos(this.yaw) * 1.3], a0 = Math.atan2(p.x - m[0], p.z - m[2]);
-          for (let k = -3; k <= 3; k++) { const a = a0 + k * 0.17; g.shots.enemyShot(m[0], 1.3, m[2], Math.sin(a) * 9, Math.cos(a) * 9, 12, 'shell'); }
+          en.fan(m[0], m[2], a0, this.rage ? 11 : 7, 0.15, 9, 12, 'shell', 1.3);
           fx.muzzle(m, [Math.sin(a0), 0, Math.cos(a0)], [1, 0.5, 0.2], 3); this.shots++;
         }
         if (this.st > 3) { this.state = 'walk'; this.st = 2.2; }
@@ -4324,14 +5288,20 @@ class Guardian {
         if (this.st > 1.6 && this.slamAt) {
           const [sx, sz] = this.slamAt;
           fx.explosion(sx, 0.3, sz, 1.8, { color: [1, 0.55, 0.3], debris: [0.4, 0.4, 0.45] }); g.sfx.play('bigboom'); fx.addTrauma(0.5);
-          if (Math.hypot(p.x - sx, p.z - sz) < 3.1) p.hurt(this.claw.T.dmg, p.x - sx, p.z - sz);
+          if (Math.hypot(p.x - sx, p.z - sz) < 3.1) p.hurt(this.claw.T.dmg * en.k.dmg, p.x - sx, p.z - sz);
           this.slamAt = null; en.warn.visible = false;
         }
         if (this.st > 2.4) { this.state = 'walk'; this.st = 2; this.slamAt = null; en.warn.visible = false; }
       } else if (this.state === 'ring') {
         this.st += dt * 2;
-        if (this.st > 0.4 + this.shots * 0.5 && this.shots < 3) { for (let k = 0; k < 18; k++) { const a = (k / 18) * Math.PI * 2 + this.shots * 0.17; g.shots.enemyShot(this.x, 1.5, this.z, Math.sin(a) * 6.5, Math.cos(a) * 6.5, 12, 'orb'); } this.shots++; C.flash = 0.08; }
+        if (this.st > 0.4 + this.shots * 0.5 && this.shots < (exposed ? 4 : 3)) { const n = exposed ? 22 : 18; en.ring(this.x, this.z, n, 6.5, 12, 'orb', (this.shots % 2) * (Math.PI / n), 1.5); this.shots++; C.flash = 0.08; }
         if (this.st > 2.6) { this.state = 'walk'; this.st = 1.6; }
+      } else if (this.state === 'spiral') {
+        // 몸통 노출: 깜빡이며 예고 → 회전 나선 3팔 (불꽃이 튀는 원자로)
+        this.st += dt * 2; // update() 가 매 프레임 dt 를 빼므로 순증가 dt
+        if (this.st < 0.7) C.flash = Math.sin(this.st * 30) > 0 ? 0.04 : 0;
+        else if ((this.acc = (this.acc || 0) + dt) > 0.1) { this.acc = 0; this.spin = (this.spin || 0) + 0.22; for (let k = 0; k < 3; k++) en.shoot(this.x, this.z, this.spin + (k / 3) * Math.PI * 2, 5, 12, 'orb', 1.5); }
+        if (this.st > 3.4) { this.state = 'walk'; this.st = 1.4; }
       }
     }
     // 부위 배치 (팔은 몸통 옆에 붙어서 같이 돈다)
@@ -4342,13 +5312,361 @@ class Guardian {
     if (!this.claw.dead) place(this.claw, -2.3);
     C.exposed = exposed;
     if (exposed && R() < 0.3) fx.sparks.emit({ position: [this.x + (R() - 0.5) * 2, 2.5, this.z + (R() - 0.5) * 2], velocity: [0, 3, 0], life: 0.3, size: 2, sizeEnd: 1, color: [1, 0.8, 0.3], colorEnd: [1, 0.3, 0.1], emissive: 1, gravity: 1 });
-    if (this.y < 1 && d < C.r + p.r) p.hurt(C.T.dmg, dx, dz);
+    if (this.y < 1 && d < C.r + p.r) p.hurt(C.T.dmg * en.k.dmg, dx, dz);
   }
 }
 
 const angDiff = (a, b) => ((a - b + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
 
 return { GUARDIAN_PARTS, Guardian };
+})();
+
+__m["game/midbosses.js"] = (() => {
+// 중간 보스: 일반 전투 방 중반에 강하하는 탄막 기체 (깊을수록 자주, 여럿)
+//  수호자 부위처럼 enemies.list 에 들어가고 (e.ctrl, e.guard = 이 객체) 여기서 움직인다.
+//  모든 패턴은 예고(충전 빛, 경고선, 바닥 표식) 뒤에 발사. 체력 50% 아래로 2페이즈 (탄이 늘고 빨라짐).
+//
+//  나선 포대 (warden): 회전 나선 + 엇갈린 고리 연사 + 조준 부채꼴
+//  레이저 랜서 (lancer): 경고선 → 레이저 휩쓸기, 조준 부채꼴, (2페이즈) 회전 십자 레이저
+//  하이브 캐리어 (hive): 꽃잎 고리 + 자폭 드론 사출 + 흔들리는 조준 연사
+//  박격 포대 (mortar): 바닥 표식 포격 → 착탄 지점 고리탄, 십자 연사
+
+const { Geometry, Mesh, Material } = __m["engine/index.js"];
+
+const add = (g, part, position = [0, 0, 0], rotation = [0, 0, 0]) => g.merge(part, { position, rotation });
+const R = Math.random, TAU = Math.PI * 2;
+const STEEL = [0.4, 0.42, 0.48], DARK = [0.18, 0.18, 0.22], RED = [0.62, 0.2, 0.22], TEAL = [0.2, 0.5, 0.52], AMBER = [0.85, 0.55, 0.15], VIO = [0.42, 0.26, 0.55];
+
+// ---- 모델 (enemies.js 의 ENEMY_TYPES 에 합쳐진다) ----
+const MIDBOSS_TYPES = {
+  warden: {
+    name: '나선 포대', hp: 1, speed: 0, r: 1.5, dmg: 16, xp: 30, mass: 50, fly: 0, cap: 3, boom: 2, part: true,
+    model() {
+      const g = new Geometry(), glow = new Geometry();
+      add(g, Geometry.cylinder(1.5, 1.7, 0.6, 8, DARK), [0, 0, 0]);
+      add(g, Geometry.cylinder(1.2, 1.4, 0.9, 8, STEEL), [0, 0.6, 0]);
+      add(g, Geometry.cylinder(0.9, 1.1, 0.5, 8, RED), [0, 1.5, 0]);
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * TAU;
+        add(g, Geometry.cylinder(0.16, 0.16, 1.1, 6, DARK), [Math.sin(a) * 1.05, 1.75, Math.cos(a) * 1.05], [Math.PI / 2, a, 0]);
+        add(glow, Geometry.box(0.22, 0.12, 0.12, [1, 0.3, 0.6]), [Math.sin(a) * 1.55, 1.7, Math.cos(a) * 1.55], [0, a, 0]);
+      }
+      add(glow, Geometry.icosphere(0.42, 0, [1, 0.25, 0.55]), [0, 2.1, 0]);
+      return { g, glow };
+    },
+  },
+  lancer: {
+    name: '레이저 랜서', hp: 1, speed: 0, r: 1.3, dmg: 14, xp: 30, mass: 40, fly: 0.6, cap: 3, boom: 2, part: true,
+    model() {
+      const g = new Geometry(), glow = new Geometry();
+      add(g, Geometry.icosphere(1.0, 1, TEAL, { squashY: 0.7 }), [0, 0.9, 0]);
+      for (const s of [-1, 1]) {
+        add(g, Geometry.box(1.6, 0.18, 0.9, DARK), [s * 1.3, 0.85, -0.2], [0, 0, s * 0.25]);
+        add(g, Geometry.box(0.3, 0.3, 1.6, STEEL), [s * 0.75, 0.6, 0.6]);
+        add(glow, Geometry.box(0.2, 0.2, 0.1, [0.4, 1, 1]), [s * 0.75, 0.75, 1.42]);
+      }
+      add(g, Geometry.cylinder(0.22, 0.3, 1.6, 6, STEEL), [0, 0.9, 1.0], [Math.PI / 2, 0, 0]);
+      add(glow, Geometry.icosphere(0.3, 0, [0.5, 1, 1]), [0, 0.9, 1.85]);
+      add(glow, Geometry.box(0.7, 0.14, 0.1, [0.5, 1, 1]), [0, 1.35, 0.85]);
+      return { g, glow };
+    },
+  },
+  hive: {
+    name: '하이브 캐리어', hp: 1, speed: 0, r: 1.7, dmg: 16, xp: 30, mass: 60, fly: 0, cap: 3, boom: 2.2, part: true,
+    model() {
+      const g = new Geometry(), glow = new Geometry();
+      add(g, Geometry.box(2.6, 1.0, 2.8, VIO), [0, 0.3, 0]);
+      add(g, Geometry.box(2.0, 0.9, 2.0, DARK), [0, 1.3, -0.2]);
+      for (const s of [-1, 1]) for (const z of [-1, 1]) add(g, Geometry.box(0.5, 0.5, 0.7, DARK), [s * 1.35, 0, z * 1.0]);
+      for (let i = 0; i < 6; i++) {
+        const x = -0.6 + (i % 3) * 0.6, z = -0.6 + Math.floor(i / 3) * 0.8;
+        add(g, Geometry.cylinder(0.22, 0.22, 0.25, 6, STEEL), [x, 2.2, z]);
+        add(glow, Geometry.cylinder(0.14, 0.14, 0.06, 6, [1, 0.4, 0.2]), [x, 2.45, z]);
+      }
+      add(glow, Geometry.box(1.4, 0.2, 0.08, [1, 0.45, 0.25]), [0, 1.0, 1.42]);
+      return { g, glow };
+    },
+  },
+  mortar: {
+    name: '박격 포대', hp: 1, speed: 0, r: 1.5, dmg: 16, xp: 30, mass: 60, fly: 0, cap: 3, boom: 2.2, part: true,
+    model() {
+      const g = new Geometry(), glow = new Geometry();
+      for (const s of [-1, 1]) add(g, Geometry.box(0.6, 0.7, 2.6, DARK), [s * 1.0, 0, 0]);
+      add(g, Geometry.box(1.8, 0.8, 2.0, AMBER), [0, 0.6, 0]);
+      add(g, Geometry.cylinder(0.75, 0.85, 0.6, 8, STEEL), [0, 1.4, 0]);
+      for (const s of [-1, 1]) add(g, Geometry.cylinder(0.3, 0.36, 1.6, 6, DARK), [s * 0.4, 1.9, 0.2], [-0.5, 0, 0]);
+      for (const s of [-1, 1]) add(glow, Geometry.cylinder(0.2, 0.2, 0.06, 6, [1, 0.6, 0.2]), [s * 0.4, 2.6, -0.2], [-0.5, 0, 0]);
+      add(glow, Geometry.box(0.8, 0.12, 0.08, [1, 0.5, 0.2]), [0, 1.0, 1.02]);
+      return { g, glow };
+    },
+  },
+};
+
+const MIDBOSS_KINDS = Object.keys(MIDBOSS_TYPES);
+const HP = { warden: 1, lancer: 0.85, hive: 1.05, mortar: 0.95 };
+
+// ---- 경고선 / 바닥 표식 / 레이저: 매 프레임 그리는 즉시 모드 풀 (titan 도 같이 씀) ----
+class Hazards {
+  constructor(scene) {
+    const lg = new Geometry();
+    lg.merge(Geometry.box(1, 1, 1), { position: [0, 0, 0.5] }); // z 0~1, y 0~1
+    const rg = new Geometry();
+    for (let i = 0; i < 24; i++) {
+      const a0 = (i / 24) * TAU, a1 = ((i + 1) / 24) * TAU, p = (a, r) => [Math.cos(a) * r, 0, Math.sin(a) * r];
+      rg.quad(p(a0, 0.82), p(a1, 0.82), p(a1, 1), p(a0, 1), [1, 1, 1], null, [0, 1, 0]);
+    }
+    const mk = (geo) => { const m = scene.add(new Mesh(geo, new Material({ color: [1, 0.2, 0.3], emissive: 1, outline: false, castShadow: false, opacity: 0.6 }))); m.visible = false; return m; };
+    this.lines = Array.from({ length: 24 }, () => mk(lg));
+    this.rings = Array.from({ length: 16 }, () => mk(rg));
+    this.nl = this.nr = 0;
+  }
+  // 선: (x,z) 에서 yaw 방향으로 len 만큼. h>0.2 면 레이저 기둥처럼 보인다
+  line(x, z, yaw, len, w, color, opacity = 0.6, y = 0.06, h = 0.04) {
+    const m = this.lines[this.nl++];
+    if (!m) return;
+    m.visible = true; m.position = [x, y, z]; m.rotation = [0, yaw, 0]; m.scale = [w, h, len];
+    m.material.color = color; m.material.opacity = opacity;
+  }
+  ring(x, z, r, color, opacity = 0.6) {
+    const m = this.rings[this.nr++];
+    if (!m) return;
+    m.visible = true; m.position = [x, 0.05, z]; m.scale = [r, 1, r];
+    m.material.color = color; m.material.opacity = opacity;
+  }
+  // 레이저 = 경고(얇고 깜빡) 또는 실제 빔(굵은 기둥 + 흰 심)
+  laser(x, z, yaw, len, w, live, t) {
+    if (!live) { this.line(x, z, yaw, len, 0.12, [1, 0.25, 0.3], 0.35 + 0.35 * Math.sin(t * 40)); return; }
+    this.line(x, z, yaw, len, w, [1, 0.3, 0.55], 0.8, 0.5, 0.9);
+    this.line(x, z, yaw, len, w * 0.4, [1, 1, 1], 1, 0.6, 0.7);
+  }
+  // 프레임 끝: 이번 프레임에 안 그린 것 숨기기
+  flush() {
+    for (let i = this.nl; i < this.lines.length; i++) this.lines[i].visible = false;
+    for (let i = this.nr; i < this.rings.length; i++) this.rings[i].visible = false;
+    this.nl = this.nr = 0;
+  }
+}
+
+// 점 (px,pz) 가 레이저 선분에 닿았는가
+function laserHits(px, pz, x, z, yaw, len, w) {
+  const dx = Math.sin(yaw), dz = Math.cos(yaw), rx = px - x, rz = pz - z, t = rx * dx + rz * dz;
+  if (t < 0 || t > len) return false;
+  return Math.abs(rx * dz - rz * dx) < w;
+}
+
+class MidBoss {
+  constructor(game, kind, x, z) {
+    this.game = game; this.kind = kind; this.t = 0; this.dead = false;
+    const en = game.enemies, K = en.k, d = Math.max(1, game.rooms.depth);
+    this.name = MIDBOSS_TYPES[kind].name;
+    const hp = 1500 * HP[kind] * (1 + d * 0.45) * Math.pow(K.pw, 0.6); // 일반 적보다 전력 보정이 약하다 (방이 늘어지지 않게)
+    const e = this.e = en.spawn(kind, x, z, { force: true });
+    e.ctrl = true; e.guard = this; e.hp = e.maxHp = hp; e.spawnT = 1; e.y = 16; e.under = true;
+    this.vy = 0; this.state = 'drop'; this.st = 0; this.pat = (R() * 3) | 0; this.yaw = 0; this.spin = 0; this.lasers = [];
+    this.marks = [];
+    game.ui.banner(`중간 보스 강하: ${this.name}`, true);
+    game.sfx.play('alarm');
+  }
+  get phase2() { return this.e.hp < this.e.maxHp * 0.5; }
+
+  dmgMul() { return this.state === 'drop' ? 0 : 1; }
+  onKill() {
+    const g = this.game, e = this.e;
+    this.dead = true;
+    g.ui.banner(`${this.name} 격파!`);
+    g.sfx.play('bigboom'); g.hitStop(0.12); g.slowMo(0.6); g.fx.addTrauma(0.8);
+    g.fx.explosion(e.x, 1.2, e.z, 2.4, { color: [1, 0.5, 0.4] });
+    for (let i = 0; i < 12; i++) g.pickups.gem(e.x + (R() - 0.5) * 3, e.z + (R() - 0.5) * 3, 4);
+    g.pickups.drop('crate', e.x, e.z);
+    if (R() < 0.5) g.pickups.drop('kit', e.x + 1, e.z);
+    g.addChips(1, '중간 보스');
+    g.shots.enemyList.length = 0; // 격파 순간 탄막 해제
+  }
+
+  // 공통: 예고 빛 (충전 중 눈이 밝아짐 + 빛)
+  charge(on) { this.e.charging = on; if (on && R() < 0.3) this.game.fx.light([this.e.x, 2, this.e.z], [1, 0.4, 0.6], 4, 0.6, 0.1); }
+  next(states) { this.state = states[this.pat++ % states.length]; this.st = 0; this.n = 0; }
+
+  update(dt) {
+    if (this.dead) return;
+    const g = this.game, p = g.player, fx = g.fx, en = g.enemies, e = this.e, H = en.hazards;
+    if (e.dead) { this.dead = true; return; }
+    this.t += dt; this.st += dt;
+    const dx = p.x - e.x, dz = p.z - e.z, d = Math.hypot(dx, dz) || 1, toP = Math.atan2(dx, dz), P2 = this.phase2;
+    let sp = 0;
+    if (this.state === 'drop') {
+      this.vy -= 45 * dt; e.y += this.vy * dt;
+      H.ring(e.x, e.z, 3, [1, 0.25, 0.35], 0.35 + 0.35 * Math.sin(this.t * 30));
+      if (e.y <= e.T.fly) {
+        e.y = e.T.fly; e.under = false; this.state = 'walk'; this.st = 0;
+        fx.explosion(e.x, 0.3, e.z, 2.2, { color: [1, 0.5, 0.4] }); fx.ring(e.x, 0.15, e.z, 5, [1, 0.35, 0.5], 0.45);
+        fx.addTrauma(0.6); g.sfx.play('bigboom');
+        if (d < 3) p.hurt(e.T.dmg * en.k.dmg, dx, dz);
+        en.ring(e.x, e.z, 12, 4.5, 10, 'orb', R());
+      }
+      this.place(); return;
+    }
+    this[this.kind](dt, { dx, dz, d, toP, P2 });
+    sp = this.sp || 0;
+    // 이동: 거리를 유지하며 맴돈다
+    const keep = this.keep || 7, side = Math.sin(this.t * 0.6 + e.seed) > 0 ? 1 : -1;
+    const fwd = d > keep + 1.5 ? 1 : d < keep - 1.5 ? -0.8 : 0;
+    const mx = (dx / d) * fwd + (dz / d) * side * 0.6, mz = (dz / d) * fwd - (dx / d) * side * 0.6;
+    e.x += mx * sp * dt; e.z += mz * sp * dt;
+    g.rooms.clamp(e, e.r * 0.8);
+    // 접촉 피해
+    if (d < e.r + p.r && !(p.stats.flying && !e.T.fly)) p.hurt(e.T.dmg * en.k.dmg, dx, dz);
+    this.place();
+  }
+  place() { const e = this.e; e.yaw = this.yaw; if (this.kind === 'lancer' && this.state !== 'drop') e.y = e.T.fly + Math.sin(this.t * 3) * 0.15; }
+
+  // ---- 나선 포대 ----
+  warden(dt, { toP, P2 }) {
+    const e = this.e, en = this.game.enemies, fx = this.game.fx;
+    this.keep = 6; this.sp = this.state === 'walk' ? 1.6 : 0.4;
+    this.yaw += dt * (this.state === 'spiral' ? (P2 ? 3.4 : 2.6) : 0.5);
+    if (this.state === 'walk') { if (this.st > (P2 ? 1.0 : 1.6)) this.next(['spiral', 'rings', 'aimed']); return; }
+    const pre = 0.8, live = this.st > pre;
+    this.charge(!live);
+    if (this.state === 'spiral') {
+      // 회전 나선: 팔 2개(2페이즈 3개), 반대로 도는 느린 나선 한 줄
+      if (live && (this.acc = (this.acc || 0) + dt) > 0.11) {
+        this.acc = 0;
+        const arms = P2 ? 3 : 2;
+        for (let k = 0; k < arms; k++) en.shoot(e.x, e.z, this.yaw + (k / arms) * TAU, 5, 10, 'orb', 1.6);
+        if (P2 && this.n++ % 3 === 0) en.shoot(e.x, e.z, -this.yaw * 1.3, 3.6, 10, 'shell', 1.6);
+      }
+      if (this.st > pre + 3.2) this.toWalk();
+    } else if (this.state === 'rings') {
+      // 엇갈린 고리: 틈을 찾아 지나가기
+      if (live && this.st > pre + this.n * 0.42 && this.n < (P2 ? 5 : 4)) { en.ring(e.x, e.z, P2 ? 18 : 14, 4.8, 10, 'orb', (this.n % 2) * (Math.PI / (P2 ? 18 : 14)), 1.4); this.n++; e.flash = 0.06; fx.addTrauma(0.08); }
+      if (this.st > pre + 2.4) this.toWalk();
+    } else if (this.state === 'aimed') {
+      if (live && this.st > pre + this.n * 0.3 && this.n < 4) { en.fan(e.x, e.z, toP, P2 ? 7 : 5, 0.2, 7.5, 12, 'shell', 1.4); this.n++; }
+      if (this.st > pre + 1.6) this.toWalk();
+    }
+  }
+  toWalk() { this.state = 'walk'; this.st = 0; this.e.charging = false; this.lasers = []; }
+
+  // ---- 레이저 랜서 ----
+  lancer(dt, { toP, P2, d }) {
+    const e = this.e, g = this.game, en = g.enemies, H = en.hazards, p = g.player;
+    this.keep = 8; this.sp = this.state === 'walk' ? 3.2 : 0;
+    const turn = (want, k) => { this.yaw += Math.max(-k * dt, Math.min(k * dt, angDiff(want, this.yaw))); };
+    if (this.state === 'walk') { turn(toP, 3); if (this.st > (P2 ? 0.9 : 1.4)) this.next(P2 ? ['sweep', 'cross', 'fan', 'sweep'] : ['sweep', 'fan']); return; }
+    const L = 22, W = 0.55, dmg = 18 * en.k.dmg;
+    if (this.state === 'sweep') {
+      // 경고선 (시작 각 + 끝 각) 0.9초 → 빔이 부채꼴로 휩쓴다
+      if (!this.n) { this.n = 1; const s = R() < 0.5 ? 1 : -1, arc = P2 ? 2.4 : 1.7; this.a0 = toP - s * arc / 2; this.a1 = toP + s * arc / 2; }
+      const pre = 0.9, dur = P2 ? 1.2 : 1.5;
+      this.charge(this.st < pre);
+      if (this.st < pre) { H.laser(e.x, e.z, this.a0, L, W, false, this.t); H.line(e.x, e.z, this.a1, L, 0.06, [1, 0.3, 0.3], 0.3); this.yaw = this.a0; }
+      else {
+        const k = Math.min(1, (this.st - pre) / dur), a = this.a0 + (this.a1 - this.a0) * k;
+        this.yaw = a; H.laser(e.x, e.z, a, L, W, true, this.t);
+        if (R() < 0.5) g.fx.hitSpark([e.x + Math.sin(a) * 1.8, 0.9, e.z + Math.cos(a) * 1.8], [0.5, 1, 1], 2);
+        if (laserHits(p.x, p.z, e.x, e.z, a, L, W * 0.5 + p.r * 0.6)) p.hurt(dmg, Math.cos(a), -Math.sin(a));
+        if (k >= 1) this.toWalk();
+      }
+    } else if (this.state === 'cross') {
+      // 회전 십자 레이저 (2페이즈)
+      const pre = 1.1;
+      this.charge(this.st < pre);
+      if (!this.n) { this.n = 1; this.dir = R() < 0.5 ? 1 : -1; this.base = toP + Math.PI / 4; }
+      const a = this.base + (this.st > pre ? (this.st - pre) * 0.75 * this.dir : 0);
+      for (let k = 0; k < 4; k++) {
+        const ak = a + (k * Math.PI) / 2;
+        H.laser(e.x, e.z, ak, L, W, this.st > pre, this.t);
+        if (this.st > pre && laserHits(p.x, p.z, e.x, e.z, ak, L, W * 0.5 + p.r * 0.6)) p.hurt(dmg, Math.cos(ak), -Math.sin(ak));
+      }
+      this.yaw = a;
+      if (this.st > pre + 2.6) this.toWalk();
+    } else if (this.state === 'fan') {
+      // 조준 부채꼴 3연발 (중앙 경고선)
+      turn(toP, 6);
+      const pre = 0.5;
+      if (this.st < pre) H.line(e.x, e.z, this.yaw, Math.min(d, 14), 0.08, [1, 0.3, 0.3], 0.5);
+      this.charge(this.st < pre);
+      if (this.st > pre + this.n * 0.35 && this.n < 3) { en.fan(e.x, e.z, this.yaw, P2 ? 9 : 7, 0.16, 8.5, 12, 'shell', 1); this.n++; g.fx.muzzle([e.x + Math.sin(this.yaw) * 1.8, 0.9, e.z + Math.cos(this.yaw) * 1.8], [Math.sin(this.yaw), 0, Math.cos(this.yaw)], [0.5, 1, 1], 2); }
+      if (this.st > pre + 1.3) this.toWalk();
+    }
+  }
+
+  // ---- 하이브 캐리어 ----
+  hive(dt, { toP, P2 }) {
+    const e = this.e, g = this.game, en = g.enemies, fx = g.fx;
+    this.keep = 7; this.sp = this.state === 'walk' ? 1.8 : 0.5;
+    this.yaw += angDiff(toP, this.yaw) * Math.min(1, dt * 2);
+    if (this.state === 'walk') { if (this.st > (P2 ? 1.0 : 1.5)) this.next(['flower', 'launch', 'stream']); return; }
+    const pre = 0.7, live = this.st > pre;
+    this.charge(!live);
+    if (this.state === 'flower') {
+      // 꽃잎: 빠른 고리 / 느린 고리를 반 칸씩 돌려 겹친다
+      if (live && this.st > pre + this.n * 0.28 && this.n < (P2 ? 8 : 6)) { const n = 10, sp = this.n % 2 ? 3.4 : 5.6; en.ring(e.x, e.z, n, sp, 10, 'orb', this.n * (Math.PI / n) * 0.5, 1.2); this.n++; }
+      if (this.st > pre + 2.4) this.toWalk();
+    } else if (this.state === 'launch') {
+      // 자폭 드론 사출 (등 뒤 발사구)
+      if (live && !this.n) {
+        this.n = 1;
+        const c = P2 ? 8 : 5;
+        for (let i = 0; i < c; i++) { const a = (i / c) * TAU; const b = en.spawn('bomber', e.x + Math.sin(a) * 2.2, e.z + Math.cos(a) * 2.2); if (b) { b.spawnT = 0; b.vy = 6; b.y = 1.5; } }
+        fx.ring(e.x, 0.2, e.z, 3.5, [1, 0.45, 0.25], 0.4); g.sfx.play('missile');
+        en.ring(e.x, e.z, 8, 4, 10, 'orb', R(), 1.2);
+      }
+      if (this.st > pre + 1.2) this.toWalk();
+    } else if (this.state === 'stream') {
+      // 흔들리며 쏟아지는 조준 연사
+      if (live && (this.acc = (this.acc || 0) + dt) > (P2 ? 0.07 : 0.1)) {
+        this.acc = 0; this.n++;
+        const a = toP + Math.sin(this.st * 7) * 0.45;
+        en.shoot(e.x, e.z, a, 7, 10, 'shell', 1.2);
+        if (P2) en.shoot(e.x, e.z, a + Math.PI, 4.5, 10, 'orb', 1.2);
+      }
+      if (this.st > pre + 2.2) this.toWalk();
+    }
+  }
+
+  // ---- 박격 포대 ----
+  mortar(dt, { toP, P2 }) {
+    const e = this.e, g = this.game, en = g.enemies, fx = g.fx, H = en.hazards, p = g.player;
+    this.keep = 9; this.sp = this.state === 'walk' ? 1.5 : 0;
+    this.yaw += angDiff(toP, this.yaw) * Math.min(1, dt * 1.5);
+    // 떨어지는 포탄 (바닥 표식이 차오르면 착탄)
+    for (let i = this.marks.length - 1; i >= 0; i--) {
+      const m = this.marks[i];
+      m.t += dt;
+      const k = Math.min(1, m.t / m.life);
+      H.ring(m.x, m.z, m.r * (0.3 + 0.7 * k), [1, 0.45, 0.2], 0.4 + 0.4 * Math.sin(m.t * (k > 0.7 ? 50 : 18)));
+      H.ring(m.x, m.z, m.r, [1, 0.25, 0.2], 0.25);
+      if (k >= 1) {
+        this.marks.splice(i, 1);
+        fx.explosion(m.x, 0.4, m.z, 1.4, { color: [1, 0.55, 0.3] }); g.sfx.play('boom'); fx.addTrauma(0.15);
+        if (Math.hypot(p.x - m.x, p.z - m.z) < m.r + p.r * 0.5) p.hurt(16 * en.k.dmg, p.x - m.x, p.z - m.z);
+        en.ring(m.x, m.z, P2 ? 8 : 6, 3.6, 9, 'orb', R(), 0.8);
+      }
+    }
+    if (this.state === 'walk') { if (this.st > (P2 ? 0.9 : 1.4)) this.next(['barrage', 'cross', 'barrage', 'walk2']); return; }
+    const pre = 0.6, live = this.st > pre;
+    this.charge(!live);
+    if (this.state === 'barrage') {
+      // 플레이어 위치 + 예측 위치 + 주변에 포탄
+      if (live && this.st > pre + this.n * 0.22 && this.n < (P2 ? 7 : 5)) {
+        const lead = this.n === 0 ? 0 : this.n === 1 ? 0.6 : 0, j = this.n < 2 ? 0 : 3.5;
+        this.marks.push({ x: p.x + p.vx * lead + (R() - 0.5) * j, z: p.z + p.vz * lead + (R() - 0.5) * j, r: 1.7, t: 0, life: 1.15 });
+        this.n++; g.sfx.play('missile'); fx.muzzle([e.x, 2.6, e.z], [0, 1, 0], [1, 0.6, 0.2], 2);
+      }
+      if (this.st > pre + 1.8) this.toWalk();
+    } else if (this.state === 'cross') {
+      // 십자 → 엑스자 연사
+      if (live && this.st > pre + this.n * 0.16 && this.n < 10) { const off = (Math.floor(this.n / 5) % 2) * Math.PI / 4 + this.yaw; en.ring(e.x, e.z, P2 ? 8 : 4, 6.5, 11, 'shell', off, 1.2); this.n++; }
+      if (this.st > pre + 1.9) this.toWalk();
+    } else this.toWalk();
+  }
+}
+
+const angDiff = (a, b) => ((a - b + Math.PI * 3) % TAU) - Math.PI;
+
+return { MIDBOSS_TYPES, MIDBOSS_KINDS, Hazards, laserHits, MidBoss };
 })();
 
 __m["game/enemies.js"] = (() => {
@@ -4360,7 +5678,9 @@ __m["game/enemies.js"] = (() => {
 const { Geometry, InstancedMesh, Material, Mesh, m4 } = __m["engine/index.js"];
 const { buildMech, animateMech } = __m["game/parts.js"];
 const { GUARDIAN_PARTS, Guardian } = __m["game/guardians.js"];
+const { MIDBOSS_TYPES, MidBoss, Hazards, laserHits } = __m["game/midbosses.js"];
 
+const TAU = Math.PI * 2;
 const add = (g, part, position = [0, 0, 0], rotation = [0, 0, 0]) => g.merge(part, { position, rotation });
 const cbox = (g, w, h, d, c, p, r) => add(g, Geometry.box(w, h, d, c), [p[0], p[1] - h / 2, p[2]], r);
 
@@ -4414,6 +5734,22 @@ const ENEMY_TYPES = {
       return { g, glow };
     },
   },
+  // 회전 포대 드론: 거리를 두고 맴돌며 회전 고리탄을 뿌린다 (방 3부터)
+  spinner: {
+    name: '회전 포대 드론', hp: 55, speed: 2.9, r: 0.6, dmg: 9, xp: 4, mass: 2, fly: 1.0, cap: 12, boom: 0.9, shoots: true,
+    model() {
+      const g = new Geometry(), glow = new Geometry();
+      add(g, Geometry.cylinder(0.5, 0.42, 0.3, 8, DPURP), [0, -0.15, 0]);
+      add(g, Geometry.icosphere(0.3, 0, PURPLE, { squashY: 0.8 }), [0, 0.15, 0]);
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * TAU;
+        add(g, Geometry.cylinder(0.06, 0.06, 0.45, 4, GUN), [Math.sin(a) * 0.55, 0, Math.cos(a) * 0.55], [Math.PI / 2, a, 0]);
+        add(glow, Geometry.box(0.1, 0.1, 0.06, [1, 0.25, 0.7]), [Math.sin(a) * 0.78, 0, Math.cos(a) * 0.78], [0, a, 0]);
+      }
+      add(glow, Geometry.icosphere(0.12, 0, [1, 0.3, 0.7]), [0, 0.42, 0]);
+      return { g, glow };
+    },
+  },
   brute: {
     name: '중장 메카', hp: 190, speed: 1.9, r: 1.05, dmg: 18, xp: 10, mass: 8, fly: 0, cap: 30, boom: 1.5,
     model() {
@@ -4435,7 +5771,15 @@ const ENEMY_TYPES = {
   },
 };
 
-Object.assign(ENEMY_TYPES, GUARDIAN_PARTS);
+Object.assign(ENEMY_TYPES, GUARDIAN_PARTS, MIDBOSS_TYPES);
+
+// 정예 특성: 방 2 이후 정예에 붙는다 (깊은 방은 2개). 색으로 구분
+const AFFIXES = {
+  swift:    { name: '질풍', tint: [0.7, 1.35, 1.6] },    // 빠름
+  armored:  { name: '중장갑', tint: [0.75, 0.85, 1.25] }, // 체력 ↑, 넉백 저항
+  volatile: { name: '폭주', tint: [1.7, 0.55, 0.4] },    // 죽으면 폭발 + 고리탄
+  gunner:   { name: '탄막', tint: [1.5, 0.6, 1.6] },     // 주기적으로 고리탄
+};
 
 // 공간 격자: 근처 적만 빠르게 찾기
 class Grid {
@@ -4471,6 +5815,9 @@ class Enemies {
       };
     }
     this.boss = null;
+    this.mids = [];
+    this.hazards = new Hazards(game.scene);
+    this.k = { hp: 1, swarmHp: 1, dmg: 1, dens: 1, pw: 1 }; // 난이도 배율 (rooms.scale(), 매 프레임 갱신)
     this.pending = [];
     this.blasts = [];
     this.bossCount = 0;
@@ -4491,15 +5838,32 @@ class Enemies {
     const T = ENEMY_TYPES[type];
     const count = this.list.reduce((n, e) => n + (e.type === type), 0);
     if (!force && (count >= T.cap || this.list.length >= 440)) return null;
-    const depth = Math.max(0, this.game.rooms.depth), t = depth * 50, hpMul = (1 + depth * 0.4) * (elite ? 6 : 1);
+    const depth = Math.max(0, this.game.rooms.depth), t = depth * 50, K = this.k, hpMul = (T.swarm ? K.swarmHp : K.hp) * (elite ? 6 : 1);
     const e = {
       type, T, x, z, y: T.fly, vx: 0, vz: 0, vy: 0, stun: 0, kx: 0, kz: 0, yaw: 0, r: T.r * (elite ? 1.3 : 1),
       hp: T.hp * hpMul, maxHp: T.hp * hpMul, flash: 0, spawnT: 0, cd: 1 + Math.random() * 2.5, state: 'walk', st: 0,
       speed: T.speed * (0.9 + Math.random() * 0.2) * (1 + Math.min(0.35, t / 600)), elite, seed: Math.random() * 10,
     };
+    // 깊은 방: 정찰 드론 일부가 총을 든다
+    if (type === 'drone' && depth >= 3 && Math.random() < 0.08 + (depth - 3) * 0.03 && this.list.reduce((n, o) => n + !!o.gun, 0) < 14) e.gun = true;
+    if (elite && depth >= 2 && !T.part) {
+      const keys = Object.keys(AFFIXES).sort(() => Math.random() - 0.5).slice(0, depth >= 6 ? 2 : 1);
+      e.affix = {}; for (const k of keys) e.affix[k] = true;
+      e.tint = AFFIXES[keys[0]].tint;
+      if (e.affix.swift) e.speed *= 1.6;
+      if (e.affix.armored) { e.hp = e.maxHp *= 1.7; e.mass = T.mass * 4; }
+      this.game.ui.toast(`정예 기체 출현 [${keys.map((k) => AFFIXES[k].name).join('·')}]! 처치하면 부품 획득`);
+    } else if (elite) this.game.ui.toast('정예 기체 출현! 처치하면 부품 획득');
     this.list.push(e);
     return e;
   }
+
+  // ---- 적 탄 (깊이/전력에 맞춰 피해 보정). 각도 a: atan2(dx, dz) ----
+  shoot(x, z, a, sp, dmg, kind = 'orb', y = 1) { this.game.shots.enemyShot(x, y, z, Math.sin(a) * sp, Math.cos(a) * sp, dmg * this.k.dmg, kind); }
+  ring(x, z, n, sp, dmg, kind = 'orb', off = 0, y = 1) { for (let i = 0; i < n; i++) this.shoot(x, z, off + (i / n) * TAU, sp, dmg, kind, y); }
+  fan(x, z, a, n, step, sp, dmg, kind = 'shell', y = 1) { for (let i = 0; i < n; i++) this.shoot(x, z, a + (i - (n - 1) / 2) * step, sp, dmg, kind, y); }
+
+  spawnMid(kind, x, z) { const m = new MidBoss(this.game, kind, x, z); this.mids.push(m); return m; }
 
   // 무리 스폰: 한 지점에 고리 하나로 예고하고 n 마리를 흩뿌린다
   pack(type, x, z, n, spread = 1.6, delay = 0) { this.pending.push({ type, x, z, n, spread, t: -delay }); }
@@ -4533,7 +5897,7 @@ class Enemies {
     const S = 2.2;
     mech.root.scale = [S, S, S];
     g.scene.add(mech.root);
-    const hp = 16000 * (0.6 + g.level * 0.12);
+    const hp = 16000 * (1 + g.level * 0.06) * Math.pow(this.k.pw, 0.6);
     this.boss = { mech, x, z, y: 22, vy: 0, r: 2.0, hp, maxHp: hp, flash: 0, yaw: 0, aim: 0, state: 'drop', st: 0, pattern: 0, anim: { phase: 0 }, boss: true, mass: 40, kx: 0, kz: 0, T: { dmg: 22, xp: 0 } };
     this.warn.visible = true;
     this.warn.position = [x, 0.05, z];
@@ -4551,7 +5915,9 @@ class Enemies {
     const dx = p.x - B.x, dz = p.z - B.z, d = Math.hypot(dx, dz) || 1;
     const toP = Math.atan2(dx, dz);
     let move = 0;
-    const fireRing = (n, speed, off = 0) => { for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2 + off; g.shots.enemyShot(B.x + Math.sin(a) * 1.5, 1.4, B.z + Math.cos(a) * 1.5, Math.sin(a) * speed, Math.cos(a) * speed, 12, 'orb'); } };
+    const P2 = B.hp < B.maxHp * 0.5; // 2페이즈: 패턴 간격이 짧아지고 탄이 늘어난다
+    if (P2 && !B.p2) { B.p2 = true; g.ui.banner('타이탄 출력 상승!', true); g.sfx.play('alarm'); fx.ring(B.x, 0.2, B.z, 8, [1, 0.3, 0.4], 0.6); this.ring(B.x, B.z, 32, 5, 12, 'orb', 0, 1.4); }
+    const fireRing = (n, speed, off = 0) => this.ring(B.x, B.z, n, speed, 12, 'orb', off, 1.4);
     if (B.state === 'drop' || B.state === 'stompFall') {
       B.vy -= 60 * dt; B.y += B.vy * dt;
       this.warn.material.opacity = 0.35 + 0.35 * Math.sin(B.st * 30);
@@ -4562,7 +5928,8 @@ class Enemies {
         g.sfx.play('bigboom');
         fx.addTrauma(0.8);
         g.hitStop(0.12);
-        if (d < 5) p.hurt(B.T.dmg, -dx / d, -dz / d);
+        if (d < 5) p.hurt(B.T.dmg * this.k.dmg, -dx / d, -dz / d);
+        if (B.state === 'stompFall') this.ring(B.x, B.z, P2 ? 24 : 14, 4.5, 12, 'shell', Math.random(), 0.8); // 착지 충격파
         for (let i = 0; i < 14; i++) fx.dust(B.x + (Math.random() - 0.5) * 5, B.z + (Math.random() - 0.5) * 5, 1);
         B.state = 'walk'; B.st = 0;
       }
@@ -4571,26 +5938,50 @@ class Enemies {
       const sp = 2.2 + this.bossCount * 0.3;
       B.x += (dx / d) * sp * dt; B.z += (dz / d) * sp * dt;
       B.yaw = toP;
-      if (B.st > 2.2) { B.state = ['ring', 'volley', 'summon', 'stomp'][B.pattern++ % 4]; B.st = 0; B.shots = 0; }
+      if (B.st > (P2 ? 1.3 : 2.0)) { const L = ['ring', 'volley', 'spiral', 'summon', 'sweep', 'stomp']; B.state = L[B.pattern++ % L.length]; B.st = 0; B.shots = 0; B.acc = 0; }
     } else if (B.state === 'ring') {
-      // 원형 탄막 3파
+      // 원형 탄막 (엇갈린 고리, 2페이즈 5파)
       B.yaw = toP;
-      if (B.st > 0.5 + B.shots * 0.55 && B.shots < 3) { fireRing(16 + this.bossCount * 2, 6.5, B.shots * 0.2); B.shots++; B.flash = 0.08; fx.light([B.x, 3, B.z], [1, 0.4, 0.3], 8, 1.1, 0.2); fx.addTrauma(0.15); }
-      if (B.st > 2.4) { B.state = 'walk'; B.st = 0; }
+      const n = 16 + this.bossCount * 2 + (P2 ? 6 : 0);
+      if (B.st > 0.5 + B.shots * 0.5 && B.shots < (P2 ? 5 : 3)) { fireRing(n, 6, (B.shots % 2) * (Math.PI / n)); B.shots++; B.flash = 0.08; fx.light([B.x, 3, B.z], [1, 0.4, 0.3], 8, 1.1, 0.2); fx.addTrauma(0.15); }
+      if (B.st > (P2 ? 3.2 : 2.4)) { B.state = 'walk'; B.st = 0; }
     } else if (B.state === 'volley') {
       // 플레이어 쪽 부채꼴 사격
       B.yaw = toP;
-      if (B.st > 0.6 + B.shots * 0.32 && B.shots < 5) {
+      if (B.st > 0.6 + B.shots * 0.32 && B.shots < (P2 ? 7 : 5)) {
         const m = B.mech.muzzle(B.shots % 2 ? 'shR' : 'shL');
-        for (let k = -2; k <= 2; k++) { const a = toP + k * 0.16; g.shots.enemyShot(m[0], 1.4, m[2], Math.sin(a) * 10, Math.cos(a) * 10, 12, 'orb'); }
+        this.fan(m[0], m[2], Math.atan2(p.x - m[0], p.z - m[2]), P2 ? 7 : 5, 0.16, 10, 12, 'orb', 1.4);
         fx.muzzle(m, [Math.sin(toP), 0, Math.cos(toP)], [1, 0.4, 0.3], 2);
         B.shots++;
       }
-      if (B.st > 2.6) { B.state = 'walk'; B.st = 0; }
+      if (B.st > (P2 ? 3.2 : 2.6)) { B.state = 'walk'; B.st = 0; }
+    } else if (B.state === 'spiral') {
+      // 회전 나선 (예고: 깜빡임). 2페이즈는 팔 4개 + 역회전 포탄
+      if (B.st < 0.7) { B.flash = Math.sin(B.st * 30) > 0 ? 0.04 : 0; B.spin = toP; }
+      else if ((B.acc += dt) > 0.1) {
+        B.acc = 0; B.shots++;
+        const arms = P2 ? 4 : 3;
+        B.spin += 0.2;
+        for (let k = 0; k < arms; k++) this.shoot(B.x, B.z, B.spin + (k / arms) * TAU, 5.2, 12, 'orb', 1.6);
+        if (P2 && B.shots % 2) this.shoot(B.x, B.z, -B.spin * 1.4, 3.8, 12, 'shell', 1.6);
+      }
+      if (B.st > 3.9) { B.state = 'walk'; B.st = 0; }
+    } else if (B.state === 'sweep') {
+      // 레이저 휩쓸기: 경고선 1초 → 부채꼴로 쓸기 (2페이즈는 반대쪽 빔 추가)
+      const H = this.hazards, L = 26, W = 0.9, pre = 1.0, dur = 1.7;
+      if (!B.shots) { B.shots = 1; const s = Math.random() < 0.5 ? 1 : -1; B.a0 = toP - s * 1.1; B.a1 = toP + s * 1.1; }
+      const k = Math.max(0, Math.min(1, (B.st - pre) / dur)), a = B.a0 + (B.a1 - B.a0) * k, live = B.st > pre;
+      B.yaw = a;
+      for (const off of P2 ? [0, Math.PI] : [0]) {
+        H.laser(B.x, B.z, a + off, L, W, live, B.st);
+        if (!live) H.line(B.x, B.z, B.a1 + off, L, 0.06, [1, 0.3, 0.3], 0.3);
+        else if (laserHits(p.x, p.z, B.x, B.z, a + off, L, W * 0.5 + p.r * 0.6)) p.hurt(24 * this.k.dmg, Math.cos(a), -Math.sin(a));
+      }
+      if (B.st > pre + dur) { B.state = 'walk'; B.st = 0; }
     } else if (B.state === 'summon') {
       if (B.st > 0.4 && !B.shots) {
         B.shots = 1;
-        for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; const e = this.spawn('drone', B.x + Math.cos(a) * 3, B.z + Math.sin(a) * 3); if (e) e.spawnT = 0; }
+        for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; const e = this.spawn(P2 && i % 2 ? 'spinner' : 'drone', B.x + Math.cos(a) * 3, B.z + Math.sin(a) * 3); if (e) e.spawnT = 0; }
         fx.ring(B.x, 0.2, B.z, 4, [1, 0.3, 0.6], 0.4);
       }
       if (B.st > 1.4) { B.state = 'walk'; B.st = 0; }
@@ -4612,7 +6003,7 @@ class Enemies {
     B.x += B.kx * dt; B.z += B.kz * dt; B.kx *= Math.exp(-6 * dt); B.kz *= Math.exp(-6 * dt);
     g.rooms.clamp(B, B.r * 0.7);
     // 접촉 피해
-    if (B.y < 1 && d < B.r + p.r) p.hurt(B.T.dmg, dx / d, dz / d);
+    if (B.y < 1 && d < B.r + p.r) p.hurt(B.T.dmg * this.k.dmg, dx / d, dz / d);
     // 애니메이션
     B.aim = B.yaw;
     const m = B.mech;
@@ -4672,7 +6063,8 @@ class Enemies {
     // 연쇄 폭발: 자폭 드론은 항상, 나머지는 '연쇄 기폭' 능력치 확률로
     g.player.addOd(T.xp * 0.0045 * (e.elite ? 6 : 1));
     const chain = g.player.stats.chain || 0;
-    if (T.bomb) this.blast(e.x, e.z, 2.2, 26 + g.rooms.depth * 4, true, 0.04);
+    if (e.affix?.volatile && e.doomT === undefined) { this.blast(e.x, e.z, 2.8, T.dmg * 2.5 * this.k.dmg, true, 0.35); this.ring(e.x, e.z, 12, 4.2, T.dmg, 'orb', Math.random()); fx.ring(e.x, 0.15, e.z, 2.8, [1, 0.3, 0.2], 0.4); }
+    if (T.bomb) this.blast(e.x, e.z, 2.2, 26 * this.k.dmg, true, 0.04);
     else if (chain && Math.random() < chain) this.blast(e.x, e.z, 1.6 + (e.elite ? 1 : 0) + T.r, (8 + e.maxHp * 0.6) * g.player.stats.dmgMul, false, 0.07);
     // 부품 노획: 적의 부위가 뜯겨 나와 떨어진다
     const sal = e.type === 'tank' ? (e.elite || Math.random() < 0.06 ? ['weapon', 'cannon'] : null)
@@ -4741,7 +6133,8 @@ class Enemies {
   }
 
   update(dt) {
-    const g = this.game, p = g.player, fx = g.fx;
+    const g = this.game, p = g.player, fx = g.fx, depth = Math.max(0, g.rooms.depth);
+    if ((g.frame & 15) === 0 || !this.k.ok) this.k = { ...g.rooms.scale(), ok: true };
     this.updatePending(dt);
     this.grid.clear();
     for (const e of this.list) this.grid.insert(e);
@@ -4755,28 +6148,47 @@ class Enemies {
       e.flash = Math.max(0, e.flash - dt);
       const dx = p.x - e.x, dz = p.z - e.z, d = Math.hypot(dx, dz) || 1;
       let mx = dx / d, mz = dz / d, sp = e.speed;
+      // 탄막 특성 정예: 주기적으로 고리탄
+      if (e.affix?.gunner && e.spawnT > 1) { e.gcd = (e.gcd ?? 2) - dt; if (e.gcd < 0.5) e.charging = true; if (e.gcd <= 0) { e.gcd = 3; e.charging = false; this.ring(e.x, e.z, 12, 4.6, T.dmg, 'orb', e.st, 0.9); } }
       if (e.type === 'tank') {
-        // 사거리 안이면 거리 유지 + 포격 (0.5초 예고)
+        // 사거리 안이면 거리 유지 + 포격 (0.5초 예고). 깊을수록 부채꼴 / 연발
         if (d < 8) { sp *= -0.3; }
         else if (d < 11) { sp *= 0.25; }
         e.cd -= dt;
         if (e.cd < 0.5 && d < 14) e.charging = true;
         if (e.cd <= 0) {
           e.charging = false;
-          e.cd = 3 + Math.random() * 1.5;
+          e.shots = (e.shots || 0) + 1;
+          e.cd = (3 + Math.random() * 1.5) * (depth >= 5 ? 0.75 : 1);
+          if (depth >= 6 && e.shots % 2) e.cd = 0.3; // 빠른 2연발
           if (d < 14) {
             const a = Math.atan2(dx, dz), mx2 = e.x + Math.sin(a) * 0.9, mz2 = e.z + Math.cos(a) * 0.9;
-            g.shots.enemyShot(mx2, 0.75, mz2, Math.sin(a) * 7.5, Math.cos(a) * 7.5, T.dmg, 'shell');
+            this.fan(mx2, mz2, a, depth >= 6 ? 5 : depth >= 3 ? 3 : 1, 0.22, 7.5, T.dmg, 'shell', 0.75);
             fx.muzzle([mx2, 0.75, mz2], [Math.sin(a), 0, Math.cos(a)], [1, 0.5, 0.2], 1);
             e.kx -= Math.sin(a) * 2; e.kz -= Math.cos(a) * 2;
           }
         }
         e.yaw = Math.atan2(dx, dz);
+      } else if (e.type === 'spinner') {
+        // 회전 포대: 거리 유지하며 옆으로 돌고, 예고 후 회전 고리 3파
+        const side = Math.sin(g.time * 0.7 + e.seed * 3) > 0 ? 1 : -1, f = d > 9 ? 1 : d < 6 ? -1 : 0;
+        mx = (dx / d) * f + (dz / d) * side * 0.8; mz = (dz / d) * f - (dx / d) * side * 0.8;
+        e.yaw += dt * (e.state === 'burst' ? 9 : 2);
+        if (e.state === 'walk') { e.cd -= dt; e.charging = e.cd < 0.6; if (e.cd <= 0 && d < 15) { e.state = 'burst'; e.st = 0; e.n = 0; e.dir = Math.random() < 0.5 ? 1 : -1; } }
+        else {
+          sp *= 0.3;
+          const n = Math.min(10, 6 + (depth >> 1));
+          if (e.st > e.n * 0.2 && e.n < 3) { this.ring(e.x, e.z, n, 4.4, T.dmg, 'orb', e.dir * e.n * 0.22 + e.seed, 1); e.n++; }
+          if (e.n >= 3) { e.state = 'walk'; e.cd = 3.2 + Math.random() * 1.5; e.charging = false; }
+        }
       } else if (e.type === 'brute') {
         // 걷기 → 예고(번쩍임) → 돌진 → 경직
         if (e.state === 'walk') { e.cd -= dt; if (e.cd <= 0 && d < 10) { e.state = 'wind'; e.st = 0; e.cx = mx; e.cz = mz; } e.yaw = Math.atan2(dx, dz); }
         else if (e.state === 'wind') { sp = 0; e.yaw = Math.atan2(e.cx, e.cz); if (e.st > 0.7) { e.state = 'charge'; e.st = 0; } }
-        else if (e.state === 'charge') { mx = e.cx; mz = e.cz; sp = 13; if (Math.random() < 0.5) fx.dust(e.x, e.z, 1); if (e.st > 0.55) { e.state = 'rest'; e.st = 0; } }
+        else if (e.state === 'charge') {
+          mx = e.cx; mz = e.cz; sp = 13; if (Math.random() < 0.5) fx.dust(e.x, e.z, 1);
+          if (e.st > 0.55) { e.state = 'rest'; e.st = 0; if (depth >= 4) this.ring(e.x, e.z, depth >= 7 ? 12 : 8, 4.2, T.dmg * 0.6, 'shell', Math.random(), 0.6); } // 깊은 방: 돌진 끝 충격파
+        }
         else { sp = 0; if (e.st > 0.7) { e.state = 'walk'; e.cd = 2.5 + Math.random() * 2; } }
       } else if (T.swarm) {
         // 벌레: 곧장 달려든다 (개체마다 살짝 다른 각도)
@@ -4790,11 +6202,16 @@ class Enemies {
         if (e.state === 'fuse') { sp = 0; e.charging = Math.sin(e.st * 40) > 0; if (e.st > 0.55) { e.hp = 0; this.kill(e); continue; } }
         e.yaw = Math.atan2(dx, dz);
       } else {
-        // 드론: 살짝 흔들리며 추적
+        // 드론: 살짝 흔들리며 추적. 총 든 드론은 예고 후 조준탄 (깊으면 3갈래)
         const w = Math.sin(g.time * 2 + e.seed) * 0.35;
         const c = Math.cos(w), s = Math.sin(w);
         [mx, mz] = [mx * c - mz * s, mx * s + mz * c];
         e.yaw = Math.atan2(mx, mz);
+        if (e.gun) {
+          if (d < 5) sp *= 0.4;
+          e.cd -= dt; e.charging = e.cd < 0.5 && d < 12;
+          if (e.cd <= 0) { e.cd = 3.5 + Math.random() * 2; if (d < 12) this.fan(e.x, e.z, Math.atan2(dx, dz), depth >= 6 ? 3 : 1, 0.28, 5.5, T.dmg, 'orb', 0.9); }
+        }
       }
       // 띄워짐 / 경직: 공중에서는 움직이지 못한다
       const air = e.y > T.fly + 0.01 || (e.vy || 0) > 0;
@@ -4827,13 +6244,21 @@ class Enemies {
       // 접촉 피해
       if (e.spawnT > 0.3 && d < e.r + p.r && e.y < T.fly + 0.6 && !(p.stats.flying && !T.fly)) { // 비행 모드: 지상 적과 부딪혀도 안전
         const dmg = e.state === 'charge' ? T.dmg * 1.5 : T.dmg;
-        if (p.hurt(dmg * (e.elite ? 1.5 : 1) * (1 + g.rooms.depth * 0.08), dx / d, dz / d)) { e.kx -= mx * 6; e.kz -= mz * 6; }
+        if (p.hurt(dmg * (e.elite ? 1.5 : 1) * this.k.dmg, dx / d, dz / d)) { e.kx -= mx * 6; e.kz -= mz * 6; }
         // 탱크 다리로 대시 들이받기
         if (p.dashT > 0 && p.stats.ram && e.ramId !== p.dashId) { e.ramId = p.dashId; this.hit(e, p.stats.ram * p.stats.dmgMul, mx, mz, 16); g.hitStop(0.03); }
       }
     }
+    // 중간 보스 (체력 바: 가장 먼저 나온 것)
+    if (this.mids.length) {
+      for (const m of this.mids) m.update(dt);
+      this.mids = this.mids.filter((m) => !m.dead);
+      const m = this.mids[0];
+      g.ui.bossBar(m ? Math.max(0.001, m.e.hp / m.e.maxHp) : 0, m && (this.mids.length > 1 ? `${m.name} 외 ${this.mids.length - 1}` : m.name));
+    }
     this.updateBoss(dt);
-    if (this.guardian) { this.guardian.update(dt); if (this.guardian.dead && !this.list.some((e) => e.guard)) this.guardian.done = true; }
+    if (this.guardian) { this.guardian.update(dt); if (this.guardian.dead && !this.list.some((e) => e.guard === this.guardian)) this.guardian.done = true; }
+    this.hazards.flush();
     this.updateBlasts(dt);
     // 처치된 적 정리
     if (this.list.some((e) => e.dead)) this.list = this.list.filter((e) => !e.dead);
@@ -4852,7 +6277,7 @@ class Enemies {
       if (e.type === 'brute' && e.state === 'wind') y += Math.abs(Math.sin(e.st * 30)) * 0.05;
       const mat = m4.fromTRS([e.x, y, e.z], [e.rx || 0, e.yaw, roll], [s, s, s]);
       const f = e.flash > 0 || (e.state === 'wind' && Math.sin(e.st * 28) > 0);
-      const tint = f ? [2.6, 2.6, 2.6] : e.elite ? [1.25, 1.1, 0.7] : [1, 1, 1];
+      const tint = f ? [2.6, 2.6, 2.6] : e.elite ? (e.tint || [1.25, 1.1, 0.7]) : [1, 1, 1];
       M.body.setAt(i, mat, tint, f ? 0.65 : 0);
       const glowK = e.charging || e.state === 'wind' ? 2.2 : 1;
       const gk = e.exposed ? 1.6 + Math.sin(time * 14) * 0.6 : glowK;
@@ -4862,14 +6287,15 @@ class Enemies {
   }
 
   clear() {
-    this.list = []; this.pending = []; this.blasts = []; this.guardian = null;
+    this.list = []; this.pending = []; this.blasts = []; this.guardian = null; this.mids = [];
+    this.hazards.flush();
     if (this.boss) { this.game.scene.remove(this.boss.mech.root); this.boss = null; }
     this.warn.visible = false;
     this.render(0);
   }
 }
 
-return { ENEMY_TYPES, Enemies };
+return { ENEMY_TYPES, AFFIXES, Enemies };
 })();
 
 __m["game/pickups.js"] = (() => {
@@ -4885,6 +6311,19 @@ const GEM_TIERS = [ // 값이 클수록 큰 결정
   { min: 0, color: [0.4, 1, 0.5], s: 1 },
 ];
 const ITEM_COLORS = { kit: [0.4, 1, 0.45], magnet: [1, 0.85, 0.25], core: [1, 0.4, 0.9], crate: [1, 0.7, 0.2] };
+const ITEM_NAMES = { kit: '수리 키트', magnet: '자석', core: '보스 코어', crate: '부품 상자' };
+const PART_COLORS = { weapon: [1, 0.55, 0.2], module: [0.4, 0.9, 1] };
+const css = (c, a = 1) => `rgba(${c.map((v) => Math.round(Math.min(1, v) * 255)).join(',')},${a})`;
+
+// 바닥 테두리: 네 모서리 ㄱ자 브래킷 (드롭이 뭔지 색으로 구분)
+function bracketGeo() {
+  const g = new Geometry(), h = 0.7, L = 0.34, w = 0.07;
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    g.merge(Geometry.box(L, 0.04, w), { position: [sx * (h - L / 2), 0, sz * h] });
+    g.merge(Geometry.box(w, 0.04, L), { position: [sx * h, 0, sz * (h - L / 2)] });
+  }
+  return g;
+}
 
 class Pickups {
   constructor(game) {
@@ -4899,6 +6338,8 @@ class Pickups {
     ig.merge(Geometry.box(0.46, 0.12, 0.12, [1, 1, 1]), { position: [0, -0.06, 0] });
     ig.merge(Geometry.box(0.12, 0.12, 0.46, [1, 1, 1]), { position: [0, -0.06, 0] });
     this.itemMesh = game.scene.add(new InstancedMesh(ig, new Material({ emissive: 0.55 }), 40));
+    this.bracket = bracketGeo();
+    this.frameMesh = game.scene.add(new InstancedMesh(this.bracket, new Material({ emissive: 1, outline: false, castShadow: false }), 50));
   }
 
   gem(x, z, value) {
@@ -4918,17 +6359,29 @@ class Pickups {
   salvage(kind, id, x, z) {
     const g = this.game;
     if (this.parts.length >= 6) return;
+    // 이미 최대 레벨이거나 자리가 없는 부품은 떨어뜨리지 않는다 (줍자마자 분해 → 경험치로 기체만 계속 커지던 문제)
+    if (!g.salvageChoice(kind, id, this.parts.filter((q) => q.kind === kind && q.id === id).length)) return;
     const node = g.scene.add(partPreview(kind, id, g.player.loadout.paint));
     const beam = g.scene.add(new Mesh(Geometry.cylinder(0.05, 0.05, 1, 5, [1, 0.8, 0.3]), new Material({ emissive: 1, outline: false, castShadow: false, opacity: 0.5 })));
     const a = Math.random() * 6.28;
     this.parts.push({ kind, id, x, z, y: 1.2, vx: Math.cos(a) * 3, vz: Math.sin(a) * 3, vy: 7, t: 0, node, beam, spin: (Math.random() - 0.5) * 14 });
     const name = kind === 'weapon' ? WEAPONS[id].name : MODULES[id].name;
+    const owned = kind === 'weapon' ? !!g.weapons.get(id) : !!g.player.loadout.modules?.[id];
+    this.parts.at(-1).label = `${kind === 'weapon' ? '무기' : '모듈'} · ${name}`;
+    this.parts.at(-1).badge = owned ? '강화' : 'NEW';
     g.ui.toast(`${name} 떨어짐! 가까이 가서 줍기`);
     g.sfx.play('clank', { vol: 0.6 });
     g.fx.ring(x, 0.15, z, 2, [1, 0.8, 0.3], 0.3);
   }
+  // 바닥 테두리 하나 찍기 (천천히 돌며 숨쉬듯 커졌다 작아짐)
+  frame(x, z, t, color, s = 1) {
+    if (this.nf >= this.frameMesh.capacity) return;
+    const k = s * (1 + Math.sin(t * 5) * 0.06);
+    this.frameMesh.setAt(this.nf++, m4.fromTRS([x, 0.06, z], [0, t * 0.8, 0], [k, 1, k]), color, 1);
+  }
   updateParts(dt) {
     const g = this.game, p = g.player, fx = g.fx;
+    this.nf = 0;
     for (let i = this.parts.length - 1; i >= 0; i--) {
       const q = this.parts[i];
       q.t += dt;
@@ -4940,6 +6393,8 @@ class Pickups {
       q.node.scale = [1.5, 1.5, 1.5];
       q.beam.position = [q.x, 0, q.z]; q.beam.scale = [1, 4 + Math.sin(q.t * 6) * 0.3, 1];
       q.beam.material.opacity = 0.35 + 0.2 * Math.sin(q.t * 8);
+      q.beam.material.color = PART_COLORS[q.kind];
+      this.frame(q.x, q.z, q.t, PART_COLORS[q.kind], 1.25);
       if (Math.random() < 0.15) fx.sparks.emit({ position: [q.x, q.y + 0.3, q.z], velocity: [0, 2, 0], life: 0.4, size: 2, sizeEnd: 1, color: [1, 0.9, 0.5], colorEnd: [1, 0.5, 0.1], emissive: 1, gravity: -0.2 });
       const dx = p.x - q.x, dz = p.z - q.z, d = Math.hypot(dx, dz);
       if (q.t > 0.6 && d < p.r + 0.9 && g.state === 'play') {
@@ -5004,12 +6459,47 @@ class Pickups {
       const s = it.kind === 'core' ? 1.8 : it.kind === 'crate' ? 1.7 + Math.sin(it.t * 6) * 0.1 : 1;
       if (it.kind === 'crate' && Math.random() < 0.3) fx.trail.emit({ position: [it.x, it.y + 0.3, it.z], velocity: [0, 2, 0], life: 0.4, size: 2, sizeEnd: 1, color: [1, 0.85, 0.4], colorEnd: [1, 0.5, 0.1], emissive: 1, gravity: 0 });
       this.itemMesh.setAt(m++, m4.fromTRS([it.x, it.y + Math.sin(it.t * 3) * 0.1, it.z], [0, it.t * 1.5, 0], blink ? [0, 0, 0] : [s, s, s]), ITEM_COLORS[it.kind], 0.55);
+      if (!blink) this.frame(it.x, it.z, it.t, ITEM_COLORS[it.kind], it.kind === 'crate' || it.kind === 'core' ? 1.15 : 0.7);
     }
     this.itemMesh.count = m;
     this.itemMesh.dirty = true;
+    this.frameMesh.count = this.nf;
+    this.frameMesh.dirty = true;
   }
 
-  clear() { for (const q of this.parts || []) { this.game.scene.remove(q.node); this.game.scene.remove(q.beam); } this.parts = []; this.gems = []; this.items = []; this.gemMesh.count = 0; this.itemMesh.count = 0; }
+  // 오버레이: 드롭 위에 테두리 있는 이름표 (무기/모듈/상자 구분). project(p) → [디바이스 x, y] | null
+  drawLabels(ctx, project, px) {
+    const g = this.game;
+    if (g.state !== 'play' && g.state !== 'install') return;
+    const fs = Math.round(px * 5.5);
+    ctx.font = `bold ${fs}px system-ui, sans-serif`;
+    ctx.textBaseline = 'middle';
+    const tag = (pt, text, color, badge) => {
+      const s = project(pt);
+      if (!s) return;
+      const bw = badge ? ctx.measureText(badge).width + px * 3 : 0;
+      const tw = ctx.measureText(text).width, w = Math.round(tw + bw + px * 6), h = Math.round(fs + px * 4);
+      const x = Math.round(s[0] - w / 2), y = Math.round(s[1] - h);
+      // 어두운 판 + 색 테두리 2겹 (도트 느낌으로 모서리만 깎음)
+      ctx.fillStyle = '#120f18';
+      ctx.fillRect(x - px, y, w + px * 2, h); ctx.fillRect(x, y - px, w, h + px * 2);
+      ctx.fillStyle = css(color);
+      ctx.fillRect(x, y, w, px); ctx.fillRect(x, y + h - px, w, px); ctx.fillRect(x, y, px, h); ctx.fillRect(x + w - px, y, px, h);
+      ctx.fillStyle = css(color, 0.18); ctx.fillRect(x + px, y + px, w - px * 2, h - px * 2);
+      ctx.fillStyle = '#fff'; ctx.fillText(text, x + px * 3, y + h / 2 + px * 0.3);
+      if (badge) {
+        const bx = x + px * 3 + tw + px * 1.5;
+        ctx.fillStyle = css(color); ctx.fillRect(bx, y + px * 2, bw - px * 1.5, h - px * 4);
+        ctx.fillStyle = '#120f18'; ctx.fillText(badge, bx + px * 0.75, y + h / 2 + px * 0.3);
+      }
+      // 아래로 꼬리 (가리키는 대상)
+      ctx.fillStyle = css(color); ctx.fillRect(Math.round(s[0] - px), y + h, px * 2, px * 2);
+    };
+    for (const q of this.parts) tag([q.x, q.y + 1.6, q.z], q.label, PART_COLORS[q.kind], q.badge);
+    for (const it of this.items) if (!(it.t > 25 && Math.sin(it.t * 20) < 0)) tag([it.x, it.y + 1.1, it.z], ITEM_NAMES[it.kind], ITEM_COLORS[it.kind]);
+  }
+
+  clear() { for (const q of this.parts || []) { this.game.scene.remove(q.node); this.game.scene.remove(q.beam); } this.parts = []; this.gems = []; this.items = []; this.gemMesh.count = 0; this.itemMesh.count = 0; this.frameMesh.count = 0; }
 }
 
 return { Pickups };
@@ -5104,6 +6594,7 @@ class Player {
     const visible = this.mech ? this.mech.root.visible : true;
     if (this.mech) sc.remove(this.mech.root);
     this.mech = buildMech(this.loadout);
+    this.upperY = this.mech.upper.position[1]; // 변형 움찔이 누적되지 않게 기준 높이 기억
     this.mech.root.visible = visible;
     sc.add(this.mech.root);
     this.hidden = [];
@@ -5298,7 +6789,7 @@ class Player {
     const mag = Math.hypot(dir[0], dir[2]);
     this.moveMag = mag;
     if (mag > 0.2) this.moveYaw = Math.atan2(dir[0], dir[2]);
-    const legs = this.loadout.legs;
+    const legs = this.loadout.legs, anim = LEGS[legs]?.anim || 'walk'; // walk/roll/hover/wheel/jet
 
     // ---- 대시 ----
     if (ctl.dash && this.charges > 0 && this.dashT <= 0) {
@@ -5349,7 +6840,7 @@ class Player {
 
     // ---- 방향: 하체는 이동 방향, 상체는 조준 방향 ----
     const spd = Math.hypot(this.vx, this.vz);
-    if (mag > 0.2 && this.dashT <= 0 && this.attackSlow <= 0) this.yaw = dampAngle(this.yaw, this.moveYaw, legs === 'treads' ? 7 : 16, dt);
+    if (mag > 0.2 && this.dashT <= 0 && this.attackSlow <= 0) this.yaw = dampAngle(this.yaw, this.moveYaw, anim === 'roll' ? 7 : anim === 'wheel' ? 10 : 16, dt);
     this.aimHold -= dt;
     if (this.aimHold <= 0) {
       if (this.mouseActive) this.aimGoal = this.mouseYaw;
@@ -5366,11 +6857,13 @@ class Player {
 
     // ---- 이동 이펙트 ----
     const moveK = Math.min(1, spd / st.speed);
-    if (legs === 'hover' && Math.random() < 0.6) fx.trail.emit({ position: [this.x + (Math.random() - 0.5) * 0.8, 0.15, this.z + (Math.random() - 0.5) * 0.8], velocity: [-this.vx * 0.2, 0.2, -this.vz * 0.2], life: 0.25, size: 2, sizeEnd: 1, color: [0.6, 0.95, 1], colorEnd: [0.2, 0.5, 1], emissive: 1, gravity: 0 });
-    if (legs === 'treads' && moveK > 0.3 && Math.random() < 0.35) fx.dust(this.x - Math.sin(this.yaw) * 0.7, this.z - Math.cos(this.yaw) * 0.7, 1);
+    // 제트: 등 아래로 추진 화염
+    if (anim === 'jet' && Math.random() < 0.7) fx.trail.emit({ position: [this.x - Math.sin(this.yaw) * 0.5 * this.size + (Math.random() - 0.5) * 0.3, 0.5 * this.size, this.z - Math.cos(this.yaw) * 0.5 * this.size + (Math.random() - 0.5) * 0.3], velocity: [-Math.sin(this.yaw) * 4, -1.5, -Math.cos(this.yaw) * 4], life: 0.18, size: 3, sizeEnd: 1, color: [1, 0.9, 0.6], colorEnd: [1, 0.4, 0.15], emissive: 1, gravity: 0 });
+    if (anim === 'hover' && Math.random() < 0.6) fx.trail.emit({ position: [this.x + (Math.random() - 0.5) * 0.8, 0.15, this.z + (Math.random() - 0.5) * 0.8], velocity: [-this.vx * 0.2, 0.2, -this.vz * 0.2], life: 0.25, size: 2, sizeEnd: 1, color: [0.6, 0.95, 1], colorEnd: [0.2, 0.5, 1], emissive: 1, gravity: 0 });
+    if ((anim === 'roll' || anim === 'wheel') && moveK > 0.3 && Math.random() < 0.35) fx.dust(this.x - Math.sin(this.yaw) * 0.7, this.z - Math.cos(this.yaw) * 0.7, 1);
     const prevPhase = this.anim.phase;
     this.animate(dt, moveK);
-    if ((legs === 'walker' || legs === 'reverse' || legs === 'quad') && Math.floor(prevPhase / Math.PI) !== Math.floor(this.anim.phase / Math.PI) && moveK > 0.3) fx.dust(this.x, this.z, 2);
+    if (anim === 'walk' && Math.floor(prevPhase / Math.PI) !== Math.floor(this.anim.phase / Math.PI) && moveK > 0.3) fx.dust(this.x, this.z, 2);
     this.updateOverdrive(dt);
     this.updateGhosts(dt);
   }
@@ -5387,6 +6880,7 @@ class Player {
     this.recoil = Math.max(0, (this.recoil || 0) - dt * 5);
     m.body.rotation[0] += this.dashLean * 0.55;
     m.upper.rotation[0] = -this.recoil * 0.5;
+    m.upper.position[1] = this.upperY;
     m.upper.position[2] = -this.recoil * 0.12;
     this.applyModePose?.(dt);
     for (const w of g.weapons.list) {
@@ -5539,28 +7033,35 @@ const { MODULES, SLOT_IDS, partPreview } = __m["game/parts.js"];
 const { STAT_UPS } = __m["game/player.js"];
 const { pixURL } = __m["game/icons.js"];
 
-const MAX_WEAPONS = 5;
+// 시작 무기 1 + 런 무기 5 (판넬 비트 포함)
+const MAX_WEAPONS = 6;
 
-// 무기를 놓을 빈 슬롯 (선호 슬롯 우선)
+// 무기를 놓을 빈 슬롯 (선호 슬롯 우선). 팔 무기 외에는 왼팔(armL)도 마지막 자리로 쓴다
+const SLOT_ORDER = {
+  arm: ['armR', 'armL', 'shR', 'shL'],
+  shoulder: ['shR', 'shL', 'hpR', 'hpL', 'back', 'armL'],
+  hip: ['hpR', 'hpL', 'shR', 'shL', 'back', 'armL'],
+  back: ['back', 'hpL', 'hpR', 'shL', 'shR', 'armL'],
+};
 function freeSlot(weapons, prefer) {
   const used = new Set(weapons.map((w) => w.slot));
-  const order = prefer === 'back' ? ['back'] : prefer === 'shoulder' ? ['shR', 'shL', 'armL'] : ['armR', 'armL', 'shR', 'shL'];
-  return order.find((s) => !used.has(s) && SLOT_IDS.includes(s)) || null;
+  return (SLOT_ORDER[prefer] || SLOT_ORDER.arm).find((s) => !used.has(s) && SLOT_IDS.includes(s)) || null;
 }
-const SLOT_NAMES = { armR: '오른팔', armL: '왼팔', shR: '오른 어깨', shL: '왼 어깨', back: '등' };
+const SLOT_NAMES = { armR: '오른팔', armL: '왼팔', shR: '오른 어깨', shL: '왼 어깨', back: '등', hpR: '오른 허리', hpL: '왼 허리' };
 
 function rollChoices(game, kind = 'any', n = 3) {
   const p = game.player, ws = game.weapons.list, mods = p.loadout.modules, ups = p.ups;
   const pool = [];
-  const armed = ws.filter((w) => w.id !== 'funnel').length;
   if (kind !== 'system') {
+    // 새 무기 후보: 시작 무기(격납고 전용)와 노획 무기(적에게서만)는 빼고, 후보가 많아도 카드가 무기로 도배되지 않게 가중치를 나눈다
+    const fresh = ws.length < MAX_WEAPONS ? Object.keys(WEAPONS).filter((id) => !WEAPONS[id].starter && !WEAPONS[id].salvage && !ws.some((w) => w.id === id)) : [];
+    const freshW = Math.min(3.2, 18 / (fresh.length || 1));
     for (const [id, W] of Object.entries(WEAPONS)) {
       const own = ws.find((w) => w.id === id);
       if (own) { if (own.level < MAX_LEVEL) pool.push({ kind: 'weapon', id, level: own.level + 1, w: 5, name: W.name, tag: W.tag, desc: W.levels[own.level].up, slot: own.slot }); }
-      else {
-        if (W.salvage) continue; // 노획 무기는 적에게서만
+      else if (fresh.includes(id)) {
         const slot = freeSlot(ws, W.prefer);
-        if ((id === 'funnel' ? !ws.some((w) => w.slot === 'back') : armed < MAX_WEAPONS) && slot) pool.push({ kind: 'weapon', id, level: 1, w: 3.2, name: W.name, tag: W.tag, desc: W.desc, isNew: true, slot });
+        if (slot) pool.push({ kind: 'weapon', id, level: 1, w: freshW, name: W.name, tag: W.tag, desc: W.desc, isNew: true, slot });
       }
     }
     for (const [id, M] of Object.entries(MODULES)) {
@@ -5591,7 +7092,7 @@ function rollChoices(game, kind = 'any', n = 3) {
   while (out.length < n) out.push({ kind: 'heal', id: 'repair', level: 0, name: '긴급 수리', tag: 'REPAIR', desc: '체력 50% 회복' });
   for (const c of out) {
     if (c.kind === 'evolve') { c.where = '무기 진화'; continue; }
-    c.where = c.kind === 'weapon' ? `${SLOT_NAMES[c.slot] || ''}${c.slot?.startsWith('arm') ? ', 직접 조작' : ', 자동 사격'}` : c.kind === 'module' ? '몸통 부품' : c.kind === 'stat' ? '시스템 튜닝' : '정비';
+    c.where = c.kind === 'weapon' ? `${SLOT_NAMES[c.slot] || ''}${c.slot?.startsWith('arm') && WEAPONS[c.id].prefer === 'arm' ? ', 직접 조작' : ', 자동 사격'}` : c.kind === 'module' ? '몸통 부품' : c.kind === 'stat' ? '시스템 튜닝' : '정비';
   }
   return out;
 }
@@ -5654,6 +7155,7 @@ __m["game/rooms.js"] = (() => {
 //  입구는 항상 가까운 쪽, 출구는 먼 쪽 → 플레이어는 화면 위로 전진한다 (하데스식).
 
 const { Geometry, Mesh, Material, fbm, rng } = __m["engine/index.js"];
+const { MIDBOSS_KINDS } = __m["game/midbosses.js"];
 
 const ZONES = {
   desert: {
@@ -5702,6 +7204,25 @@ class Rooms {
   }
 
   get last() { return RUN_ZONES.length - 1; }
+
+  // ---- 난이도 ----
+  // 플레이어 전력 지수 (시작 = 1): 레벨, 무기 수/레벨/진화, 화력 배율
+  power() {
+    const g = this.game, ws = g.weapons?.list || [];
+    const wp = ws.reduce((s, w) => s + (w.level || 1) + (w.evo ? 4 : 0), 0);
+    return Math.max(1, (1 + ((g.level || 1) - 1) * 0.05 + Math.max(0, wp - 1) * 0.08) * (g.player?.stats?.dmgMul || 1));
+  }
+  // 깊이 × 전력 → 적 체력/피해/물량 배율. 늦은 방에서 강해진 만큼 적도 따라온다 (떼거리는 덜 단단해지고 더 많아진다)
+  scale() {
+    const d = Math.max(0, this.depth), pw = this.power();
+    return {
+      pw,
+      hp: (1 + d * 0.45) * Math.pow(pw, 0.65),
+      swarmHp: (1 + d * 0.35) * Math.pow(pw, 0.3),
+      dmg: 1 + d * 0.12 + (pw - 1) * 0.05,
+      dens: Math.min(2.4, 0.9 + d * 0.06 + (pw - 1) * 0.15),
+    };
+  }
 
   newRun() { this.depth = -1; this.path = []; this.seed = (Math.random() * 1e9) | 0; }
 
@@ -5855,7 +7376,8 @@ class Rooms {
     this.waveT = 1.2;
     // 물량전: 제한 시간 동안 버티며 쓸어버리기
     this.duration = boss ? 0 : (reward === 'elite' ? 60 : 34 + depth * 5);
-    this.roomT = 0; this.acc = 0; this.marks = new Set(); this.bossOn = false; this.guardOn = false;
+    this.roomT = 0; this.acc = 0; this.marks = new Set(); this.bossOn = false; this.guardOn = false; this.waitMid = false;
+    this.midAt = ['part', 'system', 'supply', 'xp', 'elite'].includes(reward) ? this.planMids() : [];
     if (reward === 'guardian') { this.duration = 0; this.waveT = 1.5; }
     if (reward === 'workshop' || reward === 'start') { this.phase = 'clear'; this.waves = []; }
     if (reward === 'workshop') this.spawnPrize();
@@ -5872,39 +7394,63 @@ class Rooms {
 
   // 적 흐름: 초당 예산만큼 무리를 방 가장자리에 소환
   stream(dt, mul) {
-    const en = this.game.enemies, d = this.depth;
-    if (en.list.length > 380) return;
-    this.acc += dt * (3.6 + d * 1.2) * mul;
+    const en = this.game.enemies, d = this.depth, K = en.k;
+    if (en.list.length > 400) return;
+    this.acc += dt * (3.8 + d * 1.4) * mul * K.dens;
     const R = Math.random;
     while (this.acc > 0) {
       const r = R();
       const pt = this.spawnSpot(9);
       if (!pt) { this.acc = 0; break; }
-      if (d >= 3 && r < 0.05) { en.queue('brute', pt[0], pt[1], false, 0); this.acc -= 7; }
-      else if (d >= 2 && r < 0.16) { en.queue('tank', pt[0], pt[1], false, 0); this.acc -= 3; }
-      else if (d >= 2 && r < 0.3) { const n = 2 + ((R() * 2) | 0); en.pack('bomber', pt[0], pt[1], n, 1.2); this.acc -= n * 1.2; }
-      else if (r < 0.48) { const n = 3 + ((R() * 3) | 0); en.pack('drone', pt[0], pt[1], n, 1.4); this.acc -= n; }
-      else { const n = 8 + ((R() * 6) | 0) + d; en.pack('mite', pt[0], pt[1], n, 2); this.acc -= n * 0.4; }
+      if (d >= 3 && r < 0.06) { en.queue('brute', pt[0], pt[1], false, 0); this.acc -= 7; }
+      else if (d >= 3 && r < 0.12) { const n = d >= 6 ? 2 : 1; en.pack('spinner', pt[0], pt[1], n, 1.2); this.acc -= n * 3.5; }
+      else if (d >= 1 && r < 0.22) { const n = d >= 5 ? 2 : 1; en.pack('tank', pt[0], pt[1], n, 1.4); this.acc -= n * 3; }
+      else if (d >= 1 && r < 0.36) { const n = 2 + ((R() * (2 + d * 0.3)) | 0); en.pack('bomber', pt[0], pt[1], n, 1.2); this.acc -= n * 1.2; }
+      else if (r < 0.54) { const n = 3 + ((R() * 3) | 0) + (d >> 1); en.pack('drone', pt[0], pt[1], n, 1.4); this.acc -= n; }
+      else { const n = 8 + ((R() * 6) | 0) + d * 1.5; en.pack('mite', pt[0], pt[1], n | 0, 2); this.acc -= n * 0.4; }
     }
   }
   surge() {
     const g = this.game, en = g.enemies, p = g.player, d = this.depth;
     g.ui.banner('대규모 접근!', true);
     g.sfx.play('alarm');
-    const packs = 10, n = 5 + Math.floor(d * 0.8);
+    const packs = 10 + Math.min(6, d), n = Math.round((5 + d * 1.1) * Math.min(1.6, en.k.dens));
     for (let i = 0; i < packs; i++) {
       const a = (i / packs) * Math.PI * 2 + Math.random() * 0.3;
       const x = Math.max(-this.hx + 1, Math.min(this.hx - 1, p.x + Math.cos(a) * 9)), z = Math.max(-this.hz + 1, Math.min(this.hz - 1, p.z + Math.sin(a) * 9));
-      en.pack(d >= 2 && i % 3 === 0 ? 'bomber' : 'mite', x, z, n, 1.4, i * 0.05);
+      // 깊은 방: 포위망 사이사이에 포격 기체
+      if (d >= 3 && i % 4 === 2) en.pack(d >= 5 && i % 8 === 2 ? 'spinner' : 'tank', x, z, 1, 0.5, i * 0.05);
+      else en.pack(d >= 2 && i % 3 === 0 ? 'bomber' : 'mite', x, z, n, 1.4, i * 0.05);
     }
   }
   spawnElite() {
     const en = this.game.enemies, d = this.depth;
     const pt = this.spawnSpot(8);
     if (!pt) return;
-    const type = d >= 3 && Math.random() < 0.5 ? 'brute' : d >= 1 && Math.random() < 0.6 ? 'tank' : 'drone';
+    const r = Math.random();
+    const type = d >= 4 && r < 0.25 ? 'spinner' : d >= 3 && r < 0.6 ? 'brute' : d >= 1 && r < 0.8 ? 'tank' : 'drone';
     en.queue(type, pt[0], pt[1], true, 0);
-    this.game.ui.toast('정예 기체 출현! 처치하면 부품 획득');
+  }
+  // 중간 보스: 방 중반에 강하. 깊을수록 확률 ↑, 깊은 방은 둘
+  planMids() {
+    const d = this.depth, r = this.reward, R = rng(this.seed + d * 913);
+    const out = [];
+    if (r === 'elite') out.push(0.3, 0.65);
+    else if (d >= 6) out.push(0.35, 0.7);
+    else if (d >= 3) out.push(0.45);
+    else if (d >= 1 && R() < 0.6) out.push(0.5);
+    if (d >= 4 && r !== 'elite' && R() < 0.35 && out.length < 2) out.push(0.75);
+    return out;
+  }
+  spawnMid() {
+    const en = this.game.enemies, p = this.game.player;
+    const kinds = this.depth >= 3 ? MIDBOSS_KINDS : ['warden', 'hive', 'mortar'];
+    const pool = kinds.filter((k) => !en.mids.some((m) => m.kind === k)), kind = pool[(Math.random() * pool.length) | 0] || kinds[0];
+    // 플레이어 반대편 쪽, 적당히 떨어진 곳
+    let x = -Math.sign(p.x || 1) * this.hx * 0.45, z = -Math.sign(p.z || 1) * this.hz * 0.45;
+    const pt = this.spawnSpot(8);
+    if (Math.hypot(x - p.x, z - p.z) < 7 && pt) [x, z] = pt;
+    en.spawnMid(kind, x, z);
   }
 
   spawnPrize() {
@@ -5967,7 +7513,7 @@ class Rooms {
       } else if (this.reward === 'boss') {
         this.waveT -= dt;
         if (this.waves.length && this.waveT <= 0) { this.waves.shift(); en.spawnBoss(0, -2); this.bossOn = true; }
-        if (en.boss) this.stream(dt, 0.45);
+        if (en.boss) this.stream(dt, 0.35);
         if (this.bossOn && !en.boss && !this.waves.length) {
           this.bossOn = false;
           en.detonateAll();
@@ -5976,14 +7522,17 @@ class Rooms {
         }
       } else {
         this.roomT += dt;
-        const k = this.roomT / this.duration;
-        this.stream(dt, 0.55 + 0.9 * k);
+        const k = Math.min(1, this.roomT / this.duration), d = this.depth, midOn = en.mids.length > 0;
+        this.stream(dt, (0.6 + 0.95 * k) * (midOn ? 0.5 : 1)); // 중간 보스가 있으면 물량은 절반 (탄막에 집중)
         // 대규모 접근: 사방에서 벌레 떼가 원형으로 몰려온다
-        for (const m of [0.38, 0.78]) if (k >= m && !this.marks.has(m)) { this.marks.add(m); this.surge(); }
+        for (const m of d >= 4 ? [0.3, 0.58, 0.85] : [0.38, 0.78]) if (k >= m && !this.marks.has(m)) { this.marks.add(m); this.surge(); }
         // 정예 기체 (처치하면 부품 상자)
-        const eliteAt = this.reward === 'elite' ? [0.15, 0.35, 0.55, 0.75] : [0.5];
+        const eliteAt = this.reward === 'elite' ? [0.15, 0.35, 0.55, 0.75] : d >= 6 ? [0.2, 0.5, 0.8] : d >= 3 ? [0.3, 0.65] : [0.5];
         for (const m of eliteAt) if (k >= m && !this.marks.has('e' + m)) { this.marks.add('e' + m); this.spawnElite(); }
-        if (k >= 1) {
+        for (const m of this.midAt) if (k >= m && !this.marks.has('m' + m)) { this.marks.add('m' + m); this.spawnMid(); }
+        // 시간이 끝나도 중간 보스가 남아 있으면 쓰러뜨릴 때까지 계속
+        if (k >= 1 && midOn) { if (!this.waitMid) { this.waitMid = true; g.ui.banner('중간 보스를 격파하라!', true); } }
+        else if (k >= 1) {
           this.phase = 'reward';
           en.detonateAll();
           g.ui.banner('구역 제압!');
@@ -6421,11 +7970,11 @@ const KEY = 'mf-meta';
 
 // 해금 가격 (0 = 처음부터 열림)
 const PRICES = {
-  legs: { walker: 0, reverse: 60, treads: 120, quad: 150, hover: 220 },
-  frame: { standard: 0, light: 80, heavy: 120, sniper: 160 },
-  head: { vfin: 0, mono: 50, visor: 90, horned: 130 },
+  legs: { walker: 0, reverse: 60, treads: 120, quad: 150, hover: 220, wheels: 140, stomper: 180, spider: 200, tankbase: 240, jet: 260 },
+  frame: { standard: 0, light: 80, heavy: 120, sniper: 160, egg: 100, ninja: 140, tank: 180, fighter: 200, fortress: 240 },
+  head: { vfin: 0, mono: 50, visor: 90, horned: 130, dome: 70, periscope: 80, canopy: 110, samurai: 150, skull: 170 },
   weapon: { saber: 0, mg: 0, shotgun: 90, laser: 150, missile: 180 },
-  paint: { rx: 0, crimson: 0, olive: 30, midnight: 40, sakura: 50 },
+  paint: { rx: 0, crimson: 0, olive: 30, midnight: 40, sakura: 50, desert: 40, ace: 60, stealth: 70, toxic: 60, gold: 120 },
 };
 
 // 연구 (영구 강화): 레벨마다 가격 상승
@@ -6489,7 +8038,7 @@ const { Shots, WeaponSystem, WEAPONS, weaponName } = __m["game/weapons.js"];
 const { Enemies } = __m["game/enemies.js"];
 const { Pickups } = __m["game/pickups.js"];
 const { Player } = __m["game/player.js"];
-const { rollChoices, applyChoice, freeSlot, cardImage } = __m["game/upgrades.js"];
+const { rollChoices, applyChoice, freeSlot, cardImage, MAX_WEAPONS } = __m["game/upgrades.js"];
 const { MODULES, LEGS, FRAMES, HEADS } = __m["game/parts.js"];
 const { Rooms, RUN_ZONES, ZONES } = __m["game/rooms.js"];
 const { Installer } = __m["game/install.js"];
@@ -6544,6 +8093,7 @@ class Game {
     // 잠긴 부품이 선택돼 있으면 기본값으로
     for (const k of Object.keys(PRICES)) if (!this.meta.isUnlocked(k, this.selection[k])) this.selection[k] = Object.keys(PRICES[k])[0];
     for (const [k, T] of [['legs', LEGS], ['frame', FRAMES], ['head', HEADS], ['weapon', WEAPONS]]) if (!T[this.selection[k]]) this.selection[k] = Object.keys(T)[0];
+    if (!WEAPONS[this.selection.weapon].starter) this.selection.weapon = 'saber';
     this.best = store.get('best2', { depth: 0, win: false });
     this.setSelection(this.selection);
     this.hangarLighting();
@@ -6586,6 +8136,7 @@ class Game {
     this.loadout = { legs: sel.legs, frame: sel.frame, head: sel.head, paint: sel.paint, weapons: [{ id: sel.weapon, slot: freeSlot([], W.prefer) }], modules: {} };
     this.weapons.list = this.loadout.weapons.map((w) => ({ ...w, level: 1, cd: 0.4 }));
     this.player.reset(this.loadout);
+    this.weapons.syncBits();
     this.player.buildFlash = 0.3;
     this.player.yaw = this.player.aimYaw = this.turn || 0.6;
   }
@@ -6747,17 +8298,21 @@ class Game {
   }
 
   // 노획 부품 줍기 → 무기/모듈로 장착 (이미 있으면 레벨 업, 못 달면 경험치로 분해)
-  salvageInstall(kind, id, from) {
+  // 노획 부품을 장착할 수 있으면 카드 정보, 꽉 찼으면 null. pending: 바닥에 이미 떨어져 있는 같은 부품 수
+  salvageChoice(kind, id, pending = 0) {
     const p = this.player, ws = this.weapons.list;
-    let c = null;
     if (kind === 'weapon') {
       const W = WEAPONS[id], own = ws.find((w) => w.id === id);
-      if (own) { if (own.level < W.levels.length) c = { kind: 'weapon', id, level: own.level + 1, name: W.name }; }
-      else { const slot = freeSlot(ws, W.prefer); if (slot && ws.filter((w) => w.id !== 'funnel').length < 5) c = { kind: 'weapon', id, level: 1, isNew: true, slot, name: W.name }; }
-    } else {
-      const M = MODULES[id], lv = p.loadout.modules[id] || 0;
-      if (lv < M.max) c = { kind: 'module', id, level: lv + 1, isNew: !lv, name: M.name };
+      if (own) return !own.evo && own.level + pending < W.levels.length ? { kind: 'weapon', id, level: own.level + 1, name: W.name } : null;
+      const slot = freeSlot(ws, W.prefer);
+      return !pending && slot && ws.length < MAX_WEAPONS ? { kind: 'weapon', id, level: 1, isNew: true, slot, name: W.name } : null;
     }
+    const M = MODULES[id], lv = p.loadout.modules[id] || 0;
+    return lv + pending < M.max ? { kind: 'module', id, level: lv + 1, isNew: !lv, name: M.name } : null;
+  }
+  salvageInstall(kind, id, from) {
+    const p = this.player;
+    const c = this.salvageChoice(kind, id);
     if (!c) { this.addXp(this.xpNeed * 0.35); p.heal(p.stats.maxHp * 0.15); this.ui.toast('장착할 자리가 없어 분해: 경험치 + 수리'); this.sfx.play('crate'); return; }
     const r = applyChoice(this, c);
     this.state = 'install';
@@ -6817,6 +8372,7 @@ class Game {
     for (let i = 0; i < 10; i++) this.fx.chunk(p.x, 1.2, p.z, p.mech.paint.main, 9);
     p.mech.root.visible = false;
     for (const b of this.weapons.bits) b.mesh.visible = false;
+    this.weapons.hideOrbitals();
     this.slowMo(1.6);
     this.saveBest(false);
   }
@@ -6884,7 +8440,7 @@ class Game {
       this.shots.update(simDt);
       this.pickups.update(simDt);
     }
-    if (this.state === 'install') { this.installer.update(dt); p.animate(dt, 0); this.weapons.updateBits(dt); }
+    if (this.state === 'install') { this.installer.update(dt); p.animate(dt, 0); this.weapons.updateBits(dt); this.weapons.updateOrbitals(dt, false); }
     if (this.state === 'dying') { this.dyingT += dt; if (this.dyingT > 1.8) { this.state = 'over'; this.ui.bossBar(0); this.ui.result(this.resultData(false)); } }
     if (this.state === 'play' && this.pendingCrates > 0 && this.hitStopT <= 0) { this.pendingCrates--; this.offerCards('part', '정예 부품 노획'); this.cardKind = 'crate'; }
     if (this.state === 'play' && this.pendingLevels > 0 && this.hitStopT <= 0) { this.cardKind = 'level'; this.offerCards('any'); this.cardKind = 'level'; }
@@ -6942,6 +8498,7 @@ class Game {
     if (o.width !== c.width || o.height !== c.height) { o.width = c.width; o.height = c.height; }
     ctx.clearRect(0, 0, o.width, o.height);
     const px = Math.max(2, Math.round(2 * this.engine.dpr));
+    this.pickups.drawLabels(ctx, (q) => this.project(q), px);
     this.fx.drawNumbers(ctx, (q) => { const s = this.project(q); return s && s[0] > -50 && s[1] > -50 && s[0] < c.width + 50 && s[1] < c.height + 50 ? s : null; }, px);
   }
 
@@ -6958,6 +8515,15 @@ class Game {
       level(n) { for (let i = 0; i < n; i++) g.addXp(g.xpNeed - g.xp + 0.01); },
       boss() { g.rooms.depth = g.rooms.last - 1; g.nextRoom('boss', 'E'); },
       guardian(depth = 1) { g.rooms.depth = depth; g.nextRoom('guardian', 'E'); },
+      // 무기 바로 달기/올리기: weapon('saw', 5), weapon('saw', 'evo')
+      weapon(id, lv = 1) {
+        let w = g.weapons.get(id);
+        if (!w) { const slot = freeSlot(g.weapons.list, WEAPONS[id].prefer); if (!slot) return 'no slot'; w = { id, level: 1, slot, cd: 0.3 }; g.weapons.list.push(w); }
+        if (lv === 'evo') { w.level = MAX_LEVEL; w.evo = !!EVOLUTIONS[id]; } else w.level = Math.min(MAX_LEVEL, lv);
+        g.player.loadout.weapons = g.weapons.list.map((q) => ({ id: q.id, slot: q.slot, evo: q.evo }));
+        g.player.rebuild(true); g.weapons.syncBits();
+        return w.slot;
+      },
     };
   }
 }
@@ -7088,7 +8654,8 @@ const $ = (id) => document.getElementById(id);
 const fmt = (t) => `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
 const css = (c) => `rgb(${c.map((v) => Math.round(v * 255)).join(',')})`;
 const KIND_KO = { weapon: '무기', module: '몸통 부품', stat: '시스템', heal: '정비' };
-const HANGAR_WEAPONS = ['saber', 'mg', 'shotgun', 'laser', 'missile'];
+// 격납고 주무장 = 시작 무기 (런 중에는 고른 것만 강화 카드로 나온다)
+const HANGAR_WEAPONS = ['saber', 'mg', 'shotgun', 'laser', 'missile', 'flamer', 'rod'];
 
 function start() {
   applySkin();
@@ -7336,10 +8903,10 @@ function start() {
     if (onHover) { b.addEventListener('pointerenter', (e) => { if (e.pointerType === 'mouse') onHover(true); }); b.addEventListener('pointerleave', () => onHover(false)); }
     return b;
   };
-  // 부위 탭
+  // 부위 탭 (부품이 많아져서 머리/프레임도 5열)
   const TABS = [
-    { key: 'head', label: '머리', table: HEADS, ids: Object.keys(HEADS), four: true },
-    { key: 'frame', label: '프레임', table: FRAMES, ids: Object.keys(FRAMES), four: true },
+    { key: 'head', label: '머리', table: HEADS, ids: Object.keys(HEADS) },
+    { key: 'frame', label: '프레임', table: FRAMES, ids: Object.keys(FRAMES) },
     { key: 'legs', label: '다리', table: LEGS, ids: Object.keys(LEGS) },
     { key: 'weapon', label: '주무장', table: WEAPONS, ids: HANGAR_WEAPONS },
     { key: 'paint', label: '도색', table: PAINTS, ids: HANGAR_PAINTS },
@@ -7492,6 +9059,9 @@ function start() {
       if (locked) { el.classList.add('locked'); if (M.scrap < M.price(T.key, id)) el.classList.add('cant'); el.title = `${T.table[id].name}: 고철 ${M.price(T.key, id)}으로 해금`; }
       box.appendChild(el);
     }
+    // 폰 가로(한 줄 스크롤)일 때 고른 부품이 보이게 가운데로
+    const on = box.querySelector('[aria-pressed="true"]');
+    if (on && box.scrollWidth > box.clientWidth) { const r = on.getBoundingClientRect(), bb = box.getBoundingClientRect(); box.scrollLeft += r.left - bb.left - (bb.width - r.width) / 2; }
     showDesc(sel[T.key]);
     renderStats(null);
     const b = game.best;
