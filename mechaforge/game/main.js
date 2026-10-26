@@ -275,7 +275,7 @@ export class Game {
     if (kind === 'weapon') {
       const W = WEAPONS[id], own = ws.find((w) => w.id === id);
       if (own) { if (own.level < W.levels.length) c = { kind: 'weapon', id, level: own.level + 1, name: W.name }; }
-      else { const slot = freeSlot(ws, W.prefer); if (slot && ws.length < MAX_WEAPONS) c = { kind: 'weapon', id, level: 1, isNew: true, slot, name: W.name }; }
+      else { const slot = freeSlot(ws, W.prefer); if (slot && ws.filter((w) => w.id !== 'funnel').length < 5) c = { kind: 'weapon', id, level: 1, isNew: true, slot, name: W.name }; }
     } else {
       const M = MODULES[id], lv = p.loadout.modules[id] || 0;
       if (lv < M.max) c = { kind: 'module', id, level: lv + 1, isNew: !lv, name: M.name };
