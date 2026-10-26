@@ -329,13 +329,14 @@ export class Shots {
     this.wellCore = sc.add(new InstancedMesh(Geometry.icosphere(0.32, 1, [0.04, 0.02, 0.08]), new Material({ castShadow: false, outline: false }), 8));
     this.lobMesh = sc.add(new InstancedMesh(shellGeo(), new Material({ castShadow: false }), 16));
   }
-  mine(o) { if (this.mines.length >= 36) this.mines.shift(); this.mines.push({ t: 0, life: 14, fuse: -1, ...o }); }
-  disc(o) { if (this.discs.length < 16) this.discs.push({ t: 0, back: false, hits: new Map(), ...o }); }
-  well(o) { if (this.wells.length < 8) this.wells.push({ t: 0, tick: 0, ...o }); }
-  lob(o) { if (this.lobs.length < 16) this.lobs.push({ t: 0, ...o }); }
+  // src: 쏜 무기 id (런 통계용, runhooks.js 의 game.dmgSrc). 나중에 맞힐 때 다시 dmgSrc 로 돌려놓는다
+  mine(o) { if (this.mines.length >= 36) this.mines.shift(); this.mines.push({ t: 0, life: 14, fuse: -1, src: this.game.dmgSrc, ...o }); }
+  disc(o) { if (this.discs.length < 16) this.discs.push({ t: 0, back: false, hits: new Map(), src: this.game.dmgSrc, ...o }); }
+  well(o) { if (this.wells.length < 8) this.wells.push({ t: 0, tick: 0, src: this.game.dmgSrc, ...o }); }
+  lob(o) { if (this.lobs.length < 16) this.lobs.push({ t: 0, src: this.game.dmgSrc, ...o }); }
 
   // ---- 플레이어 탄 ----
-  add(o) { if (this.list.length < 480) this.list.push({ pierce: 0, knock: 2, r: 0.25, life: 1, hit: null, ...o }); }
+  add(o) { if (this.list.length < 480) this.list.push({ pierce: 0, knock: 2, r: 0.25, life: 1, hit: null, src: this.game.dmgSrc, ...o }); }
 
   enemyShot(x, y, z, vx, vz, dmg, kind = 'shell') {
     if (this.enemyList.length >= 290) return;
@@ -364,6 +365,7 @@ export class Shots {
     let nb = 0, nm = 0;
     for (let i = this.list.length - 1; i >= 0; i--) {
       const s = this.list[i];
+      g.dmgSrc = s.src;
       s.life -= dt;
       if (s.homing) {
         if (!s.target || s.target.dead || s.target.hp <= 0) s.target = en.nearest(s.x, s.z, 14);
@@ -453,6 +455,7 @@ export class Shots {
     let n = 0;
     for (let i = this.mines.length - 1; i >= 0; i--) {
       const m = this.mines[i];
+      g.dmgSrc = m.src;
       m.t += dt; m.life -= dt;
       const k = Math.min(1, m.t / 0.35), x = m.x0 + (m.x - m.x0) * k, z = m.z0 + (m.z - m.z0) * k, y = k < 1 ? m.y0 * (1 - k) + Math.sin(k * Math.PI) * 1.4 : 0.02;
       if (m.t > 0.5 && m.fuse < 0) en.each(m.x, m.z, 0.9, () => { m.fuse = 0.05; });
@@ -471,6 +474,7 @@ export class Shots {
     n = 0;
     for (let i = this.discs.length - 1; i >= 0; i--) {
       const d = this.discs[i];
+      g.dmgSrc = d.src;
       d.t += dt;
       if (!d.back) { const k = Math.exp(-2.6 * dt); d.vx *= k; d.vz *= k; if (d.t > 0.55) d.back = true; }
       else {
@@ -496,6 +500,7 @@ export class Shots {
     n = 0;
     for (let i = this.wells.length - 1; i >= 0; i--) {
       const w = this.wells[i];
+      g.dmgSrc = w.src;
       w.t += dt; w.tick -= dt;
       const tick = w.tick <= 0;
       if (tick) w.tick = 0.25;
@@ -525,6 +530,7 @@ export class Shots {
     n = 0;
     for (let i = this.lobs.length - 1; i >= 0; i--) {
       const L = this.lobs[i];
+      g.dmgSrc = L.src;
       L.t += dt;
       const k = Math.min(1, L.t / L.T);
       const x = L.x + (L.tx - L.x) * k, z = L.z + (L.tz - L.z) * k, y = L.y + (0.3 - L.y) * k + Math.sin(k * Math.PI) * 5.5;
@@ -1150,6 +1156,7 @@ export class WeaponSystem {
     const saw = this.get('saw'), tur = this.get('turret');
     let n = 0;
     if (saw && p.mech.root.visible) {
+      g.dmgSrc = 'saw';
       const L = lvOf(saw), R0 = L.radius * st.areaMul, big = L.big || 1;
       saw.ang = (saw.ang || 0) + L.spin * Math.sqrt(st.rateMul) * dt;
       const rings = L.ring2 ? [[L.blades / 2, R0, 1], [L.blades / 2, R0 * 0.55, -1.4]] : [[L.blades, R0, 1]];
@@ -1170,6 +1177,7 @@ export class WeaponSystem {
 
     const nb = tur && p.mech.root.visible ? lvOf(tur).beams : 0;
     if (nb) {
+      g.dmgSrc = 'turret';
       const L = lvOf(tur), len = L.len * st.rangeMul, mz = p.mech.muzzle(tur.slot);
       tur.ang = (tur.ang || 0) + L.spin * Math.sqrt(st.rateMul) * dt;
       if (live) en.each(p.x, p.z, len, (e) => {

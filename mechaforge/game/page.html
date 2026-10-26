@@ -207,14 +207,16 @@
   .logo { margin: 0; font-family: var(--font-tech); font-weight: 800; font-size: 28px; line-height: 1; letter-spacing: .08em; text-shadow: 0 2px 0 #000; }
   .logo span { color: var(--accent); }
   .sub { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
-  #tabs { display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px; }
+  #tabs { display: grid; grid-template-columns: repeat(8, 1fr); gap: 3px; }
   .opt.locked img, .opt.locked .sw { filter: grayscale(1) brightness(.45); }
   .opt.locked b { color: var(--accent); }
   .opt.locked.cant b { color: var(--hp); }
-  .opt small { font-family: var(--font-tech); font-size: 10px; color: var(--muted); }
+  .opt.locked.reward b { color: var(--pink); }
+  .opt small { font-family: var(--font-tech); font-size: 10px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
   .opt .rlv { display: flex; gap: 2px; } .opt .rlv i { width: 6px; height: 6px; background: #262833; display: block; } .opt .rlv i.on { background: var(--xp); }
   #scrapline { font-size: 14px; color: var(--accent); white-space: nowrap; }
-  .hhead .hright { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; max-width: 300px; flex: none; }
+  .hhead > div:first-child { flex: 1 1 auto; min-width: 0; }
+  .hhead .hright { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; flex: 0 1 300px; min-width: 0; }
   .hhead .hright #scrapline { width: 100%; text-align: right; }
   #resstats .stat:first-child b { color: var(--accent); }
   .tab { border-width: 12px; border-image: var(--plate-flat) var(--sl) fill / 12px repeat; padding: 0; display: grid; justify-items: center; gap: 1px; min-width: 0; margin: 0; }
@@ -273,7 +275,9 @@
   #chipline { font-size: 10px; color: var(--muted); }
   @media (max-height: 520px) { .strow { grid-template-columns: 36px 1fr auto; padding: 3px 6px; } .strow img { width: 36px; height: 36px; } #station .note { display: none; } .sets { grid-template-columns: repeat(4, 1fr); } }
   .sndbtn { padding: 6px 10px; font-size: 12px; white-space: nowrap; flex: none !important; min-width: 0 !important; }
-  #launch { font-size: 18px; min-height: 54px; position: sticky; bottom: 0; z-index: 1; }
+  #launchrow { display: flex; gap: 6px; position: sticky; bottom: 0; z-index: 1; }
+  #launch { font-size: 18px; min-height: 54px; flex: 1; }
+  #achbtn { flex: none; padding: 0 12px; font-size: 13px; white-space: nowrap; }
 
   /* ---- 업그레이드 카드 ---- */
   #levelup .modal { max-width: 900px; padding: 0; }
@@ -311,6 +315,32 @@
   .stat span { font-size: 10px; color: var(--muted); }
   .stat b { font-family: var(--font-tech); font-size: 18px; color: var(--cyan); font-weight: 700; text-shadow: 0 0 6px rgba(95,224,255,.35); }
   #resparts { white-space: pre-line; font-size: 12px; line-height: 1.6; color: var(--paper); margin: 0; opacity: .85; }
+  @media (min-width: 600px) { #resstats { grid-template-columns: repeat(5, 1fr); } }
+  /* 무기별 초당 피해 */
+  #resdps { display: grid; gap: 3px; }
+  #resdps:empty, #resach:empty { display: none; }
+  .dpsrow { display: grid; grid-template-columns: minmax(0, 9em) 1fr 3.4em 2.6em; align-items: center; gap: 6px; font-size: 12px; }
+  .dpsrow span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dpsrow i { height: 8px; background: #0b0f12; position: relative; display: block; box-shadow: 0 0 0 1px #050507, 0 1px 0 1px #4b4e5a; }
+  .dpsrow i em { position: absolute; inset: 0 auto 0 0; background: linear-gradient(180deg, #fff1a6 0 2px, var(--accent) 2px); }
+  .dpsrow b { font-family: var(--font-tech); text-align: right; color: var(--cyan); }
+  .dpsrow small { font-family: var(--font-tech); color: var(--muted); text-align: right; }
+  /* 업적 */
+  #resach { display: grid; gap: 4px; }
+  .achnew, .achrow { display: grid; grid-template-columns: 30px 1fr auto; gap: 8px; align-items: center; padding: 4px 8px; background: rgba(8, 8, 12, .55); box-shadow: inset 0 0 0 2px #08070c; }
+  .achnew { box-shadow: inset 0 0 0 2px var(--accent); animation: rise .3s steps(5) both; }
+  .achnew img, .achrow img { width: 30px; height: 30px; }
+  .achnew b, .achrow b { display: block; font-size: 13px; }
+  .achnew b { color: var(--accent); }
+  .achnew small, .achrow small { font-size: 11px; color: var(--muted); }
+  #achv .modal { max-width: 560px; max-height: 100%; overflow-y: auto; gap: 8px; border-image-source: var(--plate); }
+  #achcount { color: var(--accent); font-size: 16px; white-space: nowrap; }
+  #achlist { display: grid; gap: 4px; }
+  .achrow em { font-style: normal; font-size: 11px; color: var(--pink); text-align: right; }
+  .achrow:not(.done) b { color: var(--muted); }
+  .achrow.done { box-shadow: inset 0 0 0 2px #6b5a20; }
+  .achrow.done em { color: var(--xp); }
+  @media (max-height: 520px) { .achrow { padding: 2px 6px; } .achrow img { width: 24px; height: 24px; } #achv .note { display: none; } }
 
   @media (max-width: 760px), (max-height: 520px) {
     #cards { grid-template-columns: 1fr; gap: 6px; }
@@ -448,7 +478,7 @@
       <div class="opts" id="opts"></div>
     </div>
     <div id="statline"></div>
-    <button type="button" class="btn primary" id="launch">출격 ▶</button>
+    <div id="launchrow"><button type="button" class="btn" id="achbtn">업적</button><button type="button" class="btn primary" id="launch">출격 ▶</button></div>
     <p class="note" id="besttext"></p>
   </div>
 </section>
@@ -480,11 +510,22 @@
   </div>
 </section>
 
+<section id="achv" class="screen dim" hidden>
+  <div class="modal pix">
+    <div class="sthead"><div><span class="tick">SERVICE RECORD</span><h2>업적</h2></div><div id="achcount" class="px">0/0</div></div>
+    <p class="note">목표를 달성하면 파일럿, 업적 전용 도색, 부품이 열려요. 이미 산 부품이면 고철로 돌려받아요.</p>
+    <div id="achlist"></div>
+    <div class="btns"><button type="button" class="btn primary" id="achclose">닫기</button></div>
+  </div>
+</section>
+
 <section id="result" class="screen dim" hidden>
   <div class="modal pix">
     <span class="tick" id="reseyebrow">MISSION REPORT</span>
     <h2 id="restitle">기체 대파</h2>
     <div id="resstats"></div>
+    <div id="resdps"></div>
+    <div id="resach"></div>
     <p id="resparts"></p>
     <div class="btns"><button type="button" class="btn primary" id="retry">다시 출격</button><button type="button" class="btn" id="tohangar">격납고로</button></div>
   </div>

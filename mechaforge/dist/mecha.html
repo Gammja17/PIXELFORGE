@@ -212,14 +212,16 @@
   .logo { margin: 0; font-family: var(--font-tech); font-weight: 800; font-size: 28px; line-height: 1; letter-spacing: .08em; text-shadow: 0 2px 0 #000; }
   .logo span { color: var(--accent); }
   .sub { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
-  #tabs { display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px; }
+  #tabs { display: grid; grid-template-columns: repeat(8, 1fr); gap: 3px; }
   .opt.locked img, .opt.locked .sw { filter: grayscale(1) brightness(.45); }
   .opt.locked b { color: var(--accent); }
   .opt.locked.cant b { color: var(--hp); }
-  .opt small { font-family: var(--font-tech); font-size: 10px; color: var(--muted); }
+  .opt.locked.reward b { color: var(--pink); }
+  .opt small { font-family: var(--font-tech); font-size: 10px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
   .opt .rlv { display: flex; gap: 2px; } .opt .rlv i { width: 6px; height: 6px; background: #262833; display: block; } .opt .rlv i.on { background: var(--xp); }
   #scrapline { font-size: 14px; color: var(--accent); white-space: nowrap; }
-  .hhead .hright { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; max-width: 300px; flex: none; }
+  .hhead > div:first-child { flex: 1 1 auto; min-width: 0; }
+  .hhead .hright { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; flex: 0 1 300px; min-width: 0; }
   .hhead .hright #scrapline { width: 100%; text-align: right; }
   #resstats .stat:first-child b { color: var(--accent); }
   .tab { border-width: 12px; border-image: var(--plate-flat) var(--sl) fill / 12px repeat; padding: 0; display: grid; justify-items: center; gap: 1px; min-width: 0; margin: 0; }
@@ -278,7 +280,9 @@
   #chipline { font-size: 10px; color: var(--muted); }
   @media (max-height: 520px) { .strow { grid-template-columns: 36px 1fr auto; padding: 3px 6px; } .strow img { width: 36px; height: 36px; } #station .note { display: none; } .sets { grid-template-columns: repeat(4, 1fr); } }
   .sndbtn { padding: 6px 10px; font-size: 12px; white-space: nowrap; flex: none !important; min-width: 0 !important; }
-  #launch { font-size: 18px; min-height: 54px; position: sticky; bottom: 0; z-index: 1; }
+  #launchrow { display: flex; gap: 6px; position: sticky; bottom: 0; z-index: 1; }
+  #launch { font-size: 18px; min-height: 54px; flex: 1; }
+  #achbtn { flex: none; padding: 0 12px; font-size: 13px; white-space: nowrap; }
 
   /* ---- 업그레이드 카드 ---- */
   #levelup .modal { max-width: 900px; padding: 0; }
@@ -316,6 +320,32 @@
   .stat span { font-size: 10px; color: var(--muted); }
   .stat b { font-family: var(--font-tech); font-size: 18px; color: var(--cyan); font-weight: 700; text-shadow: 0 0 6px rgba(95,224,255,.35); }
   #resparts { white-space: pre-line; font-size: 12px; line-height: 1.6; color: var(--paper); margin: 0; opacity: .85; }
+  @media (min-width: 600px) { #resstats { grid-template-columns: repeat(5, 1fr); } }
+  /* 무기별 초당 피해 */
+  #resdps { display: grid; gap: 3px; }
+  #resdps:empty, #resach:empty { display: none; }
+  .dpsrow { display: grid; grid-template-columns: minmax(0, 9em) 1fr 3.4em 2.6em; align-items: center; gap: 6px; font-size: 12px; }
+  .dpsrow span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dpsrow i { height: 8px; background: #0b0f12; position: relative; display: block; box-shadow: 0 0 0 1px #050507, 0 1px 0 1px #4b4e5a; }
+  .dpsrow i em { position: absolute; inset: 0 auto 0 0; background: linear-gradient(180deg, #fff1a6 0 2px, var(--accent) 2px); }
+  .dpsrow b { font-family: var(--font-tech); text-align: right; color: var(--cyan); }
+  .dpsrow small { font-family: var(--font-tech); color: var(--muted); text-align: right; }
+  /* 업적 */
+  #resach { display: grid; gap: 4px; }
+  .achnew, .achrow { display: grid; grid-template-columns: 30px 1fr auto; gap: 8px; align-items: center; padding: 4px 8px; background: rgba(8, 8, 12, .55); box-shadow: inset 0 0 0 2px #08070c; }
+  .achnew { box-shadow: inset 0 0 0 2px var(--accent); animation: rise .3s steps(5) both; }
+  .achnew img, .achrow img { width: 30px; height: 30px; }
+  .achnew b, .achrow b { display: block; font-size: 13px; }
+  .achnew b { color: var(--accent); }
+  .achnew small, .achrow small { font-size: 11px; color: var(--muted); }
+  #achv .modal { max-width: 560px; max-height: 100%; overflow-y: auto; gap: 8px; border-image-source: var(--plate); }
+  #achcount { color: var(--accent); font-size: 16px; white-space: nowrap; }
+  #achlist { display: grid; gap: 4px; }
+  .achrow em { font-style: normal; font-size: 11px; color: var(--pink); text-align: right; }
+  .achrow:not(.done) b { color: var(--muted); }
+  .achrow.done { box-shadow: inset 0 0 0 2px #6b5a20; }
+  .achrow.done em { color: var(--xp); }
+  @media (max-height: 520px) { .achrow { padding: 2px 6px; } .achrow img { width: 24px; height: 24px; } #achv .note { display: none; } }
 
   @media (max-width: 760px), (max-height: 520px) {
     #cards { grid-template-columns: 1fr; gap: 6px; }
@@ -456,7 +486,7 @@
       <div class="opts" id="opts"></div>
     </div>
     <div id="statline"></div>
-    <button type="button" class="btn primary" id="launch">출격 ▶</button>
+    <div id="launchrow"><button type="button" class="btn" id="achbtn">업적</button><button type="button" class="btn primary" id="launch">출격 ▶</button></div>
     <p class="note" id="besttext"></p>
   </div>
 </section>
@@ -488,11 +518,22 @@
   </div>
 </section>
 
+<section id="achv" class="screen dim" hidden>
+  <div class="modal pix">
+    <div class="sthead"><div><span class="tick">SERVICE RECORD</span><h2>업적</h2></div><div id="achcount" class="px">0/0</div></div>
+    <p class="note">목표를 달성하면 파일럿, 업적 전용 도색, 부품이 열려요. 이미 산 부품이면 고철로 돌려받아요.</p>
+    <div id="achlist"></div>
+    <div class="btns"><button type="button" class="btn primary" id="achclose">닫기</button></div>
+  </div>
+</section>
+
 <section id="result" class="screen dim" hidden>
   <div class="modal pix">
     <span class="tick" id="reseyebrow">MISSION REPORT</span>
     <h2 id="restitle">기체 대파</h2>
     <div id="resstats"></div>
+    <div id="resdps"></div>
+    <div id="resach"></div>
     <p id="resparts"></p>
     <div class="btns"><button type="button" class="btn primary" id="retry">다시 출격</button><button type="button" class="btn" id="tohangar">격납고로</button></div>
   </div>
@@ -4105,13 +4146,14 @@ class Shots {
     this.wellCore = sc.add(new InstancedMesh(Geometry.icosphere(0.32, 1, [0.04, 0.02, 0.08]), new Material({ castShadow: false, outline: false }), 8));
     this.lobMesh = sc.add(new InstancedMesh(shellGeo(), new Material({ castShadow: false }), 16));
   }
-  mine(o) { if (this.mines.length >= 36) this.mines.shift(); this.mines.push({ t: 0, life: 14, fuse: -1, ...o }); }
-  disc(o) { if (this.discs.length < 16) this.discs.push({ t: 0, back: false, hits: new Map(), ...o }); }
-  well(o) { if (this.wells.length < 8) this.wells.push({ t: 0, tick: 0, ...o }); }
-  lob(o) { if (this.lobs.length < 16) this.lobs.push({ t: 0, ...o }); }
+  // src: 쏜 무기 id (런 통계용, runhooks.js 의 game.dmgSrc). 나중에 맞힐 때 다시 dmgSrc 로 돌려놓는다
+  mine(o) { if (this.mines.length >= 36) this.mines.shift(); this.mines.push({ t: 0, life: 14, fuse: -1, src: this.game.dmgSrc, ...o }); }
+  disc(o) { if (this.discs.length < 16) this.discs.push({ t: 0, back: false, hits: new Map(), src: this.game.dmgSrc, ...o }); }
+  well(o) { if (this.wells.length < 8) this.wells.push({ t: 0, tick: 0, src: this.game.dmgSrc, ...o }); }
+  lob(o) { if (this.lobs.length < 16) this.lobs.push({ t: 0, src: this.game.dmgSrc, ...o }); }
 
   // ---- 플레이어 탄 ----
-  add(o) { if (this.list.length < 480) this.list.push({ pierce: 0, knock: 2, r: 0.25, life: 1, hit: null, ...o }); }
+  add(o) { if (this.list.length < 480) this.list.push({ pierce: 0, knock: 2, r: 0.25, life: 1, hit: null, src: this.game.dmgSrc, ...o }); }
 
   enemyShot(x, y, z, vx, vz, dmg, kind = 'shell') {
     if (this.enemyList.length >= 290) return;
@@ -4140,6 +4182,7 @@ class Shots {
     let nb = 0, nm = 0;
     for (let i = this.list.length - 1; i >= 0; i--) {
       const s = this.list[i];
+      g.dmgSrc = s.src;
       s.life -= dt;
       if (s.homing) {
         if (!s.target || s.target.dead || s.target.hp <= 0) s.target = en.nearest(s.x, s.z, 14);
@@ -4229,6 +4272,7 @@ class Shots {
     let n = 0;
     for (let i = this.mines.length - 1; i >= 0; i--) {
       const m = this.mines[i];
+      g.dmgSrc = m.src;
       m.t += dt; m.life -= dt;
       const k = Math.min(1, m.t / 0.35), x = m.x0 + (m.x - m.x0) * k, z = m.z0 + (m.z - m.z0) * k, y = k < 1 ? m.y0 * (1 - k) + Math.sin(k * Math.PI) * 1.4 : 0.02;
       if (m.t > 0.5 && m.fuse < 0) en.each(m.x, m.z, 0.9, () => { m.fuse = 0.05; });
@@ -4247,6 +4291,7 @@ class Shots {
     n = 0;
     for (let i = this.discs.length - 1; i >= 0; i--) {
       const d = this.discs[i];
+      g.dmgSrc = d.src;
       d.t += dt;
       if (!d.back) { const k = Math.exp(-2.6 * dt); d.vx *= k; d.vz *= k; if (d.t > 0.55) d.back = true; }
       else {
@@ -4272,6 +4317,7 @@ class Shots {
     n = 0;
     for (let i = this.wells.length - 1; i >= 0; i--) {
       const w = this.wells[i];
+      g.dmgSrc = w.src;
       w.t += dt; w.tick -= dt;
       const tick = w.tick <= 0;
       if (tick) w.tick = 0.25;
@@ -4301,6 +4347,7 @@ class Shots {
     n = 0;
     for (let i = this.lobs.length - 1; i >= 0; i--) {
       const L = this.lobs[i];
+      g.dmgSrc = L.src;
       L.t += dt;
       const k = Math.min(1, L.t / L.T);
       const x = L.x + (L.tx - L.x) * k, z = L.z + (L.tz - L.z) * k, y = L.y + (0.3 - L.y) * k + Math.sin(k * Math.PI) * 5.5;
@@ -4926,6 +4973,7 @@ class WeaponSystem {
     const saw = this.get('saw'), tur = this.get('turret');
     let n = 0;
     if (saw && p.mech.root.visible) {
+      g.dmgSrc = 'saw';
       const L = lvOf(saw), R0 = L.radius * st.areaMul, big = L.big || 1;
       saw.ang = (saw.ang || 0) + L.spin * Math.sqrt(st.rateMul) * dt;
       const rings = L.ring2 ? [[L.blades / 2, R0, 1], [L.blades / 2, R0 * 0.55, -1.4]] : [[L.blades, R0, 1]];
@@ -4946,6 +4994,7 @@ class WeaponSystem {
 
     const nb = tur && p.mech.root.visible ? lvOf(tur).beams : 0;
     if (nb) {
+      g.dmgSrc = 'turret';
       const L = lvOf(tur), len = L.len * st.rangeMul, mz = p.mech.muzzle(tur.slot);
       tur.ang = (tur.ang || 0) + L.spin * Math.sqrt(st.rateMul) * dt;
       if (live) en.each(p.x, p.z, len, (e) => {
@@ -7970,9 +8019,124 @@ class Sound {
 return { Sound };
 })();
 
+__m["game/progress.js"] = (() => {
+// 반복 플레이 콘텐츠: 위협 등급(하데스 Heat 식 난이도 조절), 파일럿, 업적
+//  상태 저장과 보상 지급은 meta.js, 런 규칙 적용은 runhooks.js (game.mods)
+
+const { PAINTS, LEGS, FRAMES, HEADS } = __m["game/parts.js"];
+const { WEAPONS } = __m["game/weapons.js"];
+const { PIX } = __m["game/icons.js"];
+
+// ---- 위협 등급 ----
+//  첫 타이탄 격파 후 열린다. 단계마다 pts 만큼 위협 점수가 오르고, 점수 1마다 고철 +10%
+const THREATS = {
+  armor:   { name: '강화 장갑', max: 3, pts: 1, icon: 'frame', desc: (n) => `적 체력 +${n * 25}%` },
+  power:   { name: '과충전 화기', max: 3, pts: 1, icon: 'power', desc: (n) => `적 공격 피해 +${n * 20}%` },
+  swarm:   { name: '대군세', max: 2, pts: 1, icon: 't_swarm', desc: (n) => `적 물량 +${n * 20}%` },
+  mids:    { name: '중간 보스 증원', max: 2, pts: 2, icon: 'boss', desc: (n) => `전투 방마다 중간 보스 +${n}` },
+  nokit:   { name: '보급 차단', max: 1, pts: 2, icon: 't_nokit', desc: () => '수리 키트가 떨어지지 않고, 모든 수리량 -40%' },
+  long:    { name: '장기전', max: 2, pts: 1, icon: 't_clock', desc: (n) => `전투 시간 +${n * 25}%` },
+  fragile: { name: '취약 프레임', max: 2, pts: 1, icon: 'repair', desc: (n) => `내 최대 체력 -${n * 20}%` },
+  titan:   { name: '각성 거신', max: 2, pts: 1, icon: 'elite', desc: (n) => `수호자와 타이탄 체력 +${n * 40}%` },
+};
+const THREAT_MAX = Object.values(THREATS).reduce((s, T) => s + T.max * T.pts, 0);
+const threatScore = (sel = {}) => Object.entries(THREATS).reduce((s, [id, T]) => s + Math.min(T.max, sel[id] || 0) * T.pts, 0);
+const threatScrapMul = (score) => 1 + score * 0.1;
+
+// ---- 파일럿: 장점 하나 + 작은 단점 하나 ----
+//  stats.mul / stats.add 는 플레이어 능력치(computeStats 결과)에 곱하고 더한다
+const PILOTS = {
+  rookie:    { name: '레오', role: '신참', icon: 'p_rookie', perk: '특별한 장점은 없지만 단점도 없다', flaw: '', stats: {} },
+  ace:       { name: '카이', role: '에이스', icon: 'p_ace', perk: '기동 +12%, 대시 충전 시간 -25%', flaw: '최대 체력 -15%', stats: { mul: { speed: 1.12, dashCd: 0.75, maxHp: 0.85 } } },
+  engineer:  { name: '미나', role: '정비공', icon: 'p_engineer', perk: '출격 때 정비 포인트 +2, 회복량 +35%', flaw: '주는 피해 -8%', stats: { mul: { dmgMul: 0.92 } }, chips: 2, healMul: 1.35 },
+  berserker: { name: '구로', role: '광전사', icon: 'p_berserker', perk: '주는 피해 +18%, 치명 +6%', flaw: '받는 피해 +20%', stats: { mul: { dmgMul: 1.18, dmgTaken: 1.2 }, add: { crit: 0.06 } } },
+  scav:      { name: '도크', role: '고물상', icon: 'p_scav', perk: '고철 +30%, 회수 범위 +30%', flaw: '경험치 -12%', stats: { mul: { magnet: 1.3, xpMul: 0.88 } }, scrapMul: 1.3 },
+};
+
+// 이번 런의 규칙 (runhooks.js 가 읽는다). 위협 선택 + 파일럿 → 배율/플래그
+function runMods(threatSel = {}, pilotId = 'rookie') {
+  const n = (id) => Math.min(THREATS[id].max, threatSel[id] || 0), P = PILOTS[pilotId] || PILOTS.rookie;
+  const mul = { ...P.stats.mul }, add = { ...P.stats.add };
+  if (n('fragile')) mul.maxHp = (mul.maxHp || 1) * (1 - n('fragile') * 0.2);
+  const threat = threatScore(threatSel);
+  return {
+    threat, pilot: pilotId,
+    enemyHp: 1 + n('armor') * 0.25, enemyDmg: 1 + n('power') * 0.2, density: 1 + n('swarm') * 0.2,
+    bossHp: 1 + n('titan') * 0.4, extraMids: n('mids'), roomTime: 1 + n('long') * 0.25,
+    noKits: n('nokit') > 0, healMul: (n('nokit') ? 0.6 : 1) * (P.healMul || 1),
+    stats: { mul, add }, chips: P.chips || 0,
+    scrapMul: threatScrapMul(threat) * (P.scrapMul || 1),
+  };
+}
+
+// ---- 업적 ----
+//  test(r, life): r = 이번 런 요약 (main.js runSummary), life = 누적 기록 (meta.data.life)
+//  reward: pilot / paint (업적 전용) 또는 격납고 부품(이미 샀으면 가격만큼 고철 환급) 또는 고철
+const ACHIEVEMENTS = [
+  { id: 'firstwin', name: '타이탄 격파', desc: '처음으로 타이탄 쓰러뜨리기 (위협 등급 해금)', test: (r) => r.win, reward: { kind: 'pilot', id: 'ace' } },
+  { id: 'deep5', name: '전선 돌파', desc: '한 번에 방 5개 돌파', test: (r) => r.rooms >= 5, reward: { kind: 'legs', id: 'hover' } },
+  { id: 'mid5', name: '중간 보스 사냥꾼', desc: '한 런에서 중간 보스 5기 격파', test: (r) => r.mids >= 5, reward: { kind: 'pilot', id: 'berserker' } },
+  { id: 'combo300', name: '연쇄 반응', desc: '300 연속 처치', test: (r) => r.combo >= 300, reward: { kind: 'head', id: 'skull' } },
+  { id: 'kills2k', name: '고철 폭풍', desc: '한 런에서 2000기 처치', test: (r) => r.kills >= 2000, reward: { kind: 'legs', id: 'spider' } },
+  { id: 'evolve', name: '진화', desc: '무기 진화시키기', test: (r) => r.evolved, reward: { kind: 'head', id: 'samurai' } },
+  { id: 'transcend', name: '초월자', desc: '세트 3개로 초월 달성', test: (r) => r.transcend, reward: { kind: 'paint', id: 'transcend' } },
+  { id: 'jetwin', name: '제트 에이스', desc: '제트 다리로 승리', test: (r) => r.win && r.sel.legs === 'jet', reward: { kind: 'paint', id: 'skyace' } },
+  { id: 'saberwin', name: '검의 길', desc: '빔 사벨을 주무장으로 승리', test: (r) => r.win && r.sel.weapon === 'saber', reward: { kind: 'paint', id: 'blade' } },
+  { id: 'station10', name: '정비의 달인', desc: '정비 기지에서 강화/진화 누적 10회', test: (r, L) => L.stationUps >= 10, reward: { kind: 'pilot', id: 'engineer' } },
+  { id: 'scrap1500', name: '고철 부자', desc: '고철 누적 1500 획득', test: (r, L) => L.scrap >= 1500, reward: { kind: 'pilot', id: 'scav' } },
+  { id: 'runs10', name: '베테랑', desc: '출격 10회', test: (r, L) => L.runs >= 10, reward: { kind: 'paint', id: 'veteran' } },
+  { id: 'nokit', name: '보급 없이', desc: '보급 차단을 켜고 승리', test: (r) => r.win && r.noKits, reward: { kind: 'scrap', n: 300 } },
+  { id: 'threat5', name: '위협 5', desc: '위협 등급 5 이상으로 승리', test: (r) => r.win && r.threat >= 5, reward: { kind: 'paint', id: 'inferno' } },
+  { id: 'threat10', name: '위협 10', desc: '위협 등급 10 이상으로 승리', test: (r) => r.win && r.threat >= 10, reward: { kind: 'paint', id: 'boss' } },
+  { id: 'threat15', name: '위협 15', desc: '위협 등급 15 이상으로 승리', test: (r) => r.win && r.threat >= 15, reward: { kind: 'paint', id: 'void' } },
+  { id: 'squad', name: '편대장', desc: '서로 다른 파일럿 3명으로 승리', test: (r, L) => Object.keys(L.pilotWins).length >= 3, reward: { kind: 'scrap', n: 400 } },
+];
+
+// 업적으로만 얻는 것 (고철로 못 산다)
+const REWARD_PAINTS = ['transcend', 'skyace', 'blade', 'veteran', 'inferno', 'boss', 'void'];
+const REWARD_ONLY = new Set([...REWARD_PAINTS.map((id) => `paint:${id}`), ...Object.keys(PILOTS).filter((id) => id !== 'rookie').map((id) => `pilot:${id}`)]);
+
+const KIND_KO = { legs: '다리', frame: '프레임', head: '머리', weapon: '주무장', paint: '도색', pilot: '파일럿' };
+const TABLES = { legs: LEGS, frame: FRAMES, head: HEADS, weapon: WEAPONS, paint: PAINTS, pilot: PILOTS };
+function rewardText(rw) {
+  if (rw.kind === 'scrap') return `고철 +${rw.n}`;
+  return `${KIND_KO[rw.kind]} ${TABLES[rw.kind][rw.id]?.name || rw.id}`;
+}
+
+// 업적 전용 도색 (parts.js 의 PAINTS 에 등록. transcend / boss 는 원래 있는 것)
+Object.assign(PAINTS, {
+  skyace:  { name: '스카이 에이스', main: [0.92, 0.94, 0.98], sub: [0.3, 0.62, 0.95], trim: [0.12, 0.15, 0.25], acc: [1, 0.3, 0.25], eye: [0.5, 1, 1] },
+  blade:   { name: '검성', main: [0.95, 0.93, 0.9], sub: [0.85, 0.2, 0.4], trim: [0.15, 0.13, 0.18], acc: [0.95, 0.8, 0.4], eye: [1, 0.4, 0.8] },
+  veteran: { name: '베테랑', main: [0.5, 0.52, 0.46], sub: [0.3, 0.31, 0.29], trim: [0.92, 0.5, 0.15], acc: [0.95, 0.85, 0.5], eye: [1, 0.55, 0.2] },
+  inferno: { name: '인페르노', main: [0.2, 0.17, 0.17], sub: [0.95, 0.35, 0.12], trim: [0.1, 0.09, 0.1], acc: [1, 0.8, 0.25], eye: [1, 0.5, 0.15] },
+  void:    { name: '보이드', main: [0.12, 0.1, 0.18], sub: [0.5, 0.25, 0.9], trim: [0.05, 0.05, 0.08], acc: [0.4, 1, 0.9], eye: [0.9, 0.4, 1] },
+});
+
+// 파일럿 얼굴, 위협/업적 아이콘 (icons.js 의 도트 아이콘 표에 등록)
+Object.assign(PIX, {
+  p_rookie:    ['..bbbbbb..', '.bbbbbbbb.', '.bccccccb.', '.bccccccb.', '.b######b.', '..#d##d#..', '..######..', '...#dd#...', '.wwwwwwww.', 'wwwbwwbwww'],
+  p_ace:       ['..rrrrrr..', '.rrryyrrr.', '.rrryyrrr.', '.r######r.', '.rddddddr.', '..######..', '..##dd##..', '...####...', '.oooooooo.', 'ooyooooyoo'],
+  p_engineer:  ['...oooo...', '..oooooo..', '.occoocco.', 'pp######pp', 'p##d##d##p', 'p########p', '.p##pp##p.', '...####...', '.yyyyyyyy.', 'yywyyyywyy'],
+  p_berserker: ['w........w', 'ww.dddd.ww', '.wddddddw.', '.dddddddd.', '.drrddrrd.', '.dddddddd.', '..d#ww#d..', '...dddd...', '.rrrrrrrr.', 'rrdrrrrdrr'],
+  p_scav:      ['...wwww...', '..wwwwww..', '.ww####ww.', '.wgg##ggw.', '.wgg##ggw.', '.w######w.', '.w##dd##w.', '.ww####ww.', 'oowwwwwwoo', 'owwwwwwwwo'],
+  t_swarm:     ['..........', '.r.r..r.r.', '.rrr..rrr.', '.r.r..r.r.', '..........', '...r.r....', '...rrr....', '...r.r....', '..........', '..........'],
+  t_nokit:     ['r........r', '.r..gg..r.', '..r.gg.r..', '.ggrggrgg.', '.gggrrggg.', '....rr....', '...rggr...', '..r.gg.r..', '.r......r.', 'r........r'],
+  t_clock:     ['...####...', '..#....#..', '.#..y...#.', '.#..y...#.', '.#..yyy.#.', '.#......#.', '..#....#..', '...####...', '..........', '..........'],
+  trophy:      ['.yyyyyyy..', 'yy.yyy.yy.', 'y..yyy..y.', '.y.yyy.y..', '..yyyyy...', '...yyy....', '....y.....', '...yyy....', '..ooooo...', '..........'],
+  lock:        ['...www....', '..w...w...', '..w...w...', '.wwwwwww..', '.wdddddw..', '.wddwddw..', '.wddwddw..', '.wdddddw..', '.wwwwwww..', '..........'],
+});
+
+return { THREATS, THREAT_MAX, threatScore, threatScrapMul, PILOTS, runMods, ACHIEVEMENTS, REWARD_PAINTS, REWARD_ONLY, rewardText };
+})();
+
 __m["game/meta.js"] = (() => {
-// 메타 진행: 런마다 고철을 모아 격납고에서 부품 해금 + 영구 연구
-//  저장: localStorage 'mf-meta' { scrap, unlocked: { 'legs:quad': true, ... }, research: { hp: 2, ... } }
+// 메타 진행: 런마다 고철을 모아 격납고에서 부품 해금 + 영구 연구, 위협 등급, 파일럿, 업적
+//  저장: localStorage 'mf-meta' {
+//    scrap, unlocked: { 'legs:quad': true, 'pilot:ace': true, ... }, research: { hp: 2, ... },
+//    threat: { armor: 2, ... }  고른 위협 단계,  bestThreat: 격파한 최고 위협 점수 (-1 = 아직 승리 없음),
+//    pilot, ach: { firstwin: 시각 }, life: { runs, wins, scrap, stationUps, pilotWins: { ace: 1 } } }
+
+const { THREATS, PILOTS, ACHIEVEMENTS, REWARD_ONLY, threatScore, rewardText } = __m["game/progress.js"];
 
 const KEY = 'mf-meta';
 
@@ -7996,18 +8160,23 @@ const RESEARCH = {
 };
 const researchCost = (id, lv) => Math.round(RESEARCH[id].base * Math.pow(1.6, lv));
 
+const LIFE = { runs: 0, wins: 0, scrap: 0, stationUps: 0, pilotWins: {} };
+
 class Meta {
   constructor() {
-    this.data = { scrap: 0, unlocked: {}, research: {} };
+    this.data = { scrap: 0, unlocked: {}, research: {}, threat: {}, bestThreat: -1, pilot: 'rookie', ach: {} };
     try { Object.assign(this.data, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch { /* 저장 불가 */ }
+    this.data.life = { ...LIFE, ...this.data.life };
+    if (!PILOTS[this.data.pilot] || !this.isUnlocked('pilot', this.data.pilot)) this.data.pilot = 'rookie';
   }
   save() { try { localStorage.setItem(KEY, JSON.stringify(this.data)); } catch { /* 무시 */ } }
   get scrap() { return this.data.scrap; }
-  isUnlocked(kind, id) { return !PRICES[kind]?.[id] || !!this.data.unlocked[`${kind}:${id}`]; }
+  // 업적 전용 (파일럿, 특별 도색)은 보상으로만 열린다
+  isUnlocked(kind, id) { const k = `${kind}:${id}`; return REWARD_ONLY.has(k) ? !!this.data.unlocked[k] : !PRICES[kind]?.[id] || !!this.data.unlocked[k]; }
   price(kind, id) { return PRICES[kind]?.[id] || 0; }
   unlock(kind, id) {
     const p = this.price(kind, id);
-    if (this.isUnlocked(kind, id) || this.data.scrap < p) return false;
+    if (this.isUnlocked(kind, id) || REWARD_ONLY.has(`${kind}:${id}`) || this.data.scrap < p) return false;
     this.data.scrap -= p; this.data.unlocked[`${kind}:${id}`] = true; this.save();
     return true;
   }
@@ -8023,15 +8192,164 @@ class Meta {
   // 플레이어 능력치에 들어가는 연구 보너스
   ups() { return { _mhp: this.level('hp'), _mdmg: this.level('dmg'), _mxp: this.level('xp'), _mmag: this.level('magnet'), _mod: this.level('od') }; }
 
-  // 런 결과로 고철 계산 + 적립
-  reward(r) {
-    const gain = Math.round(r.kills * 0.12 + r.depth * 14 + (r.win ? 150 : 0) + r.level * 2);
-    this.data.scrap += gain; this.save();
-    return gain;
+  // ---- 파일럿 ----
+  get pilot() { return this.data.pilot; }
+  setPilot(id) { if (!this.isUnlocked('pilot', id)) return false; this.data.pilot = id; this.save(); return true; }
+
+  // ---- 위협 등급: 첫 승리 뒤에 열린다 ----
+  get threatOpen() { return this.data.life.wins > 0; }
+  threatRank(id) { return Math.min(THREATS[id].max, this.data.threat[id] || 0); }
+  // 누를 때마다 0 → 1 → … → max → 0
+  cycleThreat(id) { if (!this.threatOpen) return; this.data.threat[id] = (this.threatRank(id) + 1) % (THREATS[id].max + 1); this.save(); }
+  get threatSel() { return this.threatOpen ? this.data.threat : {}; }
+  get threat() { return threatScore(this.threatSel); }
+  get bestThreat() { return this.data.bestThreat; }
+
+  // ---- 업적 ----
+  count(key, n = 1) { this.data.life[key] = (this.data.life[key] || 0) + n; this.save(); }
+  achieved(id) { return !!this.data.ach[id]; }
+  get achCount() { return ACHIEVEMENTS.filter((a) => this.achieved(a.id)).length; }
+  grant(rw) {
+    if (rw.kind === 'scrap') { this.data.scrap += rw.n; return rewardText(rw); }
+    const k = `${rw.kind}:${rw.id}`;
+    // 이미 고철로 산 부품이면 가격만큼 돌려준다
+    if (!REWARD_ONLY.has(k) && this.isUnlocked(rw.kind, rw.id)) { const p = this.price(rw.kind, rw.id); this.data.scrap += p; return `${rewardText(rw)} (보유 중: 고철 +${p})`; }
+    this.data.unlocked[k] = true;
+    return rewardText(rw);
+  }
+
+  // 업적 기능 이전 저장(best2.win)에 승리 기록이 있으면 첫 승리로 쳐 준다
+  migrateWin() {
+    const d = this.data;
+    if (d.life.wins) return;
+    d.life.wins = 1; d.bestThreat = Math.max(0, d.bestThreat);
+    const a = ACHIEVEMENTS.find((q) => q.id === 'firstwin');
+    if (!d.ach[a.id]) { d.ach[a.id] = Date.now(); this.grant(a.reward); }
+    this.save();
+  }
+
+  // ---- 런 종료: 고철 계산 + 기록 + 업적. r = main.js runSummary ----
+  finishRun(r) {
+    const d = this.data, L = d.life;
+    const base = r.kills * 0.12 + r.depth * 14 + (r.win ? 150 : 0) + r.level * 2;
+    const gain = Math.round(base * r.scrapMul);
+    // 위협 신기록 보너스: 이전 최고보다 1점 높을 때마다 40
+    const newBest = r.win && r.threat > d.bestThreat;
+    const bonus = newBest ? Math.max(0, r.threat - Math.max(0, d.bestThreat)) * 40 : 0;
+    if (newBest) d.bestThreat = r.threat;
+    d.scrap += gain + bonus;
+    L.runs++; L.scrap += gain + bonus;
+    if (r.win) { L.wins++; L.pilotWins[r.pilot] = (L.pilotWins[r.pilot] || 0) + 1; }
+    const got = [];
+    for (const a of ACHIEVEMENTS) if (!d.ach[a.id] && a.test(r, L)) { d.ach[a.id] = Date.now(); got.push({ name: a.name, reward: this.grant(a.reward) }); }
+    this.save();
+    return { gain, bonus, newBest, achieved: got };
   }
 }
 
 return { PRICES, RESEARCH, researchCost, Meta };
+})();
+
+__m["game/runhooks.js"] = (() => {
+// 런 규칙(위협 등급, 파일럿)과 런 통계(무기별 피해, 중간 보스 처치)를 다른 모듈 위에 덧씌운다.
+//  rooms / enemies / pickups / player 파일은 고치지 않고 인스턴스 메서드를 감싸기만 한다.
+//
+//  game.mods (startRun 에서 progress.runMods 로 만든다. 격납고에서는 파일럿만 반영):
+//    enemyHp, enemyDmg, density  rooms.scale() 결과에 곱함 → enemies.k 로 모든 적 체력/피해/물량에 반영
+//    bossHp                      중간 보스/수호자/타이탄은 자기 체력 공식을 써서 따로 곱함 (enemyHp × bossHp)
+//    extraMids                   전투 방마다 중간 보스 추가 수 (planMids)
+//    roomTime                    전투 방 제한 시간 배율
+//    noKits, healMul             수리 키트 드롭 금지, 모든 회복량 배율
+//    stats { mul, add }          플레이어 능력치에 곱하고 더하는 값 (파일럿, 취약 프레임)
+//  rooms.js / enemies.js 가 나중에 game.mods 를 직접 읽게 되면 여기서 해당 감싸기를 지우면 된다.
+//
+//  game.dmgSrc: 지금 피해를 주는 무기 id. 무기 호출을 감싸서 정하고, 남아서 나중에 터지는 것
+//  (탄, 지뢰, 원반, 폭발)은 weapons.js / 여기서 src 를 찍어 둔다 → game.stats.byWeapon
+
+const { MIDBOSS_TYPES } = __m["game/midbosses.js"];
+
+const NO_MODS = {
+  threat: 0, enemyHp: 1, enemyDmg: 1, density: 1, bossHp: 1, extraMids: 0, roomTime: 1,
+  noKits: false, healMul: 1, stats: { mul: {}, add: {} }, chips: 0, scrapMul: 1,
+};
+
+// 능력치에 파일럿/위협 배율 덧씌우기 (격납고 능력치 막대도 같이 쓴다)
+function applyStatMods(st, { mul, add }) {
+  for (const k in mul) st[k] *= mul[k];
+  for (const k in add) st[k] += add[k];
+  st.maxHp = Math.max(1, Math.round(st.maxHp));
+  return st;
+}
+
+// obj.name 을 fn(원래 함수, ...인자) 로 바꾼다
+const wrap = (obj, name, fn) => { const orig = obj[name].bind(obj); obj[name] = (...a) => fn(orig, ...a); };
+
+function installRunHooks(game) {
+  const { rooms, enemies: en, pickups, player: p, weapons: ws, shots } = game;
+  const M = () => game.mods || NO_MODS;
+  const scaleHp = (e, k) => { if (e && k !== 1) { e.hp *= k; e.maxHp *= k; } };
+
+  // ---- 위협 등급 ----
+  wrap(rooms, 'scale', (orig) => {
+    const s = orig(), m = M();
+    return { ...s, hp: s.hp * m.enemyHp, swarmHp: s.swarmHp * m.enemyHp, dmg: s.dmg * m.enemyDmg, dens: s.dens * m.density };
+  });
+  wrap(rooms, 'planMids', (orig) => {
+    const out = orig(), n = M().extraMids;
+    if (n && rooms.depth >= 1) out.push(...[0.22, 0.58].slice(0, n));
+    return out;
+  });
+  wrap(rooms, 'enter', (orig, ...a) => { orig(...a); if (rooms.duration > 0) rooms.duration *= M().roomTime; });
+  wrap(en, 'spawnMid', (orig, ...a) => { const m = orig(...a); scaleHp(m?.e, M().enemyHp); return m; });
+  wrap(en, 'spawnGuardian', (orig, ...a) => {
+    orig(...a);
+    const k = M().enemyHp * M().bossHp;
+    for (const e of en.list) if (e.guard && e.guard === en.guardian) scaleHp(e, k);
+  });
+  wrap(en, 'spawnBoss', (orig, ...a) => { orig(...a); scaleHp(en.boss, M().enemyHp * M().bossHp); });
+  wrap(pickups, 'drop', (orig, kind, ...a) => { if (!(kind === 'kit' && M().noKits)) orig(kind, ...a); });
+  wrap(p, 'heal', (orig, v) => orig(v * M().healMul));
+
+  // ---- 파일럿 / 취약 프레임: 능력치를 다시 계산할 때마다 덧씌운다 ----
+  wrap(p, 'refreshStats', (orig) => {
+    const prevMax = p.stats?.maxHp, prevHp = p.hp;
+    orig();
+    const st = applyStatMods(p.stats, M().stats);
+    if (prevMax !== undefined && prevHp !== undefined) p.hp = Math.min(st.maxHp, st.maxHp > prevMax ? prevHp + st.maxHp - prevMax : prevHp);
+  });
+
+  // ---- 런 통계: 실제로 깎은 체력을 무기별로 ----
+  wrap(en, 'hit', (orig, e, ...a) => {
+    const before = e.hp;
+    orig(e, ...a);
+    const done = before - Math.max(0, e.hp), S = game.stats;
+    if (done > 0 && S?.byWeapon) { const k = game.dmgSrc || 'other'; S.byWeapon[k] = (S.byWeapon[k] || 0) + done; }
+  });
+  wrap(en, 'kill', (orig, e) => { if (!e.dead && MIDBOSS_TYPES[e.type] && game.stats) game.stats.mids = (game.stats.mids || 0) + 1; orig(e); });
+
+  // 피해 출처 정하기
+  const as = (src, fn) => { const prev = game.dmgSrc; game.dmgSrc = src; try { return fn(); } finally { game.dmgSrc = prev; } };
+  for (const name of ['fire', 'slash', 'flame', 'whip']) wrap(ws, name, (orig, w, ...a) => as(w ? w.id : 'fist', () => orig(w, ...a)));
+  wrap(ws, 'special', (orig) => as(ws.primaryKind, orig));
+  wrap(ws, 'updateBarrage', (orig, dt) => as(ws.primaryKind, () => orig(dt)));
+  wrap(ws, 'updateBits', (orig, dt) => as('funnel', () => orig(dt)));
+  wrap(ws, 'updateBurns', (orig, dt) => as('flamer', () => orig(dt)));
+  wrap(ws, 'updateWaves', (orig, dt) => as('stomp', () => orig(dt)));
+  // updateOrbitals / Shots.update 는 안에서 대상마다 dmgSrc 를 바꾸므로 끝나면 되돌린다
+  wrap(ws, 'updateOrbitals', (orig, ...a) => as(null, () => orig(...a)));
+  wrap(shots, 'update', (orig, dt) => as(null, () => orig(dt)));
+  // 연쇄 폭발: 터뜨린 무기 이름을 폭발에 찍어 두고, 터질 때 출처별로 나눠서 처리
+  wrap(en, 'blast', (orig, ...a) => { const n = en.blasts.length; orig(...a); if (en.blasts.length > n) en.blasts[en.blasts.length - 1].src = game.dmgSrc || null; });
+  wrap(en, 'updateBlasts', (orig, dt) => {
+    const all = en.blasts, srcs = new Set(all.map((b) => b.src ?? null));
+    if (srcs.size <= 1) { as(all[0]?.src ?? null, () => orig(dt)); return; }
+    const rest = [];
+    for (const s of srcs) { en.blasts = all.filter((b) => (b.src ?? null) === s); as(s, () => orig(dt)); rest.push(...en.blasts); }
+    en.blasts = rest;
+  });
+}
+
+return { NO_MODS, applyStatMods, installRunHooks };
 })();
 
 __m["game/main.js"] = (() => {
@@ -8055,6 +8373,8 @@ const { Sound } = __m["game/sound.js"];
 const { Meta, PRICES } = __m["game/meta.js"];
 const { activeSets, canTranscend, SETS, TRANSCEND } = __m["game/sets.js"];
 const { EVOLUTIONS, MAX_LEVEL } = __m["game/weapons.js"];
+const { runMods } = __m["game/progress.js"];
+const { installRunHooks, NO_MODS } = __m["game/runhooks.js"];
 
 const store = {
   get(k, d) { try { const v = localStorage.getItem('mechaforge.' + k); return v ? JSON.parse(v) : d; } catch { return d; } },
@@ -8097,12 +8417,15 @@ class Game {
     this.ctl = { attack: false, attackPressed: false, special: false, dash: false };
     this.btn = { attack: false, attackPressed: false, special: false, dash: false };
     this.meta = new Meta();
+    this.mods = NO_MODS; // 위협 등급 + 파일럿 규칙 (startRun 에서 정함, runhooks.js 참고)
+    installRunHooks(this);
     this.selection = { legs: 'walker', frame: 'standard', head: 'vfin', weapon: 'saber', paint: 'rx', ...store.get('loadout2', {}) };
     // 잠긴 부품이 선택돼 있으면 기본값으로
     for (const k of Object.keys(PRICES)) if (!this.meta.isUnlocked(k, this.selection[k])) this.selection[k] = Object.keys(PRICES[k])[0];
     for (const [k, T] of [['legs', LEGS], ['frame', FRAMES], ['head', HEADS], ['weapon', WEAPONS]]) if (!T[this.selection[k]]) this.selection[k] = Object.keys(T)[0];
     if (!WEAPONS[this.selection.weapon].starter) this.selection.weapon = 'saber';
     this.best = store.get('best2', { depth: 0, win: false });
+    if (this.best.win) this.meta.migrateWin();
     this.setSelection(this.selection);
     this.hangarLighting();
     this.engine.onUpdate = (dt) => this.update(dt);
@@ -8150,12 +8473,13 @@ class Game {
   }
 
   startRun() {
+    this.mods = runMods(this.meta.threatSel, this.meta.pilot);
     this.setSelection(this.selection);
     this.weapons.reset(); this.weapons.list = this.loadout.weapons.map((w) => ({ ...w, level: 1, cd: 0.4 }));
     this.time = 0;
-    this.stats = { kills: 0, dealt: 0, taken: 0, bestCombo: 0 };
+    this.stats = { kills: 0, dealt: 0, taken: 0, bestCombo: 0, mids: 0, byWeapon: {} };
     this.combo = 0; this.comboT = 0;
-    this.level = 1; this.xp = 0; this.xpNeed = xpNeedFor(1); this.pendingLevels = 0; this.pendingCrates = 0; this.chips = 1;
+    this.level = 1; this.xp = 0; this.xpNeed = xpNeedFor(1); this.pendingLevels = 0; this.pendingCrates = 0; this.chips = 1 + this.mods.chips;
     this.enemies.clear(); this.shots.clear(); this.pickups.clear();
     this.hangar.visible = this.hangarGlow.visible = false;
     this.player.mech.root.visible = true;
@@ -8172,6 +8496,7 @@ class Game {
     this.state = 'hangar';
     this.enemies.clear(); this.shots.clear(); this.pickups.clear();
     this.rooms.clear();
+    this.mods = NO_MODS;
     this.fx.extraLights = this.hangarLights;
     this.hangar.visible = this.hangarGlow.visible = true;
     this.hangarLighting();
@@ -8288,6 +8613,7 @@ class Game {
     const cost = act === 'up' ? 1 : act === 'evo' ? 2 : act === 'repair' ? 1 : 0;
     if ((this.chips || 0) < cost) { this.sfx.play('hurt', { vol: 0.4 }); this.ui.toast('정비 포인트가 부족해요'); return false; }
     this.chips -= cost;
+    if (act === 'up' || act === 'evo') this.meta.count('stationUps');
     if (act === 'repair') { p.heal(p.stats.maxHp * 0.4); this.sfx.play('tune'); return true; }
     if (kind === 'weapon') {
       const w = this.weapons.get(id);
@@ -8396,12 +8722,21 @@ class Game {
     if (win || d > this.best.depth) { this.best = { depth: Math.max(d, this.best.depth), win: win || this.best.win }; store.set('best2', this.best); }
   }
   resultData(win) {
-    const lo = this.player.loadout;
-    const scrap = this.meta.reward({ kills: this.stats.kills, depth: this.rooms.depth, win, level: this.level });
+    const lo = this.player.loadout, S = this.stats, m = this.mods, R = this.rooms;
+    const run = this.meta.finishRun({
+      win, kills: S.kills, depth: R.depth, rooms: win ? R.last + 1 : R.depth, level: this.level, combo: S.bestCombo || 0, mids: S.mids,
+      evolved: this.weapons.list.some((w) => w.evo), transcend: !!lo.transcend, sel: this.selection,
+      threat: m.threat, noKits: m.noKits, pilot: m.pilot, scrapMul: m.scrapMul,
+    });
+    // 무기별 피해 (실제로 깎은 체력) → 초당 피해
+    const t = Math.max(1, this.time), total = Object.values(S.byWeapon).reduce((a, b) => a + b, 0) || 1;
+    const srcName = (id) => { const w = this.weapons.get(id); return id === 'fist' ? '주먹' : id === 'other' ? '기타 (연쇄/대시/세트)' : w ? weaponName(w) : WEAPONS[id]?.name || id; };
     return {
-      scrap, total: this.meta.scrap,
-      win, combo: this.stats.bestCombo || 0, time: this.time, depth: this.rooms.depth, last: this.rooms.last, kills: this.stats.kills, level: this.level, dealt: this.stats.dealt, taken: this.stats.taken,
-      zone: ZONES[this.rooms.zone]?.name || '',
+      scrap: run.gain, bonus: run.bonus, newBest: run.newBest, achieved: run.achieved, total: this.meta.scrap,
+      threat: m.threat, bestThreat: this.meta.bestThreat, scrapMul: m.scrapMul, pilot: m.pilot, mids: S.mids,
+      win, combo: S.bestCombo || 0, time: this.time, depth: R.depth, last: R.last, kills: S.kills, level: this.level, dealt: S.dealt, taken: S.taken,
+      zone: ZONES[R.zone]?.name || '',
+      dps: Object.entries(S.byWeapon).sort((a, b) => b[1] - a[1]).map(([id, dmg]) => ({ id, name: srcName(id), dmg, dps: dmg / t, share: dmg / total })),
       weapons: this.weapons.list.map((w) => w.evo ? weaponName(w) : `${weaponName(w)} Lv${w.level}`),
       modules: Object.entries(lo.modules).map(([k, v]) => `${MODULES[k].name} Lv${v}`),
     };
@@ -8655,8 +8990,10 @@ const { computeStats, MODES } = __m["game/player.js"];
 const { ZONES, REWARDS } = __m["game/rooms.js"];
 const { pixURL } = __m["game/icons.js"];
 const { RESEARCH, researchCost } = __m["game/meta.js"];
+const { THREATS, PILOTS, ACHIEVEMENTS, REWARD_PAINTS, runMods, threatScrapMul, rewardText } = __m["game/progress.js"];
 const { SETS, setProgress, setOf } = __m["game/sets.js"];
 const { applySkin } = __m["game/skin.js"];
+const { applyStatMods } = __m["game/runhooks.js"];
 
 const $ = (id) => document.getElementById(id);
 const fmt = (t) => `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
@@ -8699,7 +9036,7 @@ function start() {
       doorEls.clear();
     },
     onStart() {
-      for (const id of ['hangar', 'result', 'paused', 'levelup']) $(id).hidden = true;
+      for (const id of ['hangar', 'result', 'paused', 'levelup', 'achv']) $(id).hidden = true;
       $('hud').hidden = false; $('boss').hidden = true;
       $('pad').hidden = !coarse; $('hint').hidden = coarse; $('dots').hidden = coarse; $('dots').classList.add('play');
       $('view').focus();
@@ -8736,14 +9073,20 @@ function start() {
     result(s) {
       $('restitle').textContent = s.win ? '작전 성공! 타이탄 격파' : `기체 대파 (${s.zone})`;
       $('restitle').classList.toggle('win', s.win); $('result').firstElementChild.classList.toggle('win', s.win);
-      const rows = [['고철 획득', `+${s.scrap}`], ['최대 연속 처치', s.combo], ['돌파한 방', `${s.win ? s.last + 1 : s.depth}/${s.last + 1}`], ['시간', fmt(s.time)], ['처치', s.kills], ['레벨', s.level], ['준 피해', Math.round(s.dealt)], ['받은 피해', Math.round(s.taken)]];
+      const rows = [['고철 획득', `+${s.scrap + s.bonus}`], ['위협 등급', s.newBest && s.threat ? `${s.threat} 신기록` : s.threat], ['돌파한 방', `${s.win ? s.last + 1 : s.depth}/${s.last + 1}`], ['중간 보스 격파', s.mids], ['처치', s.kills], ['최대 연속 처치', s.combo], ['시간', fmt(s.time)], ['레벨', s.level], ['준 피해', Math.round(s.dealt)], ['받은 피해', Math.round(s.taken)]];
       $('resstats').innerHTML = rows.map(([k, v]) => `<div class="stat"><span>${k}</span><b>${v}</b></div>`).join('');
-      $('resparts').textContent = `보유 고철 ${s.total}. 격납고에서 새 부품과 연구를 해금할 수 있어요.\n무장: ${s.weapons.join(', ')}${s.modules.length ? `\n부품: ${s.modules.join(', ')}` : ''}`;
+      // 무기별 초당 피해 (상위 6개)
+      const top = s.dps.slice(0, 6), max = top[0]?.dps || 1;
+      $('resdps').innerHTML = top.length ? `<span class="lbl">무기별 초당 피해</span>${top.map((q) => `<div class="dpsrow"><span>${q.name}</span><i><em style="width:${(q.dps / max) * 100}%"></em></i><b>${Math.round(q.dps)}</b><small>${Math.round(q.share * 100)}%</small></div>`).join('')}` : '';
+      $('resach').innerHTML = s.achieved.map((a) => `<div class="achnew"><img class="px-img" alt="" src="${pixURL('trophy', 3)}"><div><b>업적: ${a.name}</b><small>보상: ${a.reward}</small></div></div>`).join('');
+      const P = PILOTS[s.pilot];
+      $('resparts').textContent = `파일럿 ${P.role} ${P.name} · 고철 ×${s.scrapMul.toFixed(1)}${s.bonus ? ` · 위협 신기록 보너스 +${s.bonus}` : ''}\n보유 고철 ${s.total}. 격납고에서 새 부품과 연구를 해금할 수 있어요.\n무장: ${s.weapons.join(', ')}${s.modules.length ? `\n부품: ${s.modules.join(', ')}` : ''}`;
       $('result').hidden = false;
       $('pad').hidden = true; $('banner').hidden = true;
       setTimeout(() => $('retry').focus(), 50);
     },
-    launch() { game.startRun(); },
+    // Enter 출격: 업적 창이 열려 있거나 방금 Enter 로 닫았으면 무시
+    launch() { if ($('achv').hidden && performance.now() - achClosedAt > 300) game.startRun(); },
     comboMilestone(m) { const c = $('combo'); c.classList.remove('pop'); void c.offsetWidth; c.classList.add('pop', 'big'); setTimeout(() => c.classList.remove('big'), 600); ui.toast(`${m} 연속 처치!`); },
     comboEnd() { $('combo').classList.add('fade'); },
     // 컷인: 화면을 가로지르는 띠 + 큰 글자 (진화, 오버드라이브)
@@ -8917,10 +9260,15 @@ function start() {
     { key: 'frame', label: '프레임', table: FRAMES, ids: Object.keys(FRAMES) },
     { key: 'legs', label: '다리', table: LEGS, ids: Object.keys(LEGS) },
     { key: 'weapon', label: '주무장', table: WEAPONS, ids: HANGAR_WEAPONS },
-    { key: 'paint', label: '도색', table: PAINTS, ids: HANGAR_PAINTS },
+    { key: 'paint', label: '도색', table: PAINTS, ids: [...HANGAR_PAINTS, ...REWARD_PAINTS] },
+    { key: 'pilot', label: '파일럿', table: PILOTS, ids: Object.keys(PILOTS), pilot: true },
+    { key: 'threat', label: '위협', table: THREATS, ids: Object.keys(THREATS), threat: true },
     { key: 'research', label: '연구', table: RESEARCH, ids: Object.keys(RESEARCH), research: true },
   ];
   let tab = 'legs', confirmKey = null;
+  // 업적 보상으로만 열리는 것: 어느 업적인지
+  const achFor = (kind, id) => ACHIEVEMENTS.find((a) => a.reward.kind === kind && a.reward.id === id);
+  const pips = (max, lv) => Array.from({ length: max }, (_, i) => `<i class="${i < lv ? 'on' : ''}"></i>`).join('');
   const descOf = (T, id) => T.key === 'weapon' ? (id === 'missile' ? '어깨 자동 사격 + 주먹 3단 콤보' : WEAPONS[id].desc) : T.key === 'paint' ? '기체 색상' : T.table[id].desc;
   // 능력치 막대: 모든 조합의 최소~최대 기준
   const STAT_DEFS = [
@@ -8936,11 +9284,12 @@ function start() {
     const st = computeStats({ legs: l, frame: f, head: h, modules: {} }, {});
     STAT_DEFS.forEach(([, get], i) => { const v = get(st); range[i][0] = Math.min(range[i][0], v); range[i][1] = Math.max(range[i][1], v); });
   }
-  const statsOf = (sel) => computeStats({ legs: sel.legs, frame: sel.frame, head: sel.head, modules: {} }, {});
-  function renderStats(preview) {
-    const cur = statsOf(game.selection), pv = preview ? statsOf(preview) : null;
+  // 파일럿과 위협(취약 프레임)까지 반영한 출격 능력치
+  const statsOf = (sel, pilot = game.meta.pilot) => applyStatMods(computeStats({ legs: sel.legs, frame: sel.frame, head: sel.head, modules: {} }, {}), runMods(game.meta.threatSel, pilot).stats);
+  function renderStats(preview, previewPilot = null) {
+    const cur = statsOf(game.selection), pv = preview || previewPilot ? statsOf(preview || game.selection, previewPilot || game.meta.pilot) : null;
     $('statline').innerHTML = STAT_DEFS.map(([name, get, fmtv], i) => {
-      const [lo, hi] = range[i], k = (v) => 15 + 85 * ((v - lo) / (hi - lo || 1));
+      const [lo, hi] = range[i], k = (v) => Math.max(4, Math.min(100, 15 + 85 * ((v - lo) / (hi - lo || 1))));
       const v = get(cur), w = pv ? get(pv) : v;
       const cls = pv && w > v + 1e-6 ? 'up' : pv && w < v - 1e-6 ? 'down' : '';
       return `<div class="sbar"><span>${name}</span><i><em class="${cls}" style="width:${k(w)}%"></em></i><b>${fmtv(w, pv || cur)}</b></div>`;
@@ -8993,25 +9342,20 @@ function start() {
 
   function renderHangar() {
     const sel = game.selection;
+    renderRecord();
     const set = (k, v) => { game.setSelection({ ...game.selection, [k]: v }); renderHangar(); };
     // 탭 (현재 장착 부품 썸네일 포함)
     const tabs = $('tabs'); tabs.innerHTML = '';
     for (const T of TABS) {
       const b = document.createElement('button');
       b.type = 'button'; b.className = 'tab'; b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', String(T.key === tab));
-      const id = sel[T.key];
-      if (T.research) {
-        b.innerHTML = `<img class="px-img" alt="" src="${pixURL('power', 4)}"><b>${game.meta.scrap} 고철</b>`;
-        b.setAttribute('aria-label', `연구: 고철 ${game.meta.scrap}`);
-        b.addEventListener('click', () => setTab(T.key));
-        const cell = document.createElement('div');
-        cell.className = 'tabcell' + (T.key === tab ? ' on' : '');
-        cell.innerHTML = `<span class="tablbl">${T.label}</span>`;
-        cell.appendChild(b); tabs.appendChild(cell);
-        continue;
-      }
-      b.innerHTML = `${T.key === 'paint' ? `<i class="sw" style="background:${swatch(id)}"></i>` : `<img class="px-img" alt="" src="${thumb(T.key === 'weapon' ? 'weapon' : T.key, id)}">`}<b>${T.table[id].name}</b>`;
-      b.setAttribute('aria-label', `${T.label}: ${T.table[id].name}`);
+      const id = sel[T.key], M = game.meta;
+      const face = (img, text) => { b.innerHTML = `<img class="px-img" alt="" src="${img}"><b>${text}</b>`; b.setAttribute('aria-label', `${T.label}: ${text}`); };
+      if (T.research) face(pixURL('power', 4), `${M.scrap} 고철`);
+      else if (T.pilot) face(pixURL(PILOTS[M.pilot].icon, 4), PILOTS[M.pilot].name);
+      else if (T.threat) face(pixURL(M.threatOpen ? 'elite' : 'lock', 4), M.threatOpen ? `${M.threat}점` : '잠김');
+      else if (T.key === 'paint') { b.innerHTML = `<i class="sw" style="background:${swatch(id)}"></i><b>${PAINTS[id].name}</b>`; b.setAttribute('aria-label', `${T.label}: ${PAINTS[id].name}`); }
+      else face(thumb(T.key, id), T.table[id].name);
       b.addEventListener('click', () => setTab(T.key));
       const cell = document.createElement('div');
       cell.className = 'tabcell' + (T.key === tab ? ' on' : '');
@@ -9024,11 +9368,53 @@ function start() {
     box.innerHTML = '';
     const M = game.meta;
     $('scrapline').textContent = `고철 ${M.scrap}`;
+    const desc = (title, text) => { $('tabdesc').firstChild.textContent = title; $('tabdesc').lastChild.textContent = text; };
+    const lockText = (kind, id) => { const a = achFor(kind, id); return a ? `잠김: 업적 '${a.name}' (${a.desc}) 보상.` : `잠김: 고철 ${M.price(kind, id)}으로 해금.`; };
     const showDesc = (id) => {
-      $('tabdesc').firstChild.textContent = T.table[id].name;
-      if (T.research) { const lv = M.level(id), R = RESEARCH[id]; $('tabdesc').lastChild.textContent = `${R.desc}. ${lv >= R.max ? '완료' : `다음 단계 고철 ${researchCost(id, lv)}`}`; return; }
-      $('tabdesc').lastChild.textContent = M.isUnlocked(T.key, id) ? descOf(T, id) : `잠김: 고철 ${M.price(T.key, id)}으로 해금. ${descOf(T, id)}`;
+      if (T.research) { const lv = M.level(id), R = RESEARCH[id]; desc(R.name, `${R.desc}. ${lv >= R.max ? '완료' : `다음 단계 고철 ${researchCost(id, lv)}`}`); return; }
+      if (T.pilot) { const P = PILOTS[id]; desc(`${P.role} ${P.name}`, `${M.isUnlocked('pilot', id) ? '' : `${lockText('pilot', id)} `}장점: ${P.perk}${P.flaw ? `. 단점: ${P.flaw}` : ''}`); return; }
+      if (T.threat) {
+        const best = M.bestThreat >= 0 ? `최고 격파 ${M.bestThreat}점` : '아직 격파 기록 없음';
+        if (!M.threatOpen) { desc('위협 등급', '타이탄을 한 번 격파하면 열려요. 적을 강하게 만들수록 고철 보상이 늘어나요.'); return; }
+        if (!id) { desc(`위협 ${M.threat}점`, `누를 때마다 단계가 올라가요. 1점마다 고철 +10% (지금 ×${threatScrapMul(M.threat).toFixed(1)}). ${best}`); return; }
+        const H = THREATS[id], lv = M.threatRank(id);
+        desc(`위협 ${M.threat}점`, `${H.name} ${lv}/${H.max}: ${H.desc(Math.max(1, lv))} (단계마다 +${H.pts}점). 고철 ×${threatScrapMul(M.threat).toFixed(1)}. ${best}`);
+        return;
+      }
+      desc(T.table[id].name, M.isUnlocked(T.key, id) ? descOf(T, id) : `${lockText(T.key, id)} ${descOf(T, id)}`);
     };
+    if (T.pilot) {
+      for (const id of T.ids) {
+        const P = PILOTS[id], locked = !M.isUnlocked('pilot', id);
+        const el = opt(locked ? '업적' : P.name, M.pilot === id, () => {
+          if (locked) { showDesc(id); ui.toast(`업적 '${achFor('pilot', id).name}'을 달성하면 합류해요`); return; }
+          M.setPilot(id); renderHangar();
+        }, pixURL(P.icon, 5), null, (on) => { renderStats(null, on ? id : null); showDesc(on ? id : M.pilot); });
+        if (locked) el.classList.add('locked', 'reward');
+        box.appendChild(el);
+      }
+      showDesc(M.pilot);
+      renderStats(null);
+      return;
+    }
+    if (T.threat) {
+      for (const id of T.ids) {
+        const H = THREATS[id], lv = M.threatRank(id);
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'opt' + (M.threatOpen ? '' : ' locked cant');
+        b.setAttribute('aria-pressed', String(lv > 0));
+        b.innerHTML = `<img class="px-img" alt="" src="${pixURL(H.icon, 4)}"><span class="rlv">${pips(H.max, lv)}</span><b>${lv ? `+${lv * H.pts}점` : '끔'}</b><small>${H.name}</small>`;
+        b.addEventListener('click', () => {
+          if (!M.threatOpen) { showDesc(id); ui.toast('타이탄을 한 번 격파하면 열려요'); return; }
+          M.cycleThreat(id); game.sfx.play('clank'); renderHangar(); showDesc(id);
+        });
+        b.addEventListener('pointerenter', () => showDesc(id));
+        box.appendChild(b);
+      }
+      showDesc(null);
+      renderStats(null);
+      return;
+    }
     if (T.research) {
       box.className = 'opts';
       for (const id of T.ids) {
@@ -9049,6 +9435,8 @@ function start() {
     }
     // 잠긴 부품: 회색 + 가격. 누르면 고철로 해금
     const pick = (id) => () => {
+      const ach = !M.price(T.key, id) && achFor(T.key, id);
+      if (!M.isUnlocked(T.key, id) && ach) { showDesc(id); ui.toast(`업적 '${ach.name}'을 달성하면 열려요`); return; }
       if (!M.isUnlocked(T.key, id)) {
         // 실수로 쓰지 않게: 처음 누르면 안내, 한 번 더 누르면 해금
         if (confirmKey !== T.key + id) { confirmKey = T.key + id; showDesc(id); ui.toast(M.scrap >= M.price(T.key, id) ? `한 번 더 누르면 해금 (고철 ${M.price(T.key, id)})` : `고철이 부족해요 (${M.price(T.key, id)} 필요)`); return; }
@@ -9060,11 +9448,11 @@ function start() {
     };
     for (const id of T.ids) {
       const hover = (on) => { renderStats(on ? { ...sel, [T.key]: id } : null); showDesc(on ? id : sel[T.key]); };
-      const locked = !M.isUnlocked(T.key, id);
+      const locked = !M.isUnlocked(T.key, id), price = M.price(T.key, id), lbl = price ? `${price}` : '업적';
       const el = T.key === 'paint'
-        ? opt(locked ? `${M.price(T.key, id)}` : PAINTS[id].name, sel.paint === id, pick(id), null, swatch(id), (on) => showDesc(on ? id : sel.paint))
-        : opt(locked ? `${M.price(T.key, id)}` : T.table[id].name, sel[T.key] === id, pick(id), thumb(T.key, id), null, T.key === 'weapon' ? (on) => showDesc(on ? id : sel.weapon) : hover);
-      if (locked) { el.classList.add('locked'); if (M.scrap < M.price(T.key, id)) el.classList.add('cant'); el.title = `${T.table[id].name}: 고철 ${M.price(T.key, id)}으로 해금`; }
+        ? opt(locked ? lbl : PAINTS[id].name, sel.paint === id, pick(id), null, swatch(id), (on) => showDesc(on ? id : sel.paint))
+        : opt(locked ? lbl : T.table[id].name, sel[T.key] === id, pick(id), thumb(T.key, id), null, T.key === 'weapon' ? (on) => showDesc(on ? id : sel.weapon) : hover);
+      if (locked) { el.classList.add('locked', price ? 'buy' : 'reward'); if (M.scrap < price) el.classList.add('cant'); el.title = `${T.table[id].name}: ${price ? `고철 ${price}으로 해금` : '업적 보상'}`; }
       box.appendChild(el);
     }
     // 폰 가로(한 줄 스크롤)일 때 고른 부품이 보이게 가운데로
@@ -9072,9 +9460,28 @@ function start() {
     if (on && box.scrollWidth > box.clientWidth) { const r = on.getBoundingClientRect(), bb = box.getBoundingClientRect(); box.scrollLeft += r.left - bb.left - (bb.width - r.width) / 2; }
     showDesc(sel[T.key]);
     renderStats(null);
-    const b = game.best;
-    $('besttext').textContent = `${b.win ? '타이탄 격파 기록 있음. ' : b.depth ? `최고 기록: 방 ${b.depth}개 돌파. ` : ''}${coarse ? '폰을 가로로 들고: 왼쪽 드래그로 이동, 오른쪽 버튼으로 공격, 특수기, 대시' : 'Enter 키로 출격, 마우스로 조준'}`;
   }
+  // 격납고 아랫줄: 최고 기록 + 업적 버튼 + 출격 버튼의 위협 표시
+  function renderRecord() {
+    const b = game.best, M = game.meta;
+    const best = M.bestThreat > 0 ? `최고 위협 ${M.bestThreat}점 격파. ` : b.win ? '타이탄 격파 기록 있음. ' : b.depth ? `최고 기록: 방 ${b.depth}개 돌파. ` : '';
+    $('besttext').textContent = `${best}${coarse ? '폰을 가로로 들고: 왼쪽 드래그로 이동, 오른쪽 버튼으로 공격, 특수기, 대시' : 'Enter 키로 출격, 마우스로 조준'}`;
+    $('achbtn').textContent = `업적 ${M.achCount}/${ACHIEVEMENTS.length}`;
+    $('launch').textContent = M.threat ? `출격 ▶ 위협 ${M.threat}` : '출격 ▶';
+  }
+  // ---- 업적 목록 ----
+  function renderAch() {
+    const M = game.meta;
+    $('achcount').textContent = `${M.achCount}/${ACHIEVEMENTS.length}`;
+    $('achlist').innerHTML = ACHIEVEMENTS.map((a) => {
+      const done = M.achieved(a.id);
+      return `<div class="achrow${done ? ' done' : ''}"><img class="px-img" alt="" src="${pixURL(done ? 'trophy' : 'lock', 3)}"><div><b>${a.name}</b><small>${a.desc}</small></div><em>${rewardText(a.reward)}</em></div>`;
+    }).join('');
+  }
+  let achClosedAt = 0;
+  const showAch = (v) => { $('achv').hidden = !v; if (!v) achClosedAt = performance.now(); if (v) { renderAch(); setTimeout(() => $('achclose').focus({ preventScroll: true }), 30); } };
+  $('achbtn').addEventListener('click', () => showAch(true));
+  $('achclose').addEventListener('click', () => showAch(false));
   renderHangar();
   $('dots').hidden = coarse;
   $('launch').addEventListener('click', () => game.startRun());
@@ -9105,6 +9512,7 @@ function start() {
   addEventListener('keydown', (e) => {
     if (game.state === 'levelup' && /^[1-3]$/.test(e.key) && document.activeElement?.tagName === 'BUTTON') game.pick(Number(e.key) - 1);
     if (game.state === 'paused' && (e.key === 'Escape' || e.key === 'p') && document.activeElement?.tagName === 'BUTTON') game.pause(false);
+    if (!$('achv').hidden && e.key === 'Escape') showAch(false);
   });
   document.addEventListener('visibilitychange', () => { if (document.hidden) game.pause(true); });
 

@@ -18,6 +18,8 @@ import { Sound } from './sound.js';
 import { Meta, PRICES } from './meta.js';
 import { activeSets, canTranscend, SETS, TRANSCEND } from './sets.js';
 import { EVOLUTIONS, MAX_LEVEL } from './weapons.js';
+import { runMods } from './progress.js';
+import { installRunHooks, NO_MODS } from './runhooks.js';
 
 const store = {
   get(k, d) { try { const v = localStorage.getItem('mechaforge.' + k); return v ? JSON.parse(v) : d; } catch { return d; } },
@@ -60,12 +62,15 @@ export class Game {
     this.ctl = { attack: false, attackPressed: false, special: false, dash: false };
     this.btn = { attack: false, attackPressed: false, special: false, dash: false };
     this.meta = new Meta();
+    this.mods = NO_MODS; // 위협 등급 + 파일럿 규칙 (startRun 에서 정함, runhooks.js 참고)
+    installRunHooks(this);
     this.selection = { legs: 'walker', frame: 'standard', head: 'vfin', weapon: 'saber', paint: 'rx', ...store.get('loadout2', {}) };
     // 잠긴 부품이 선택돼 있으면 기본값으로
     for (const k of Object.keys(PRICES)) if (!this.meta.isUnlocked(k, this.selection[k])) this.selection[k] = Object.keys(PRICES[k])[0];
     for (const [k, T] of [['legs', LEGS], ['frame', FRAMES], ['head', HEADS], ['weapon', WEAPONS]]) if (!T[this.selection[k]]) this.selection[k] = Object.keys(T)[0];
     if (!WEAPONS[this.selection.weapon].starter) this.selection.weapon = 'saber';
     this.best = store.get('best2', { depth: 0, win: false });
+    if (this.best.win) this.meta.migrateWin();
     this.setSelection(this.selection);
     this.hangarLighting();
     this.engine.onUpdate = (dt) => this.update(dt);
@@ -113,12 +118,13 @@ export class Game {
   }
 
   startRun() {
+    this.mods = runMods(this.meta.threatSel, this.meta.pilot);
     this.setSelection(this.selection);
     this.weapons.reset(); this.weapons.list = this.loadout.weapons.map((w) => ({ ...w, level: 1, cd: 0.4 }));
     this.time = 0;
-    this.stats = { kills: 0, dealt: 0, taken: 0, bestCombo: 0 };
+    this.stats = { kills: 0, dealt: 0, taken: 0, bestCombo: 0, mids: 0, byWeapon: {} };
     this.combo = 0; this.comboT = 0;
-    this.level = 1; this.xp = 0; this.xpNeed = xpNeedFor(1); this.pendingLevels = 0; this.pendingCrates = 0; this.chips = 1;
+    this.level = 1; this.xp = 0; this.xpNeed = xpNeedFor(1); this.pendingLevels = 0; this.pendingCrates = 0; this.chips = 1 + this.mods.chips;
     this.enemies.clear(); this.shots.clear(); this.pickups.clear();
     this.hangar.visible = this.hangarGlow.visible = false;
     this.player.mech.root.visible = true;
@@ -135,6 +141,7 @@ export class Game {
     this.state = 'hangar';
     this.enemies.clear(); this.shots.clear(); this.pickups.clear();
     this.rooms.clear();
+    this.mods = NO_MODS;
     this.fx.extraLights = this.hangarLights;
     this.hangar.visible = this.hangarGlow.visible = true;
     this.hangarLighting();
@@ -251,6 +258,7 @@ export class Game {
     const cost = act === 'up' ? 1 : act === 'evo' ? 2 : act === 'repair' ? 1 : 0;
     if ((this.chips || 0) < cost) { this.sfx.play('hurt', { vol: 0.4 }); this.ui.toast('정비 포인트가 부족해요'); return false; }
     this.chips -= cost;
+    if (act === 'up' || act === 'evo') this.meta.count('stationUps');
     if (act === 'repair') { p.heal(p.stats.maxHp * 0.4); this.sfx.play('tune'); return true; }
     if (kind === 'weapon') {
       const w = this.weapons.get(id);
@@ -359,12 +367,21 @@ export class Game {
     if (win || d > this.best.depth) { this.best = { depth: Math.max(d, this.best.depth), win: win || this.best.win }; store.set('best2', this.best); }
   }
   resultData(win) {
-    const lo = this.player.loadout;
-    const scrap = this.meta.reward({ kills: this.stats.kills, depth: this.rooms.depth, win, level: this.level });
+    const lo = this.player.loadout, S = this.stats, m = this.mods, R = this.rooms;
+    const run = this.meta.finishRun({
+      win, kills: S.kills, depth: R.depth, rooms: win ? R.last + 1 : R.depth, level: this.level, combo: S.bestCombo || 0, mids: S.mids,
+      evolved: this.weapons.list.some((w) => w.evo), transcend: !!lo.transcend, sel: this.selection,
+      threat: m.threat, noKits: m.noKits, pilot: m.pilot, scrapMul: m.scrapMul,
+    });
+    // 무기별 피해 (실제로 깎은 체력) → 초당 피해
+    const t = Math.max(1, this.time), total = Object.values(S.byWeapon).reduce((a, b) => a + b, 0) || 1;
+    const srcName = (id) => { const w = this.weapons.get(id); return id === 'fist' ? '주먹' : id === 'other' ? '기타 (연쇄/대시/세트)' : w ? weaponName(w) : WEAPONS[id]?.name || id; };
     return {
-      scrap, total: this.meta.scrap,
-      win, combo: this.stats.bestCombo || 0, time: this.time, depth: this.rooms.depth, last: this.rooms.last, kills: this.stats.kills, level: this.level, dealt: this.stats.dealt, taken: this.stats.taken,
-      zone: ZONES[this.rooms.zone]?.name || '',
+      scrap: run.gain, bonus: run.bonus, newBest: run.newBest, achieved: run.achieved, total: this.meta.scrap,
+      threat: m.threat, bestThreat: this.meta.bestThreat, scrapMul: m.scrapMul, pilot: m.pilot, mids: S.mids,
+      win, combo: S.bestCombo || 0, time: this.time, depth: R.depth, last: R.last, kills: S.kills, level: this.level, dealt: S.dealt, taken: S.taken,
+      zone: ZONES[R.zone]?.name || '',
+      dps: Object.entries(S.byWeapon).sort((a, b) => b[1] - a[1]).map(([id, dmg]) => ({ id, name: srcName(id), dmg, dps: dmg / t, share: dmg / total })),
       weapons: this.weapons.list.map((w) => w.evo ? weaponName(w) : `${weaponName(w)} Lv${w.level}`),
       modules: Object.entries(lo.modules).map(([k, v]) => `${MODULES[k].name} Lv${v}`),
     };
