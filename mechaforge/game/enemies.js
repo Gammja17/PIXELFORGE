@@ -346,6 +346,7 @@ export class Enemies {
   hit(e, dmg, dirX, dirZ, knock, { crit = false, quiet = false, noNum = false, launch = 0, stun = 0 } = {}) {
     const g = this.game;
     if (e.dead || e.under) return;
+    if (e.prop) return g.rooms.hazards.hitProp(e, dmg); // 환경 소품 (hazards.js)
     if (e.guard) { dmg *= e.guard.dmgMul(e); launch = 0; stun = 0; knock = 0; }
     e.hp -= dmg;
     e.flash = 0.09;
@@ -466,6 +467,7 @@ export class Enemies {
     this.updatePending(dt);
     this.grid.clear();
     for (const e of this.list) this.grid.insert(e);
+    g.rooms.hazards.insertProps(this.grid); // 드럼통, 엄폐물도 무기/폭발에 맞는다 (hazards.js)
 
     for (const e of this.list) {
       const T = e.T;

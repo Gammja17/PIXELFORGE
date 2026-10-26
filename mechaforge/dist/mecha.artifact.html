@@ -6018,6 +6018,7 @@ class Enemies {
   hit(e, dmg, dirX, dirZ, knock, { crit = false, quiet = false, noNum = false, launch = 0, stun = 0 } = {}) {
     const g = this.game;
     if (e.dead || e.under) return;
+    if (e.prop) return g.rooms.hazards.hitProp(e, dmg); // 환경 소품 (hazards.js)
     if (e.guard) { dmg *= e.guard.dmgMul(e); launch = 0; stun = 0; knock = 0; }
     e.hp -= dmg;
     e.flash = 0.09;
@@ -6138,6 +6139,7 @@ class Enemies {
     this.updatePending(dt);
     this.grid.clear();
     for (const e of this.list) this.grid.insert(e);
+    g.rooms.hazards.insertProps(this.grid); // 드럼통, 엄폐물도 무기/폭발에 맞는다 (hazards.js)
 
     for (const e of this.list) {
       const T = e.T;
@@ -7147,31 +7149,947 @@ function applyChoice(game, c) {
 return { MAX_WEAPONS, freeSlot, rollChoices, cardImage, applyChoice };
 })();
 
+__m["game/world.js"] = (() => {
+// 방 지형: 구역별 벽/기둥/소품 모양, 방 배치(레이아웃), 적 길찾기 흐름장
+//
+//  레이아웃은 원형 충돌체 줄(간격 1, 반경 0.62)로 벽을 만든다. 적은 rooms.clamp() 에서
+//  벽에 밀릴 때 흐름장(Flow) 방향으로 벽을 따라 미끄러져 틈으로 돌아 나온다.
+//  문 앞(반경 4.5)과 방 중앙(보상 상자, 반경 3.4)은 항상 비워 둔다.
+
+const { Geometry } = __m["engine/index.js"];
+
+const TAU = Math.PI * 2;
+
+// 방 종류별로 고를 수 있는 배치
+const LAYOUTS = {
+  open:    { name: '개활지' },
+  pillars: { name: '열주' },
+  cross:   { name: '십자 회랑' },
+  ring:    { name: '원형 투기장' },
+  lanes:   { name: '삼중 통로' },
+  bunkers: { name: '참호' },
+  split:   { name: '전선' },
+};
+
+function pickLayout(R, reward, prev) {
+  if (reward === 'start' || reward === 'workshop') return 'open';
+  if (reward === 'boss' || reward === 'guardian') return 'open'; // 수호자는 충돌체를 무시하고 움직인다
+  const pool = ['open', 'pillars', 'cross', 'ring', 'lanes', 'bunkers', 'split'].filter((k) => k !== prev);
+  return R.pick(pool);
+}
+
+// ---- 구역별 벽 조각 ----
+//  piece(x, z, yaw, len, h): 길이 len 짜리 벽 한 칸, pillar(x, z, h): 기둥
+function styleFor(ctx) {
+  const { zone, Z, R, geo, glow, colliders, lights } = ctx;
+  const pick = (a) => a[(R() * a.length) | 0];
+  const rockAt = (x, z, r, col) => geo.merge(Geometry.icosphere(r, 0, col || pick(Z.wall), { jitter: 0.3, seed: (R() * 1e6) | 0, squashY: 0.8 }), { position: [x, r * 0.3, z], rotation: [0, R() * 6, 0] });
+  const S = {
+    desert: {
+      // 무너진 사암 벽: 칸마다 높이가 다르고 가끔 이가 빠져 있다
+      piece(x, z, yaw, len, h) {
+        const hh = h * R.range(0.55, 1.05);
+        geo.merge(Geometry.box(0.95, hh, len, pick(Z.stone)), { position: [x, 0, z], rotation: [0, yaw, R.range(-0.04, 0.04)] });
+        if (R() < 0.3) rockAt(x + R.range(-0.5, 0.5), z + R.range(-0.5, 0.5), 0.3);
+      },
+      pillar(x, z, h) {
+        geo.merge(Geometry.cylinder(0.5, 0.58, h, 6, pick(Z.stone)), { position: [x, 0, z] });
+        geo.merge(Geometry.box(1.2, 0.3, 1.2, pick(Z.stone)), { position: [x, h, z] });
+      },
+      prop(x, z) {
+        if (R() < 0.5) { geo.merge(Geometry.cylinder(0.42, 0.48, R.range(1.6, 3.2), 6, pick(Z.stone)), { position: [x, 0, z] }); colliders.push({ x, z, r: 0.55, block: true }); }
+        else { rockAt(x, z, R.range(0.8, 1.3)); colliders.push({ x, z, r: 0.95 }); if (R() < 0.6) rockAt(x + 1, z + 0.6, 0.4); }
+      },
+    },
+    factory: {
+      // 강철 방벽: 위에 노랑/검정 경고 줄
+      piece(x, z, yaw, len, h) {
+        geo.merge(Geometry.box(0.9, h, len, pick(Z.wall)), { position: [x, 0, z], rotation: [0, yaw, 0] });
+        geo.merge(Geometry.box(0.96, 0.14, len * 0.5, [0.85, 0.7, 0.2]), { position: [x - Math.sin(yaw) * len * 0.25, h, z - Math.cos(yaw) * len * 0.25], rotation: [0, yaw, 0] });
+        geo.merge(Geometry.box(0.96, 0.14, len * 0.5, [0.16, 0.16, 0.18]), { position: [x + Math.sin(yaw) * len * 0.25, h, z + Math.cos(yaw) * len * 0.25], rotation: [0, yaw, 0] });
+      },
+      pillar(x, z, h) {
+        geo.merge(Geometry.box(0.9, h, 0.9, [0.3, 0.32, 0.36]), { position: [x, 0, z] });
+        geo.merge(Geometry.box(1.3, 0.2, 1.3, [0.85, 0.7, 0.2]), { position: [x, 0, z] });
+        glow.merge(Geometry.box(0.2, 0.2, 0.94, [1, 0.55, 0.15]), { position: [x, h - 0.4, z] });
+      },
+      prop(x, z) {
+        const t = R();
+        if (t < 0.4) { const yaw = R() < 0.5 ? 0 : Math.PI / 2; geo.merge(Geometry.box(1.3, 1.3, 2.6, pick(Z.stone)), { position: [x, 0, z], rotation: [0, yaw, 0] }); colliders.push({ x, z, r: 0.9, block: true }, { x: x + (yaw ? 0.8 : 0), z: z + (yaw ? 0 : 0.8), r: 0.8, block: true }, { x: x - (yaw ? 0.8 : 0), z: z - (yaw ? 0 : 0.8), r: 0.8, block: true }); }
+        else if (t < 0.7) { for (let k = 0; k < 3; k++) geo.merge(Geometry.cylinder(0.3, 0.3, 2.2, 7, [0.4, 0.42, 0.46]), { position: [x - 1.1, 0.3 + (k > 1 ? 0.5 : 0), z + (k % 2) * 0.62 - (k > 1 ? -0.31 : 0)], rotation: [0, 0, Math.PI / 2] }); colliders.push({ x, z: z + 0.3, r: 0.85 }); } // 파이프 더미
+        else { geo.merge(Geometry.box(1.6, 1.5, 1.6, [0.4, 0.42, 0.46]), { position: [x, 0, z] }); geo.merge(Geometry.cylinder(0.15, 0.15, 2.2, 5, [0.6, 0.6, 0.62]), { position: [x + 0.5, 1.5, z] }); glow.merge(Geometry.box(0.5, 0.3, 0.05, [0.3, 1, 0.6]), { position: [x, 0.8, z + 0.82] }); colliders.push({ x, z, r: 1.05, block: true }); }
+      },
+    },
+    crystal: {
+      // 수정 능선: 바위 + 빛나는 수정 가시
+      piece(x, z, yaw, len, h) {
+        rockAt(x, z, R.range(0.6, 0.8));
+        if (R() < 0.6) for (let k = 0; k < 2; k++) glow.merge(Geometry.cone(0.16 + R() * 0.12, h * R.range(0.8, 1.5), 5, pick(Z.stone)), { position: [x + R.range(-0.3, 0.3), 0, z + R.range(-0.3, 0.3)], rotation: [R.range(-0.4, 0.4), R() * 6, R.range(-0.4, 0.4)] });
+      },
+      pillar(x, z, h) {
+        const c = pick(Z.stone);
+        for (let k = 0; k < 4; k++) glow.merge(Geometry.cone(0.3 + R() * 0.15, h * R.range(0.7, 1.2), 5, c), { position: [x + R.range(-0.25, 0.25), 0, z + R.range(-0.25, 0.25)], rotation: [R.range(-0.3, 0.3), R() * 6, R.range(-0.3, 0.3)] });
+        rockAt(x, z, 0.6);
+      },
+      prop(x, z) {
+        if (R() < 0.6) { const c = pick(Z.stone); for (let k = 0; k < 3; k++) glow.merge(Geometry.cone(0.18 + R() * 0.15, R.range(1.6, 3) * (0.6 + R() * 0.5), 5, c), { position: [x + R.range(-0.3, 0.3), 0, z + R.range(-0.3, 0.3)], rotation: [R.range(-0.4, 0.4), R() * 6, R.range(-0.4, 0.4)] }); colliders.push({ x, z, r: 0.6, block: true }); if (lights.length < 3) lights.push({ position: [x, 1.5, z], color: c, radius: 5, intensity: 0.55 }); }
+        else { rockAt(x, z, R.range(0.8, 1.2)); colliders.push({ x, z, r: 0.9 }); }
+      },
+    },
+    foundry: {
+      // 현무암 벽 + 갈라진 틈 사이로 새어 나오는 쇳물 빛
+      piece(x, z, yaw, len, h) {
+        const hh = h * R.range(0.8, 1.05);
+        geo.merge(Geometry.box(1, hh, len, pick(Z.wall)), { position: [x, 0, z], rotation: [0, yaw, 0] });
+        if (R() < 0.55) glow.merge(Geometry.box(1.04, 0.08, len * R.range(0.3, 0.8), pick(Z.stone)), { position: [x, hh * R.range(0.3, 0.7), z], rotation: [0, yaw, 0] });
+      },
+      pillar(x, z, h) {
+        geo.merge(Geometry.cylinder(0.55, 0.7, h, 7, pick(Z.wall)), { position: [x, 0, z] });
+        glow.merge(Geometry.cylinder(0.5, 0.5, 0.22, 7, [1, 0.55, 0.15]), { position: [x, h, z] }); // 도가니 쇳물
+      },
+      prop(x, z) {
+        const t = R();
+        if (t < 0.4) { // 쇳물 도가니
+          geo.merge(Geometry.cylinder(0.85, 0.7, 1.1, 8, [0.3, 0.27, 0.27]), { position: [x, 0, z] });
+          glow.merge(Geometry.cylinder(0.72, 0.72, 0.06, 8, [1, 0.6, 0.2]), { position: [x, 1.08, z] });
+          colliders.push({ x, z, r: 0.95, block: true });
+          if (lights.length < 3) lights.push({ position: [x, 1.8, z], color: [1, 0.5, 0.2], radius: 5, intensity: 0.6 });
+        } else if (t < 0.7) { rockAt(x, z, R.range(0.8, 1.2)); colliders.push({ x, z, r: 0.95 }); }
+        else { geo.merge(Geometry.box(2.2, 0.5, 1, [0.36, 0.3, 0.28]), { position: [x, 0, z], rotation: [0, R() * 3, 0] }); geo.merge(Geometry.box(0.9, 0.4, 0.6, [0.42, 0.36, 0.3]), { position: [x, 0.5, z], rotation: [0, R() * 3, 0] }); colliders.push({ x, z, r: 1 }); } // 주괴 더미
+      },
+    },
+    tundra: {
+      // 얼음 벽 + 눈 덮인 윗면
+      piece(x, z, yaw, len, h) {
+        const hh = h * R.range(0.75, 1.05);
+        geo.merge(Geometry.box(0.95, hh, len, pick(Z.wall)), { position: [x, 0, z], rotation: [0, yaw, R.range(-0.05, 0.05)] });
+        geo.merge(Geometry.box(1.05, 0.16, len + 0.05, [0.9, 0.93, 0.97]), { position: [x, hh, z], rotation: [0, yaw, 0] });
+      },
+      pillar(x, z, h) {
+        for (let k = 0; k < 3; k++) geo.merge(Geometry.cone(0.42 + R() * 0.15, h * R.range(0.7, 1.1), 5, pick(Z.wall)), { position: [x + R.range(-0.2, 0.2), 0, z + R.range(-0.2, 0.2)], rotation: [R.range(-0.2, 0.2), R() * 6, R.range(-0.2, 0.2)] });
+        geo.merge(Geometry.cylinder(0.75, 0.85, 0.2, 7, [0.9, 0.93, 0.97]), { position: [x, 0, z] });
+      },
+      prop(x, z) {
+        const t = R();
+        if (t < 0.45) { rockAt(x, z, R.range(0.8, 1.2), pick(Z.wall)); geo.merge(Geometry.icosphere(0.7, 0, [0.92, 0.95, 0.98], { squashY: 0.35, seed: (R() * 1e6) | 0 }), { position: [x, 0.7, z] }); colliders.push({ x, z, r: 0.95 }); }
+        else if (t < 0.75) { // 얼어붙은 메카 잔해
+          const y = R() * 6;
+          geo.merge(Geometry.box(1.4, 0.9, 1.1, [0.36, 0.38, 0.44]), { position: [x, -0.1, z], rotation: [0.25, y, 0.2] });
+          geo.merge(Geometry.box(1.5, 0.15, 1.2, [0.92, 0.95, 0.98]), { position: [x, 0.75, z], rotation: [0.25, y, 0.2] });
+          geo.merge(Geometry.cylinder(0.12, 0.12, 1.6, 5, [0.3, 0.32, 0.38]), { position: [x - 0.4, 0.4, z], rotation: [0.2, y, 1.2] });
+          colliders.push({ x, z, r: 0.95, block: true });
+        } else { for (let k = 0; k < 3; k++) geo.merge(Geometry.cone(0.35, R.range(1.2, 2.2), 5, pick(Z.stone)), { position: [x + R.range(-0.4, 0.4), 0, z + R.range(-0.4, 0.4)], rotation: [R.range(-0.3, 0.3), 0, R.range(-0.3, 0.3)] }); colliders.push({ x, z, r: 0.7, block: true }); }
+      },
+    },
+    orbital: {
+      // 격벽 판넬: 위쪽에 청록 표시등 띠
+      piece(x, z, yaw, len, h) {
+        geo.merge(Geometry.box(0.8, h, len, pick(Z.wall)), { position: [x, 0, z], rotation: [0, yaw, 0] });
+        geo.merge(Geometry.box(0.9, 0.12, len, [0.22, 0.24, 0.3]), { position: [x, 0, z], rotation: [0, yaw, 0] });
+        glow.merge(Geometry.box(0.84, 0.08, len * 0.9, pick(Z.stone)), { position: [x, h - 0.25, z], rotation: [0, yaw, 0] });
+      },
+      pillar(x, z, h) {
+        geo.merge(Geometry.cylinder(0.5, 0.5, h, 8, [0.4, 0.42, 0.5]), { position: [x, 0, z] });
+        for (const y of [0.6, h - 0.5]) glow.merge(Geometry.cylinder(0.53, 0.53, 0.12, 8, [0.3, 0.9, 1]), { position: [x, y, z] });
+      },
+      prop(x, z) {
+        const t = R();
+        if (t < 0.4) { // 제어 콘솔
+          geo.merge(Geometry.box(1.6, 1, 0.9, [0.36, 0.38, 0.46]), { position: [x, 0, z] });
+          glow.merge(Geometry.box(1.2, 0.45, 0.05, pick(Z.stone)), { position: [x, 0.6, z + 0.46] });
+          glow.merge(Geometry.box(0.05, 0.45, 0.6, pick(Z.stone)), { position: [x + 0.81, 0.6, z] });
+          colliders.push({ x, z, r: 0.95, block: true });
+        } else if (t < 0.7) { // 누운 화물 포드
+          const yaw = R() * 3;
+          geo.merge(Geometry.cylinder(0.6, 0.6, 2.2, 8, [0.62, 0.64, 0.7]), { position: [x - Math.sin(yaw) * 1.1, 0.6, z - Math.cos(yaw) * 1.1], rotation: [Math.PI / 2, yaw, 0] });
+          glow.merge(Geometry.cylinder(0.62, 0.62, 0.15, 8, [1, 0.6, 0.2]), { position: [x, 0.6, z], rotation: [Math.PI / 2, yaw, 0] });
+          colliders.push({ x: x + Math.sin(yaw) * 0.5, z: z + Math.cos(yaw) * 0.5, r: 0.75 }, { x: x - Math.sin(yaw) * 0.5, z: z - Math.cos(yaw) * 0.5, r: 0.75 });
+        } else { geo.merge(Geometry.cylinder(0.12, 0.2, 3.4, 5, [0.5, 0.52, 0.58]), { position: [x, 0, z] }); geo.merge(Geometry.box(1.2, 0.08, 0.08, [0.5, 0.52, 0.58]), { position: [x, 2.8, z] }); glow.merge(Geometry.icosphere(0.14, 0, [1, 0.3, 0.3]), { position: [x, 3.45, z] }); colliders.push({ x, z, r: 0.4, block: true }); } // 안테나
+      },
+    },
+  };
+  return { ...S[zone], rock: rockAt };
+}
+
+// ---- 레이아웃 만들기 ----
+//  ctx: { R, hx, hz, zone, Z, geo, glow, colliders, cover(x, z) }
+function buildLayout(kind, ctx) {
+  const { R, hx, hz, colliders } = ctx;
+  const st = styleFor(ctx);
+  const a = Math.min(hx, hz);
+  const doors = [[hx, 0], [-hx, 0], [0, hz], [0, -hz]];
+  const ok = (x, z, m = 0.6) => Math.abs(x) < hx - 1.6 && Math.abs(z) < hz - 1.6 && Math.hypot(x, z) > 3.4 + m
+    && doors.every(([dx, dz]) => Math.hypot(x - dx, z - dz) > 4.5 + m);
+  const H = 1.25; // 벽 높이 (카메라가 기체를 가리지 않게 낮게)
+  // 벽: (x0,z0)→(x1,z1) 을 1 간격 칸으로. gaps = [[t0,t1], ...] (0~1 비율) 는 비운다
+  const wall = (x0, z0, x1, z1, gaps = []) => {
+    const len = Math.hypot(x1 - x0, z1 - z0), n = Math.max(1, Math.round(len)), yaw = Math.atan2(x1 - x0, z1 - z0);
+    for (let i = 0; i <= n; i++) {
+      const t = i / n;
+      if (gaps.some(([g0, g1]) => t > g0 && t < g1)) continue;
+      const x = x0 + (x1 - x0) * t, z = z0 + (z1 - z0) * t;
+      if (!ok(x, z)) continue;
+      st.piece(x, z, yaw, len / n + 0.05, H);
+      colliders.push({ x, z, r: 0.62, block: true });
+    }
+  };
+  const pillar = (x, z) => { if (!ok(x, z, 0.9)) return; st.pillar(x, z, R.range(2.2, 3)); colliders.push({ x, z, r: 0.8, block: true }); };
+  const covers = (n) => { for (let i = 0; i < n; i++) { const p = spot(ctx, ok, 2.2); if (p) ctx.cover(p[0], p[1]); } };
+
+  if (kind === 'pillars') {
+    // 바둑판 열주: 축(문으로 가는 길)은 비워 둔다
+    const s = R.pick([4.6, 5.4]);
+    for (let x = s / 2; x < hx - 2; x += s) for (let z = s / 2; z < hz - 2; z += s) for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) pillar(sx * x, sz * z);
+    covers(2 + ((R() * 2) | 0));
+  } else if (kind === 'cross') {
+    // 대각선 X 벽: 방이 문마다 하나씩 쐐기 넷으로 나뉘고, 중앙과 팔 끝의 틈으로만 오간다
+    for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+      const r0 = 4.4, r1 = a * 1.15, k = Math.SQRT1_2, g = R.range(0.35, 0.65);
+      wall(sx * r0 * k, sz * r0 * k, sx * r1 * k, sz * r1 * k, R() < 0.6 ? [[g - 0.12, g + 0.12]] : []);
+    }
+    covers(2);
+  } else if (kind === 'ring') {
+    // 원형 벽: 문 방향 4곳 + 가끔 대각선이 뚫려 있다
+    const rr = a * 0.55, gapA = 1.7 / rr, diag = R() < 0.5;
+    const n = Math.round(TAU * rr);
+    for (let i = 0; i < n; i++) {
+      const ang = (i / n) * TAU;
+      const off = (q) => Math.abs(((ang - q + Math.PI * 3) % TAU) - Math.PI);
+      if ([0, 1, 2, 3].some((q) => off(q * Math.PI / 2) < gapA)) continue;
+      if (diag && [1, 3, 5, 7].some((q) => off(q * Math.PI / 4) < gapA * 0.8)) continue;
+      const x = Math.cos(ang) * rr, z = Math.sin(ang) * rr;
+      st.piece(x, z, -ang, TAU * rr / n + 0.05, H); // 접선 방향
+      colliders.push({ x, z, r: 0.62, block: true });
+    }
+    // 바깥 고리에 기둥 몇 개
+    for (let i = 0; i < 4; i++) { const ang = Math.PI / 4 + i * Math.PI / 2, r = a * 0.85; pillar(Math.cos(ang) * r, Math.sin(ang) * r); }
+    covers(2);
+  } else if (kind === 'lanes') {
+    // 평행 벽 두 줄: 가운데 + 한쪽에 틈 → 세 통로
+    const alongX = R() < 0.5, L = alongX ? hx : hz, c = (alongX ? hz : hx) * 0.42;
+    for (const s of [-1, 1]) {
+      const g = R() < 0.5 ? [0.12, 0.24] : [0.76, 0.88];
+      const gaps = [[0.44, 0.56], g];
+      if (alongX) wall(-L + 2, s * c, L - 2, s * c, gaps); else wall(s * c, -L + 2, s * c, L - 2, gaps);
+    }
+    covers(3);
+  } else if (kind === 'bunkers') {
+    // ㄱ자 참호 벽 여러 개 + 부서지는 엄폐물
+    const n = 5 + ((R() * 3) | 0);
+    for (let i = 0; i < n; i++) {
+      const p = spot(ctx, ok, 3.5); if (!p) continue;
+      const [x, z] = p, yaw = ((R() * 4) | 0) * (Math.PI / 2), l1 = R.range(2.2, 3.4), l2 = R.range(1.6, 2.6);
+      const ux = Math.sin(yaw), uz = Math.cos(yaw);
+      wall(x, z, x + ux * l1, z + uz * l1);
+      wall(x, z, x + uz * l2, z - ux * l2);
+    }
+    covers(4 + ((R() * 3) | 0));
+  } else if (kind === 'split') {
+    // 전선: 입구 쪽(E,N)과 출구 쪽(W,S)을 가르는 대각 방벽. 중앙 + 두 곳만 뚫려 있다
+    const g1 = R.range(0.14, 0.26), g2 = R.range(0.74, 0.86);
+    wall(-(hx - 2), hz - 2, hx - 2, -(hz - 2), [[g1 - 0.06, g1 + 0.06], [0.43, 0.57], [g2 - 0.06, g2 + 0.06]]);
+    covers(3);
+  } else {
+    covers(R() < 0.5 ? 2 : 0);
+  }
+  // 구역 소품 (개활지는 많이, 구조물이 있는 방은 조금)
+  const nProps = ctx.nProps ?? (kind === 'open' ? 5 + ((R() * 4) | 0) : 1 + ((R() * 3) | 0));
+  for (let i = 0; i < nProps; i++) { const p = spot(ctx, ok, 2.5); if (p) st.prop(p[0], p[1]); }
+  ctx.ok = ok;
+  return st;
+}
+
+// 비어 있는 자리 하나 (다른 충돌체와 d 이상 떨어진 곳)
+function spot(ctx, ok, d = 2.5) {
+  const { R, hx, hz, colliders } = ctx;
+  for (let k = 0; k < 40; k++) {
+    const x = R.range(-hx + 2, hx - 2), z = R.range(-hz + 2, hz - 2);
+    if (ok(x, z) && !colliders.some((c) => Math.hypot(c.x - x, c.z - z) < c.r + d)) return [x, z];
+  }
+  return null;
+}
+
+// ---- 길찾기 흐름장 ----
+//  1칸 격자에서 플레이어 칸까지의 거리(다익스트라). 적은 막혔을 때만 이 방향을 따라 미끄러진다
+class Flow {
+  build(hx, hz, colliders) {
+    this.hx = hx; this.hz = hz;
+    this.nx = Math.ceil(hx * 2) + 1; this.nz = Math.ceil(hz * 2) + 1;
+    const N = this.nx * this.nz;
+    this.solid = new Uint8Array(N);
+    this.dist = new Float64Array(N).fill(1e9); // Float32 면 꺼낸 거리와 저장된 거리가 반올림으로 달라져 칸을 건너뛴다
+    for (const c of colliders) {
+      if (c.prize) continue;
+      const rr = c.r + 0.3;
+      for (let i = Math.max(0, Math.floor(c.x + hx - rr)); i <= Math.min(this.nx - 1, Math.ceil(c.x + hx + rr)); i++)
+        for (let j = Math.max(0, Math.floor(c.z + hz - rr)); j <= Math.min(this.nz - 1, Math.ceil(c.z + hz + rr)); j++)
+          if (Math.hypot(i + 0.5 - hx - c.x, j + 0.5 - hz - c.z) < rr) this.solid[i + j * this.nx] = 1;
+    }
+    this.ready = false; this.t = 0;
+  }
+  // 부서진 엄폐물 자리를 다시 길로
+  unblock(x, z, r) {
+    if (!this.solid) return;
+    for (let i = Math.floor(x + this.hx - r - 1); i <= x + this.hx + r + 1; i++) for (let j = Math.floor(z + this.hz - r - 1); j <= z + this.hz + r + 1; j++)
+      if (i >= 0 && j >= 0 && i < this.nx && j < this.nz && Math.hypot(i + 0.5 - this.hx - x, j + 0.5 - this.hz - z) < r + 0.3) this.solid[i + j * this.nx] = 0;
+  }
+  cell(x, z) {
+    const i = Math.floor(x + this.hx), j = Math.floor(z + this.hz);
+    return i < 0 || j < 0 || i >= this.nx || j >= this.nz ? -1 : i + j * this.nx;
+  }
+  update(dt, px, pz) {
+    if (!this.solid || (this.t -= dt) > 0) return;
+    this.t = 0.2;
+    const { nx, nz, solid, dist } = this;
+    dist.fill(1e9);
+    const s = this.cell(px, pz);
+    if (s < 0) return;
+    // 이진 힙 다익스트라 (직선 1, 대각 1.41, 모서리 깎기 금지)
+    const heap = [[0, s]]; dist[s] = 0;
+    const push = (d, k) => { heap.push([d, k]); let i = heap.length - 1; while (i > 0) { const p = (i - 1) >> 1; if (heap[p][0] <= heap[i][0]) break; [heap[p], heap[i]] = [heap[i], heap[p]]; i = p; } };
+    const pop = () => { const top = heap[0], last = heap.pop(); if (heap.length) { heap[0] = last; let i = 0; for (;;) { const l = i * 2 + 1, r = l + 1; let m = i; if (l < heap.length && heap[l][0] < heap[m][0]) m = l; if (r < heap.length && heap[r][0] < heap[m][0]) m = r; if (m === i) break; [heap[m], heap[i]] = [heap[i], heap[m]]; i = m; } } return top; };
+    while (heap.length) {
+      const [d, k] = pop();
+      if (d > dist[k]) continue;
+      const i = k % nx, j = (k / nx) | 0;
+      for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) {
+        if (!di && !dj) continue;
+        const a = i + di, b = j + dj;
+        if (a < 0 || b < 0 || a >= nx || b >= nz) continue;
+        const q = a + b * nx;
+        if (solid[q] || (di && dj && (solid[a + j * nx] || solid[i + b * nx]))) continue;
+        const nd = d + (di && dj ? 1.414 : 1);
+        if (nd < dist[q]) { dist[q] = nd; push(nd, q); }
+      }
+    }
+    this.ready = true;
+  }
+  // (x,z) 에서 플레이어로 가는 다음 칸 방향 (단위 벡터) 또는 null
+  dir(x, z) {
+    if (!this.ready) return null;
+    const k = this.cell(x, z);
+    if (k < 0) return null;
+    const { nx, nz, dist } = this, i = k % nx, j = (k / nx) | 0;
+    let best = dist[k], bx = 0, bz = 0;
+    for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) {
+      const a = i + di, b = j + dj;
+      if ((!di && !dj) || a < 0 || b < 0 || a >= nx || b >= nz) continue;
+      const d = dist[a + b * nx] + (di && dj ? 0.414 : 0);
+      if (d < best) { best = d; bx = di; bz = dj; }
+    }
+    if (!bx && !bz) return null;
+    const l = Math.hypot(bx, bz);
+    return [bx / l, bz / l];
+  }
+}
+
+return { LAYOUTS, pickLayout, buildLayout, spot, Flow };
+})();
+
+__m["game/hazards.js"] = (() => {
+// 환경 위험 요소, 부서지는 소품, 특수 방 규칙
+//
+//  위험 요소는 적도 똑같이 다치게 한다 (적을 끌어들이는 게 공략). 바닥 위험은 비행 모드/비행 적에게는 무해.
+//    lava   용암 균열: 어둡게 식어 있다가 → 점점 빨리 맥동(예고) → 분출 (틱 피해, 드럼통 점화)
+//    elec   전기 바닥: 체크무늬 두 조가 번갈아 깜빡임(예고) → 방전 (피해 + 경직)
+//    belt   컨베이어: 위에 선 지상 유닛을 화살표 방향으로 민다
+//    cryo   냉각 분출구: 바닥 고리가 깜빡임(예고) → 냉기 폭발 (피해 + 적 동결, 플레이어 감속)
+//    ice    빙판: 플레이어는 미끄러지고, 적은 넉백이 멀리 밀린다
+//    pylon  공명 수정탑: 빛이 차오름(예고) → 원형 충격파
+//  소품은 enemies.grid 에 들어가서 무기/폭발에 맞는다 (enemies.hit → hitProp). 조준 대상(nearest)은 아니다.
+//    barrel / plasma  폭발 드럼통: 맞으면 짧게 깜빡이다 enemies.blast 로 터짐 → 다른 드럼통에 연쇄
+//    mine   지뢰: 지상 유닛이 밟으면 삑삑 → 폭발
+//    엄폐물 (sandbag, crate, crystal, slag, iceblock, panel): 적 탄을 막고, 맞으면 부서진다
+//  특수 방: dark (정전, 기체 주변만 밝음), storm (수축하는 방어막 고리 밖은 피해)
+
+const { Geometry, InstancedMesh, Material, m4 } = __m["engine/index.js"];
+
+const TAU = Math.PI * 2;
+const add = (g, part, position = [0, 0, 0], rotation = [0, 0, 0]) => g.merge(part, { position, rotation });
+
+// 바닥에 눕힌 고리 (반경 1)
+function flatRing(inner = 0.86, seg = 28, color = [1, 1, 1]) {
+  const g = new Geometry();
+  for (let i = 0; i < seg; i++) {
+    const a0 = (i / seg) * TAU, a1 = ((i + 1) / seg) * TAU, p = (a, r) => [Math.cos(a) * r, 0, Math.sin(a) * r];
+    g.quad(p(a0, inner), p(a1, inner), p(a1, 1), p(a0, 1), color, null, [0, 1, 0]);
+  }
+  return g;
+}
+
+// ---- 소품 ----
+const PROPS = {
+  barrel: {
+    name: '연료 드럼통', hp: 18, r: 0.55, boom: { r: 3.4, dmg: 60, pDmg: 20, col: [1, 0.55, 0.2] },
+    model() {
+      const g = new Geometry(), glow = new Geometry();
+      add(g, Geometry.cylinder(0.42, 0.42, 1.0, 8, [0.72, 0.2, 0.16]));
+      for (const y of [0.22, 0.72]) add(g, Geometry.cylinder(0.445, 0.445, 0.08, 8, [0.22, 0.2, 0.22]), [0, y, 0]);
+      add(g, Geometry.cylinder(0.36, 0.36, 0.05, 8, [0.3, 0.3, 0.32]), [0, 1.0, 0]);
+      // 경고 표식: 카메라 쪽(+x, +z) 두 면
+      add(glow, Geometry.box(0.3, 0.26, 0.04, [1, 0.8, 0.2]), [0, 0.35, 0.42]);
+      add(glow, Geometry.box(0.04, 0.26, 0.3, [1, 0.8, 0.2]), [0.42, 0.35, 0]);
+      return { g, glow };
+    },
+  },
+  plasma: {
+    name: '플라스마 탱크', hp: 18, r: 0.55, boom: { r: 3.8, dmg: 60, pDmg: 20, col: [0.4, 0.9, 1] },
+    model() {
+      const g = new Geometry(), glow = new Geometry();
+      add(g, Geometry.cylinder(0.4, 0.44, 1.05, 8, [0.5, 0.52, 0.6]));
+      add(g, Geometry.cylinder(0.3, 0.38, 0.12, 8, [0.3, 0.32, 0.38]), [0, 1.05, 0]);
+      add(glow, Geometry.cylinder(0.45, 0.45, 0.26, 8, [0.3, 0.9, 1]), [0, 0.4, 0]);
+      add(glow, Geometry.icosphere(0.14, 0, [0.6, 1, 1]), [0, 1.2, 0]);
+      return { g, glow };
+    },
+  },
+  mine: {
+    name: '지뢰', hp: 1, r: 0.4, walk: true, boom: { r: 2.7, dmg: 45, pDmg: 16, col: [1, 0.4, 0.25] },
+    model() {
+      const g = new Geometry(), glow = new Geometry();
+      add(g, Geometry.cylinder(0.3, 0.36, 0.12, 7, [0.26, 0.25, 0.22]));
+      add(g, Geometry.cylinder(0.12, 0.12, 0.06, 6, [0.4, 0.38, 0.34]), [0, 0.12, 0]);
+      add(glow, Geometry.box(0.1, 0.06, 0.1, [1, 0.2, 0.2]), [0, 0.18, 0]);
+      add(glow, flatRing(0.9, 20, [0.9, 0.15, 0.15]), [0, 0.03, 0]);   // 밟으면 터지는 범위
+      return { g, glow };
+    },
+  },
+  sandbag: {
+    name: '모래주머니', hp: 150, r: 0.85, cover: true,
+    model() {
+      const g = new Geometry();
+      for (let i = 0; i < 3; i++) add(g, Geometry.icosphere(0.42, 0, [0.62, 0.55, 0.4], { squashY: 0.55, seed: i + 3 }), [(i - 1) * 0.6, 0.22, 0]);
+      for (let i = 0; i < 2; i++) add(g, Geometry.icosphere(0.4, 0, [0.56, 0.5, 0.36], { squashY: 0.55, seed: i + 9 }), [(i - 0.5) * 0.6, 0.6, 0]);
+      return { g };
+    },
+  },
+  crate: {
+    name: '화물 상자', hp: 130, r: 0.8, cover: true,
+    model() {
+      const g = new Geometry();
+      add(g, Geometry.box(1.15, 1.0, 1.15, [0.6, 0.44, 0.25]));
+      for (const s of [-1, 1]) { add(g, Geometry.box(1.2, 0.12, 0.12, [0.36, 0.26, 0.16]), [0, 0.5, s * 0.55]); add(g, Geometry.box(0.12, 0.12, 1.2, [0.36, 0.26, 0.16]), [s * 0.55, 0.5, 0]); }
+      add(g, Geometry.box(0.6, 0.5, 0.6, [0.55, 0.5, 0.32]), [0.15, 1.0, -0.1], [0, 0.4, 0]);
+      return { g };
+    },
+  },
+  crystal: {
+    name: '수정 덩어리', hp: 120, r: 0.75, cover: true,
+    model() {
+      const g = new Geometry(), glow = new Geometry();
+      add(g, Geometry.icosphere(0.6, 0, [0.24, 0.22, 0.34], { jitter: 0.3, seed: 5, squashY: 0.6 }), [0, 0.15, 0]);
+      for (let k = 0; k < 5; k++) { const a = k * 1.3; add(glow, Geometry.cone(0.2, 1.0 + (k % 3) * 0.35, 5, k % 2 ? [0.45, 0.95, 1] : [0.75, 0.6, 1]), [Math.cos(a) * 0.25, 0.2, Math.sin(a) * 0.25], [Math.cos(a) * 0.35, a, Math.sin(a) * 0.35]); }
+      return { g, glow };
+    },
+  },
+  slag: {
+    name: '슬래그 덩어리', hp: 190, r: 0.85, cover: true,
+    model() {
+      const g = new Geometry(), glow = new Geometry();
+      add(g, Geometry.icosphere(0.75, 0, [0.22, 0.18, 0.18], { jitter: 0.25, seed: 11, squashY: 0.8 }), [0, 0.45, 0]);
+      add(glow, Geometry.box(0.7, 0.07, 0.08, [1, 0.5, 0.15]), [0.1, 0.5, 0.62], [0, 0, 0.3]);
+      add(glow, Geometry.box(0.08, 0.07, 0.6, [1, 0.5, 0.15]), [0.64, 0.6, 0], [0.4, 0, 0]);
+      return { g, glow };
+    },
+  },
+  iceblock: {
+    name: '얼음 덩어리', hp: 110, r: 0.8, cover: true,
+    model() {
+      const g = new Geometry();
+      add(g, Geometry.box(1.15, 1.05, 1.15, [0.58, 0.76, 0.9]), [0, 0, 0], [0, 0.3, 0]);
+      add(g, Geometry.box(1.2, 0.15, 1.2, [0.92, 0.95, 0.98]), [0, 1.05, 0], [0, 0.3, 0]);
+      add(g, Geometry.cone(0.3, 0.8, 5, [0.66, 0.84, 0.96]), [0.45, 0, 0.35]);
+      return { g };
+    },
+  },
+  panel: {
+    name: '방호 판넬', hp: 140, r: 0.8, cover: true,
+    model() {
+      const g = new Geometry(), glow = new Geometry();
+      add(g, Geometry.box(1.5, 1.05, 0.4, [0.42, 0.45, 0.52]));
+      for (const s of [-1, 1]) add(g, Geometry.box(0.2, 0.2, 0.9, [0.28, 0.3, 0.36]), [s * 0.6, 0, 0]);
+      add(glow, Geometry.box(1.2, 0.08, 0.42, [0.3, 0.9, 1]), [0, 0.8, 0]);
+      return { g, glow };
+    },
+  },
+};
+
+// 적이 위험 요소에 받는 피해: 최대 체력 비율 (정예/보스급은 훨씬 적게)
+function enemyDmg(e, frac) {
+  const big = e.boss || e.T?.part;
+  return e.maxHp * frac * (big ? 0.04 : e.elite ? 0.3 : 1);
+}
+const onFloor = (e) => e.prop || (e.boss ? e.y < 0.5 : !(e.T.fly > 0.05) && e.y < 0.5);
+// 점과 선분 거리
+function segDist(px, pz, ax, az, bx, bz) {
+  const vx = bx - ax, vz = bz - az, l2 = vx * vx + vz * vz || 1, t = Math.max(0, Math.min(1, ((px - ax) * vx + (pz - az) * vz) / l2));
+  return Math.hypot(px - ax - vx * t, pz - az - vz * t);
+}
+
+class RoomHazards {
+  constructor(game, rooms) {
+    this.game = game; this.rooms = rooms;
+    const sc = game.scene;
+    this.inst = {};
+    for (const [id, P] of Object.entries(PROPS)) {
+      const { g, glow } = P.model();
+      this.inst[id] = {
+        body: sc.add(new InstancedMesh(g, new Material(), 24)),
+        glow: glow && sc.add(new InstancedMesh(glow, new Material({ emissive: 1, castShadow: false, outline: false }), 24)),
+      };
+    }
+    // 컨베이어 화살표 (^ 모양, +z 를 가리킴)
+    const chev = new Geometry();
+    for (const s of [-1, 1]) add(chev, Geometry.box(0.14, 0.03, 0.7, [1, 0.7, 0.2]), [s * 0.22, 0, 0], [0, -s * 0.75, 0]);
+    this.chev = sc.add(new InstancedMesh(chev, new Material({ emissive: 1, castShadow: false, outline: false }), 200));
+    // 수축 방어막 (벽 띠 + 바닥 선)
+    const band = new Geometry();
+    band.merge(Geometry.cylinder(1, 1, 1.6, 48, [1, 0.35, 0.25], { caps: false }));
+    band.merge(flatRing(0.985, 48, [1, 0.6, 0.3]), { position: [0, 0.04, 0] });
+    this.band = sc.add(new InstancedMesh(band, new Material({ emissive: 1, castShadow: false, outline: false, opacity: 0.55 }), 1));
+    this.clear();
+  }
+
+  clear() {
+    this.list = []; this.props = []; this.areas = []; this.special = null; this.t = 0;
+    for (const k in this.inst) { this.inst[k].body.count = 0; if (this.inst[k].glow) this.inst[k].glow.count = 0; }
+    this.chev.count = 0; this.band.count = 0;
+  }
+
+  // ---- 방 배치 ----
+  //  ctx: { R, hx, hz, zone, Z, depth, reward, geo, glow, colliders, ok(x, z, margin) }
+  //  begin → (레이아웃이 엄폐물 addProp) → populate 로 구역 위험 요소를 채운다
+  begin(ctx) { this.clear(); this.ctx = ctx; }
+  populate(ctx) {
+    const { R, Z, reward, depth } = ctx;
+    if (reward === 'start' || reward === 'workshop') return;
+    const big = reward === 'boss' || reward === 'guardian';
+    const mul = big ? 0.6 : 0.75 + depth * 0.07;
+    for (const [kind, n0] of Object.entries(Z.haz || {})) {
+      const n = Math.max(0, Math.round(n0 * mul + R.range(-0.6, 0.6)));
+      for (let i = 0; i < n; i++) this.place(kind, ctx);
+    }
+  }
+
+  // 겹치지 않는 자리 (반경 r 원 + 충돌체 여유)
+  room(ctx, r, tries = 60) {
+    const { R, hx, hz, colliders, ok } = ctx;
+    for (let k = 0; k < tries; k++) {
+      const x = R.range(-hx + 2 + r * 0.5, hx - 2 - r * 0.5), z = R.range(-hz + 2 + r * 0.5, hz - 2 - r * 0.5);
+      if (!ok(x, z, r * 0.6)) continue;
+      if (colliders.some((c) => Math.hypot(c.x - x, c.z - z) < c.r + r * 0.8 + 0.3)) continue;
+      if (this.areas.some((a) => Math.hypot(a.x - x, a.z - z) < a.r + r)) continue;
+      return [x, z];
+    }
+    return null;
+  }
+
+  place(kind, ctx) {
+    const { R, geo, colliders } = ctx;
+    const glowMat = () => new Material({ emissive: 1, castShadow: false, outline: false });
+    if (PROPS[kind]) {
+      const p = this.room(ctx, kind === 'mine' ? 1.4 : 1.1); if (!p) return;
+      this.addProp(kind, p[0], p[1]);
+      this.areas.push({ x: p[0], z: p[1], r: 1.2 });
+      return;
+    }
+    const h = { kind, t: R() * 5, on: false };
+    if (kind === 'lava') {
+      // 지그재그 균열 (가지 하나)
+      const L = R.range(4.5, 7.5), c = this.room(ctx, L * 0.55); if (!c) return;
+      const yaw = R() * Math.PI, ux = Math.sin(yaw), uz = Math.cos(yaw), w = R.range(0.55, 0.75);
+      const pts = [];
+      for (let i = 0; i <= 5; i++) { const t = (i / 5 - 0.5) * L, j = i % 5 ? R.range(-0.6, 0.6) : 0; pts.push([c[0] + ux * t + uz * j, c[1] + uz * t - ux * j]); }
+      const segs = [];
+      for (let i = 0; i < 5; i++) segs.push([...pts[i], ...pts[i + 1], w]);
+      const m = pts[2 + ((R() * 2) | 0)], by = yaw + (R() < 0.5 ? 1 : -1) * R.range(0.8, 1.3), bl = R.range(1.4, 2.4);
+      segs.push([m[0], m[1], m[0] + Math.sin(by) * bl, m[1] + Math.cos(by) * bl, w * 0.6]);
+      const gl = new Geometry();
+      for (const [ax, az, bx, bz, ww] of segs) {
+        const len = Math.hypot(bx - ax, bz - az), a = Math.atan2(bx - ax, bz - az), mx = (ax + bx) / 2, mz = (az + bz) / 2;
+        geo.merge(Geometry.box(ww + 0.55, 0.035, len + 0.4, [0.12, 0.08, 0.08]), { position: [mx, 0, mz], rotation: [0, a, 0] }); // 그을린 테두리
+        gl.merge(Geometry.box(ww, 0.05, len + 0.1, [1, 0.42, 0.1]), { position: [mx, 0, mz], rotation: [0, a, 0] });
+        gl.merge(Geometry.box(ww * 0.35, 0.06, len * 0.8, [1, 0.85, 0.35]), { position: [mx, 0, mz], rotation: [0, a, 0] }); // 밝은 심
+      }
+      Object.assign(h, { segs, x: c[0], z: c[1], r: L * 0.55 + 1, period: R.range(5.5, 8), warn: 1.4, live: 0.9, tickT: 0.3, mesh: this.rooms.addMesh(gl, glowMat()) });
+      this.areas.push({ x: c[0], z: c[1], r: L * 0.5 });
+    } else if (kind === 'elec') {
+      // 전기 바닥 판: 2~3 × 2~3 칸, 체크무늬 두 조
+      const nx = 2 + ((R() * 2) | 0), nz = 2 + ((R() * 2) | 0), S = 1.8, rr = Math.hypot(nx, nz) * S * 0.5;
+      const c = this.room(ctx, rr); if (!c) return;
+      const groups = [[], []], gls = [new Geometry(), new Geometry()];
+      for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) {
+        const x = c[0] + (i - (nx - 1) / 2) * S, z = c[1] + (j - (nz - 1) / 2) * S, gi = (i + j) & 1;
+        groups[gi].push([x, z]);
+        geo.merge(Geometry.box(S - 0.08, 0.04, S - 0.08, [0.15, 0.16, 0.21]), { position: [x, 0, z] });
+        const gl = gls[gi], col = [0.35, 0.8, 1], q = S * 0.5 - 0.18;
+        for (const s of [-1, 1]) { gl.merge(Geometry.box(S - 0.36, 0.06, 0.09, col), { position: [x, 0, z + s * q] }); gl.merge(Geometry.box(0.09, 0.06, S - 0.36, col), { position: [x + s * q, 0, z] }); }
+        gl.merge(Geometry.box(0.5, 0.065, 0.08, col), { position: [x, 0, z], rotation: [0, 0.8, 0] });
+        gl.merge(Geometry.box(0.5, 0.065, 0.08, col), { position: [x, 0, z], rotation: [0, -0.8, 0] });
+      }
+      const period = R.range(4.2, 5.2);
+      for (const gi of [0, 1]) {
+        if (!groups[gi].length) continue;
+        this.list.push({ kind, tiles: groups[gi], half: S * 0.5, x: c[0], z: c[1], r: rr + 1, period, t: gi * period * 0.5 + R() * 0.3, warn: 1.0, live: 1.1, tickT: 0.35, mesh: this.rooms.addMesh(gls[gi], glowMat()) });
+      }
+      this.areas.push({ x: c[0], z: c[1], r: rr });
+      return;
+    } else if (kind === 'belt') {
+      // 컨베이어: 축 방향, 길이 6~9
+      const L = R.range(6, 9), W = 2.1, c = this.room(ctx, L * 0.5); if (!c) return;
+      const yaw = (R() < 0.5 ? 0 : Math.PI / 2) + (R() < 0.5 ? Math.PI : 0), ux = Math.round(Math.sin(yaw)), uz = Math.round(Math.cos(yaw));
+      // 벽과 겹치면 포기
+      for (let t = -L / 2; t <= L / 2; t += 1) if (colliders.some((q) => Math.hypot(q.x - c[0] - ux * t, q.z - c[1] - uz * t) < q.r + 1.3)) return;
+      geo.merge(Geometry.box(W, 0.05, L, [0.12, 0.12, 0.14]), { position: [c[0], 0, c[1]], rotation: [0, yaw, 0] });
+      for (const s of [-1, 1]) {
+        for (let t = -L / 2; t < L / 2 - 0.1; t += 0.8) geo.merge(Geometry.box(0.2, 0.12, 0.4, ((t * 1.25 + 9) | 0) & 1 ? [0.85, 0.7, 0.2] : [0.15, 0.15, 0.17]), { position: [c[0] + uz * s * W * 0.55 + ux * (t + 0.2), 0, c[1] - ux * s * W * 0.55 + uz * (t + 0.2)], rotation: [0, yaw, 0] });
+        geo.merge(Geometry.cylinder(0.2, 0.2, W, 6, [0.3, 0.3, 0.34]), { position: [c[0] + ux * s * L * 0.5 - uz * W * 0.5, 0.2, c[1] + uz * s * L * 0.5 + ux * W * 0.5], rotation: [0, yaw, Math.PI / 2] });
+      }
+      Object.assign(h, { x: c[0], z: c[1], ux, uz, L, W, yaw, speed: 3.4, r: L * 0.5 + 1, off: 0 });
+      this.areas.push({ x: c[0], z: c[1], r: L * 0.5 });
+    } else if (kind === 'cryo') {
+      const r = 2.7, c = this.room(ctx, r); if (!c) return;
+      geo.merge(Geometry.cylinder(0.85, 0.95, 0.1, 8, [0.3, 0.34, 0.4]), { position: [c[0], 0, c[1]] });
+      for (let k = -1; k <= 1; k++) geo.merge(Geometry.box(1.3, 0.14, 0.12, [0.18, 0.2, 0.26]), { position: [c[0], 0.02, c[1] + k * 0.32] });
+      const gl = new Geometry();
+      gl.merge(flatRing(0.9, 28, [0.6, 0.9, 1]), { position: [c[0], 0.05, c[1]], scale: [r, 1, r] });
+      gl.merge(Geometry.cylinder(0.6, 0.6, 0.05, 8, [0.6, 0.9, 1]), { position: [c[0], 0.06, c[1]] });
+      Object.assign(h, { x: c[0], z: c[1], r, period: R.range(5, 7), warn: 1.3, live: 0.45, mesh: this.rooms.addMesh(gl, glowMat()) });
+      this.areas.push({ x: c[0], z: c[1], r });
+    } else if (kind === 'ice') {
+      const r = R.range(2.2, 3.4), c = this.room(ctx, r); if (!c) return;
+      const n = 9, pts = [];
+      for (let i = 0; i < n; i++) { const a = (i / n) * TAU, k = r * R.range(0.8, 1.1); pts.push([c[0] + Math.cos(a) * k, 0.03, c[1] + Math.sin(a) * k]); }
+      for (let i = 0; i < n; i++) geo.tri([c[0], 0.03, c[1]], pts[(i + 1) % n], pts[i], [0.55, 0.74, 0.9], null, [0, 1, 0]);
+      for (let k = 0; k < 3; k++) { const a = R() * TAU; geo.merge(Geometry.box(0.06, 0.04, r * 1.2, [0.88, 0.95, 1]), { position: [c[0], 0.02, c[1]], rotation: [0, a, 0] }); }
+      Object.assign(h, { x: c[0], z: c[1], r });
+      this.areas.push({ x: c[0], z: c[1], r });
+    } else if (kind === 'pylon') {
+      const r = 3.3, c = this.room(ctx, r); if (!c) return;
+      const col = R.pick(ctx.Z.stone), gl = new Geometry();
+      for (let k = 0; k < 4; k++) gl.merge(Geometry.cone(0.3 + R() * 0.12, R.range(1.8, 2.8), 5, col), { position: [c[0] + R.range(-0.25, 0.25), 0, c[1] + R.range(-0.25, 0.25)], rotation: [R.range(-0.25, 0.25), R() * 6, R.range(-0.25, 0.25)] });
+      gl.merge(flatRing(0.93, 32, col), { position: [c[0], 0.05, c[1]], scale: [r, 1, r] });
+      geo.merge(Geometry.cylinder(0.85, 1, 0.3, 7, [0.24, 0.22, 0.34]), { position: [c[0], 0, c[1]] });
+      colliders.push({ x: c[0], z: c[1], r: 0.75, block: true });
+      Object.assign(h, { x: c[0], z: c[1], r, col, period: R.range(6, 8), warn: 1.5, live: 0.4, mesh: this.rooms.addMesh(gl, glowMat()) });
+      this.areas.push({ x: c[0], z: c[1], r: r * 0.7 });
+    } else return;
+    this.list.push(h);
+  }
+
+  addProp(kind, x, z) {
+    const P = PROPS[kind], K = this.game.enemies.k, d = Math.max(0, this.rooms.depth);
+    const hp = P.cover ? P.hp * (1 + d * 0.25) * Math.pow(K.hp, 0.55) : P.hp * Math.pow(K.hp, 0.5);
+    const e = { prop: true, kind, P, x, z, y: 0, r: P.r, hp, maxHp: hp, flash: 0, yaw: this.ctx.R() * TAU, T: { mass: 1e4, fly: 0, dmg: 0, xp: 0 }, mass: 1e4, kx: 0, kz: 0, spawnT: 9, fuse: -1 };
+    if (!P.walk) { e.col = { x, z, r: P.r, block: true, prop: e }; this.rooms.colliders.push(e.col); }
+    this.props.push(e);
+    return e;
+  }
+
+  // enemies.update 에서: 소품을 적 격자에 넣는다 (무기/폭발 판정에 걸리게)
+  insertProps(grid) { for (const e of this.props) if (!e.dead && e.fuse < 0) grid.insert(e); }
+
+  // enemies.hit 에서 소품이 맞았을 때
+  hitProp(e, dmg) {
+    if (e.dead || e.fuse >= 0) return;
+    e.hp -= dmg; e.flash = 0.08;
+    if (e.hp > 0) return;
+    if (e.P.boom) { e.fuse = e.kind === 'mine' ? 0.12 : 0.16 + Math.random() * 0.14; return; }
+    this.breakProp(e);
+  }
+  breakProp(e) {
+    const g = this.game, fx = g.fx;
+    e.dead = true;
+    if (e.col) { this.rooms.colliders = this.rooms.colliders.filter((c) => c !== e.col); this.rooms.flow.unblock(e.x, e.z, e.r); }
+    fx.explosion(e.x, 0.6, e.z, 0.7, { color: [1, 0.8, 0.5], scorch: false, debris: e.kind === 'iceblock' ? [0.7, 0.85, 0.95] : e.kind === 'crate' ? [0.55, 0.4, 0.25] : [0.35, 0.33, 0.35] });
+    for (let i = 0; i < 4; i++) fx.chunk(e.x, 0.6, e.z, e.kind === 'iceblock' ? [0.7, 0.85, 0.95] : [0.4, 0.36, 0.34], 5);
+    g.sfx.play('clank', { vol: 0.5 });
+  }
+  explode(e) {
+    const g = this.game, en = g.enemies, K = en.k, p = g.player, B = e.P.boom, fx = g.fx;
+    e.dead = true;
+    if (e.col) { this.rooms.colliders = this.rooms.colliders.filter((c) => c !== e.col); this.rooms.flow.unblock(e.x, e.z, e.r); }
+    en.blast(e.x, e.z, B.r, B.dmg * K.hp, false, 0);
+    const dx = p.x - e.x, dz = p.z - e.z;
+    if (Math.hypot(dx, dz) < B.r + p.r * 0.4) p.hurt(B.pDmg * K.dmg, dx, dz);
+    fx.explosion(e.x, 0.7, e.z, e.kind === 'mine' ? 1.2 : 1.7, { color: B.col });
+    fx.ring(e.x, 0.15, e.z, B.r, B.col, 0.35);
+    fx.light([e.x, 1.2, e.z], B.col, B.r * 2.2, 1.4, 0.35);
+    g.sfx.play('bigboom', { vol: 0.7 });
+    fx.addTrauma(0.25);
+  }
+
+  // ---- 특수 방 ----
+  setupSpecial(kind) {
+    this.special = kind;
+    const g = this.game, sc = g.scene, R = this.rooms;
+    if (kind === 'dark') {
+      this.base = { sun: sc.sun.intensity, sky: [...sc.ambientSky], gnd: [...sc.ambientGround], fog: [...sc.skyColor] };
+      sc.sun.intensity *= 0.1; sc.ambientSky = sc.ambientSky.map((v) => v * 0.22); sc.ambientGround = sc.ambientGround.map((v) => v * 0.22);
+      sc.skyColor = sc.fog.color = sc.skyColor.map((v) => v * 0.4);
+      this.lamp = { position: [0, 2.5, 0], color: [1, 0.92, 0.8], radius: 8.5, intensity: 1.5 };
+      R.lights.push(this.lamp);
+      this.dark = 1;
+    } else if (kind === 'storm') {
+      this.rMax = Math.hypot(R.hx, R.hz) + 1; this.rMin = 5.5; this.ringR = this.rMax; this.ringT = 0;
+    }
+  }
+  // 고리 밖인가 (적 소환 위치 거르기)
+  outside(x, z, m = 0) { return this.special === 'storm' && Math.hypot(x, z) > this.ringR - m; }
+
+  // ---- 매 프레임 ----
+  update(dt) {
+    const g = this.game, R = this.rooms, en = g.enemies, p = g.player, fx = g.fx, K = en.k;
+    const fight = R.phase === 'fight';
+    this.t += dt;
+    const pFloor = !p.stats.flying;
+    const near = (x, z) => Math.hypot(p.x - x, p.z - z) < 15;
+
+    for (const h of this.list) {
+      // 상태: idle → warn → live. 방을 제압하면 꺼진다
+      let st = 'idle', k = 0;
+      if (h.period) {
+        if (fight) h.t += dt;
+        const ph = h.t % h.period, w0 = h.period - h.warn - h.live, l0 = h.period - h.live;
+        if (fight && ph >= l0) { st = 'live'; k = (ph - l0) / h.live; } else if (fight && ph >= w0) { st = 'warn'; k = (ph - w0) / h.warn; }
+        if (st === 'live' && !h.on) { h.on = true; h.tick = 0; h.burst = true; } else h.burst = false;
+        if (st !== 'live') h.on = false;
+      }
+      const M = h.mesh?.material;
+      if (h.kind === 'lava') {
+        const cool = fight ? 1 : 0.4;
+        if (st === 'idle') M.color = [0.32 * cool, 0.3 * cool, 0.3 * cool];
+        else if (st === 'warn') { const f = 0.45 + 0.55 * Math.abs(Math.sin(this.t * (6 + k * 14))); M.color = [f, f * 0.85, f * 0.7]; if (Math.random() < 0.4) this.alongCrack(h, (x, z) => fx.sparks.emit({ position: [x, 0.1, z], velocity: [0, 1.5 + Math.random() * 2, 0], life: 0.35, size: 2, sizeEnd: 1, color: [1, 0.7, 0.2], colorEnd: [0.8, 0.2, 0.05], emissive: 1, gravity: 0.6 })); }
+        else {
+          M.color = [1.9, 1.6, 1.2];
+          for (let i = 0; i < 3; i++) this.alongCrack(h, (x, z) => fx.trail.emit({ position: [x, 0.1, z], velocity: [(Math.random() - 0.5) * 0.8, 3 + Math.random() * 4, (Math.random() - 0.5) * 0.8], life: 0.3 + Math.random() * 0.25, size: 3 + Math.random() * 2, sizeEnd: 1, color: [1, 0.85, 0.4], colorEnd: [1, 0.25, 0.05], emissive: 1, gravity: 0 }));
+          if (h.burst) { fx.light([h.x, 1, h.z], [1, 0.5, 0.15], 7, 1.2, h.live); if (near(h.x, h.z)) g.sfx.play('boom', { vol: 0.45 }); }
+          if ((h.tick -= dt) <= 0) {
+            h.tick = h.tickT;
+            const w = (e) => h.segs.some(([ax, az, bx, bz, ww]) => segDist(e.x, e.z, ax, az, bx, bz) < ww * 0.5 + e.r * 0.5);
+            en.each(h.x, h.z, h.r, (e) => { if (onFloor(e) && w(e)) this.harm(e, 0.45, 0, 0, { launch: 2.5 }); });
+            if (pFloor && w(p)) p.hurt(15 * K.dmg, p.x - h.x, p.z - h.z);
+          }
+        }
+      } else if (h.kind === 'elec') {
+        if (st === 'idle') M.color = fight ? [0.28, 0.28, 0.32] : [0.12, 0.12, 0.14];
+        else if (st === 'warn') { const on = Math.sin(this.t * (24 + k * 30)) > 0; M.color = on ? [1.5, 1.5, 1.5] : [0.25, 0.25, 0.3]; }
+        else {
+          const f = 1.8 + Math.random() * 0.8; M.color = [f, f, f];
+          if (Math.random() < 0.7) { const [x, z] = h.tiles[(Math.random() * h.tiles.length) | 0]; fx.sparks.emit({ position: [x + (Math.random() - 0.5) * 1.6, 0.15, z + (Math.random() - 0.5) * 1.6], velocity: [(Math.random() - 0.5) * 4, 2 + Math.random() * 3, (Math.random() - 0.5) * 4], life: 0.18, size: 2, sizeEnd: 1, color: [0.9, 1, 1], colorEnd: [0.3, 0.7, 1], emissive: 1, gravity: 0.4 }); }
+          if (h.burst) { fx.light([h.x, 1, h.z], [0.4, 0.8, 1], 6, 1.1, h.live); if (near(h.x, h.z)) g.sfx.play('beam', { vol: 0.3 }); }
+          if ((h.tick -= dt) <= 0) {
+            h.tick = h.tickT;
+            const w = (e) => h.tiles.some(([x, z]) => Math.abs(e.x - x) < h.half + e.r * 0.3 && Math.abs(e.z - z) < h.half + e.r * 0.3);
+            en.each(h.x, h.z, h.r, (e) => { if (onFloor(e) && w(e)) { this.harm(e, 0.32, 0, 0, { stun: 0.7 }); fx.hitSpark([e.x, 0.6, e.z], [0.5, 0.9, 1], 2); } });
+            if (pFloor && w(p)) p.hurt(13 * K.dmg, p.vx, p.vz);
+          }
+        }
+      } else if (h.kind === 'belt') {
+        // 화살표가 흐르고, 위에 선 지상 유닛을 민다
+        if (fight) h.off = (h.off + dt * h.speed) % 1.3;
+        const inside = (e, m = 0) => { const rx = e.x - h.x, rz = e.z - h.z, u = rx * h.ux + rz * h.uz, v = rx * h.uz - rz * h.ux; return Math.abs(u) < h.L / 2 + m && Math.abs(v) < h.W / 2 + m; };
+        if (fight) {
+          const v = h.speed * dt;
+          en.each(h.x, h.z, h.r, (e) => { if (!e.prop && onFloor(e) && !e.T.part && inside(e)) { e.x += h.ux * v; e.z += h.uz * v; } });
+          if (pFloor && p.dashT <= 0 && inside(p)) { p.x += h.ux * v; p.z += h.uz * v; R.clamp(p, p.r, true); }
+        }
+      } else if (h.kind === 'cryo') {
+        if (st === 'idle') M.color = fight ? [0.3, 0.3, 0.32] : [0.15, 0.15, 0.16];
+        else if (st === 'warn') {
+          const on = Math.sin(this.t * (14 + k * 26)) > 0; M.color = on ? [1.4, 1.4, 1.4] : [0.35, 0.35, 0.4];
+          if (Math.random() < 0.5) fx.smoke.emit({ position: [h.x + (Math.random() - 0.5), 0.2, h.z + (Math.random() - 0.5)], velocity: [0, 1 + Math.random(), 0], life: 0.6, size: 2, sizeEnd: 4, color: [0.85, 0.95, 1], colorEnd: [0.6, 0.75, 0.9] });
+        } else {
+          M.color = [2 - k * 1.5, 2 - k * 1.5, 2 - k * 1.5];
+          if (h.burst) {
+            fx.ring(h.x, 0.2, h.z, h.r, [0.7, 0.95, 1], 0.4); fx.light([h.x, 1, h.z], [0.6, 0.9, 1], 7, 1.2, 0.4);
+            for (let i = 0; i < 18; i++) { const a = Math.random() * TAU, s = 3 + Math.random() * 4; fx.smoke.emit({ position: [h.x, 0.3, h.z], velocity: [Math.cos(a) * s, 0.5 + Math.random(), Math.sin(a) * s], life: 0.5, size: 3, sizeEnd: 5, color: [0.9, 0.97, 1], colorEnd: [0.6, 0.8, 1] }); }
+            if (near(h.x, h.z)) g.sfx.play('shield', { vol: 0.45 });
+            en.each(h.x, h.z, h.r, (e) => { const dx = e.x - h.x, dz = e.z - h.z, d = Math.hypot(dx, dz) || 1; this.harm(e, 0.4, dx / d, dz / d, { stun: 1.6, knock: 6 }); });
+            if (Math.hypot(p.x - h.x, p.z - h.z) < h.r + p.r * 0.4 && p.hurt(11 * K.dmg, p.x - h.x, p.z - h.z)) p.attackSlow = Math.max(p.attackSlow || 0, 1.1);
+          }
+        }
+      } else if (h.kind === 'ice') {
+        if (Math.hypot(p.x - h.x, p.z - h.z) < h.r * 0.92 && pFloor && p.dashT <= 0) { p.ex += p.vx * 4.5 * dt; p.ez += p.vz * 4.5 * dt; }
+        en.each(h.x, h.z, h.r, (e) => { if (!e.prop && onFloor(e) && Math.hypot(e.x - h.x, e.z - h.z) < h.r * 0.92) { const f = 1 + 4.5 * dt; e.kx *= f; e.kz *= f; } });
+      } else if (h.kind === 'pylon') {
+        if (st === 'idle') M.color = fight ? [0.55, 0.55, 0.55] : [0.35, 0.35, 0.35];
+        else if (st === 'warn') { const f = 0.6 + k * 1.4 + (Math.random() < 0.2 ? 0.4 : 0); M.color = [f, f, f]; if (Math.random() < 0.3) fx.sparks.emit({ position: [h.x + (Math.random() - 0.5), 0.5 + Math.random() * 2, h.z + (Math.random() - 0.5)], velocity: [0, 1, 0], life: 0.3, size: 2, sizeEnd: 1, color: [1, 1, 1], colorEnd: h.col, emissive: 1, gravity: 0 }); }
+        else {
+          M.color = [2.4 - k * 1.6, 2.4 - k * 1.6, 2.4 - k * 1.6];
+          if (h.burst) {
+            fx.ring(h.x, 0.3, h.z, h.r, h.col, 0.35); fx.ring(h.x, 1.2, h.z, h.r * 0.8, h.col, 0.3); fx.light([h.x, 2, h.z], h.col, 8, 1.4, 0.35);
+            if (near(h.x, h.z)) g.sfx.play('beam', { vol: 0.4 });
+            en.each(h.x, h.z, h.r, (e) => { const dx = e.x - h.x, dz = e.z - h.z, d = Math.hypot(dx, dz) || 1; this.harm(e, 0.5, dx / d, dz / d, { knock: 10 }); });
+            if (Math.hypot(p.x - h.x, p.z - h.z) < h.r + p.r * 0.4) p.hurt(14 * K.dmg, p.x - h.x, p.z - h.z);
+          }
+        }
+      }
+    }
+
+    this.updateProps(dt, fight);
+    this.blockShots();
+    this.updateSpecial(dt, fight);
+    this.render();
+  }
+
+  alongCrack(h, fn) { const s = h.segs[(Math.random() * h.segs.length) | 0], t = Math.random(); fn(s[0] + (s[2] - s[0]) * t, s[1] + (s[3] - s[1]) * t); }
+
+  // 위험 요소 → 유닛. 소품은 드럼통/지뢰 점화, 엄폐물은 조금 깎임
+  harm(e, frac, dx, dz, { stun = 0, launch = 0, knock = 0 } = {}) {
+    if (e.prop) { this.hitProp(e, e.P.boom ? 1e9 : e.maxHp * 0.15); return; }
+    this.game.enemies.hit(e, enemyDmg(e, frac), dx, dz, knock, { noNum: true, stun, launch });
+  }
+
+  updateProps(dt, fight) {
+    const g = this.game, en = g.enemies, p = g.player, fx = g.fx;
+    for (const e of this.props) {
+      if (e.dead) continue;
+      e.flash = Math.max(0, e.flash - dt);
+      if (e.fuse >= 0) {
+        e.fuse -= dt;
+        if (Math.random() < 0.6) fx.sparks.emit({ position: [e.x, 0.9, e.z], velocity: [(Math.random() - 0.5) * 3, 2 + Math.random() * 2, (Math.random() - 0.5) * 3], life: 0.2, size: 2, sizeEnd: 1, color: [1, 0.9, 0.5], colorEnd: [1, 0.3, 0.1], emissive: 1, gravity: 0.5 });
+        if (e.fuse < 0) this.explode(e);
+        continue;
+      }
+      // 지뢰: 지상 유닛이 밟으면 0.55초 뒤 폭발
+      if (e.kind === 'mine' && fight) {
+        if (e.armT === undefined) {
+          let hit = pFloorNear(p, e);
+          if (!hit) en.each(e.x, e.z, 0.9, (o) => { if (!o.prop && onFloor(o)) hit = true; });
+          if (hit) { e.armT = 0.55; g.sfx.play('click', { vol: 0.8 }); }
+        } else if ((e.armT -= dt) <= 0) { e.hp = 0; e.fuse = 0; }
+      }
+    }
+    if (this.props.some((e) => e.dead)) this.props = this.props.filter((e) => !e.dead);
+  }
+
+  // 적 탄은 벽/엄폐물에 막힌다. 엄폐물은 조금씩 깎이고, 드럼통은 터진다
+  blockShots() {
+    const S = this.game.shots.enemyList, C = this.rooms.colliders;
+    for (let i = S.length - 1; i >= 0; i--) {
+      const s = S[i];
+      for (const c of C) {
+        if (!c.block || Math.abs(s.x - c.x) > c.r || Math.abs(s.z - c.z) > c.r || (s.x - c.x) ** 2 + (s.z - c.z) ** 2 > c.r * c.r * 0.8) continue;
+        S.splice(i, 1);
+        this.game.fx.hitSpark([s.x, s.y, s.z], [1, 0.6, 0.35], 2);
+        if (c.prop) this.hitProp(c.prop, c.prop.P.boom ? 1e9 : c.prop.maxHp * 0.035);
+        break;
+      }
+    }
+  }
+
+  updateSpecial(dt, fight) {
+    const g = this.game, sc = g.scene, p = g.player, en = g.enemies;
+    if (this.special === 'dark') {
+      // 제압하면 불이 다시 들어온다
+      if (!fight) this.dark = Math.max(0, this.dark - dt * 0.8);
+      const B = this.base, k = this.dark, mix = (lo, hi) => hi * (1 - k) + lo * k;
+      sc.sun.intensity = mix(B.sun * 0.1, B.sun);
+      sc.ambientSky = B.sky.map((v) => mix(v * 0.22, v)); sc.ambientGround = B.gnd.map((v) => mix(v * 0.22, v));
+      sc.skyColor = sc.fog.color = B.fog.map((v) => mix(v * 0.4, v));
+      this.lamp.position = [p.x, 2.6 * (p.size || 1), p.z];
+      this.lamp.intensity = 1.5 * k + 0.2;
+    } else if (this.special === 'storm') {
+      const R = this.rooms;
+      if (fight) { const k = Math.max(0, Math.min(1, R.roomT / (R.duration * 0.8))), s = k * k * (3 - 2 * k); this.ringR = this.rMax + (this.rMin - this.rMax) * s; }
+      else this.ringR += dt * 12;
+      if (fight && (this.ringT -= dt) <= 0) {
+        this.ringT = 0.5;
+        if (Math.hypot(p.x, p.z) > this.ringR - p.r * 0.5) p.hurt(8 * en.k.dmg, -p.x, -p.z);
+        for (const e of en.list) if (e.spawnT > 0.5 && Math.hypot(e.x, e.z) > this.ringR) en.hit(e, enemyDmg(e, 0.15), -e.x, -e.z, 2, { noNum: true });
+      }
+    }
+  }
+
+  render() {
+    const t = this.t, counts = {};
+    for (const k in this.inst) counts[k] = 0;
+    for (const e of this.props) {
+      const I = this.inst[e.kind], i = counts[e.kind]++;
+      if (i >= 24) continue;
+      const hurt = e.P.cover ? 0.82 + 0.18 * Math.max(0, e.hp / e.maxHp) : 1;
+      const fusing = e.fuse >= 0 || e.armT !== undefined, blink = fusing && Math.sin(t * 50) > 0;
+      const m = m4.fromTRS([e.x, 0, e.z], [0, e.yaw, 0], [1, hurt, 1]);
+      const f = e.flash > 0 || blink;
+      I.body.setAt(i, m, f ? [2.4, 2.4, 2.4] : e.P.cover ? [hurt, hurt, hurt] : [1, 1, 1], f ? 0.6 : 0);
+      const gk = e.kind === 'mine' && !fusing ? 0.45 + 0.4 * (Math.sin(t * 3 + e.yaw * 5) > 0.6 ? 1 : 0) : blink ? 2.5 : 1;
+      if (I.glow) I.glow.setAt(i, m, [gk, gk, gk], 1);
+    }
+    for (const k in this.inst) { const I = this.inst[k]; I.body.count = Math.min(24, counts[k]); if (I.glow) I.glow.count = I.body.count; }
+    // 컨베이어 화살표
+    let n = 0;
+    for (const h of this.list) {
+      if (h.kind !== 'belt') continue;
+      for (let s = -h.L / 2 + 0.6 + h.off; s < h.L / 2 - 0.5 && n < 200; s += 1.3) {
+        this.chev.setAt(n++, m4.fromTRS([h.x + h.ux * s, 0.06, h.z + h.uz * s], [0, h.yaw, 0], [1, 1, 1]), this.rooms.phase === 'fight' ? [1, 1, 1] : [0.4, 0.4, 0.4], 1);
+      }
+    }
+    this.chev.count = n;
+    // 수축 방어막
+    if (this.special === 'storm' && this.ringR < this.rMax + 4) {
+      const pulse = 0.85 + 0.15 * Math.sin(t * 6);
+      this.band.setAt(0, m4.fromTRS([0, 0, 0], [0, t * 0.3, 0], [this.ringR, 1, this.ringR]), [pulse, pulse, pulse], 1);
+      this.band.count = 1;
+    } else this.band.count = 0;
+  }
+}
+
+function pFloorNear(p, e) { return !p.stats.flying && p.dashT <= 0 && Math.hypot(p.x - e.x, p.z - e.z) < 0.9 + p.r * 0.3; }
+
+return { PROPS, RoomHazards };
+})();
+
 __m["game/rooms.js"] = (() => {
-// 방 탐험: 구역(사막 폐허 / 폐공장 / 수정 협곡)별 방을 하나씩 생성하고,
+// 방 탐험: 구역별 방을 하나씩 생성하고,
 // 적 웨이브 → 클리어 → 보상 → 출구 문(다음 방 보상 아이콘) 선택 → 다음 방… → 보스 방.
+//
+//  런마다 6개 구역 중 3개를 골라 순서를 섞는다 (지난 런의 첫 구역은 피하고, 안 나온 구역을 우선).
+//  방마다 레이아웃(world.js)과 구역 위험 요소(hazards.js), 가끔 특수 규칙(정전, 수축 방어막)이 붙는다.
 //
 //  카메라가 -x,-z 쪽(화면 위)을 바라보므로 먼 벽(W: -x, S: -z)은 높게, 가까운 벽(E, N)은 낮게 만든다.
 //  입구는 항상 가까운 쪽, 출구는 먼 쪽 → 플레이어는 화면 위로 전진한다 (하데스식).
 
 const { Geometry, Mesh, Material, fbm, rng } = __m["engine/index.js"];
 const { MIDBOSS_KINDS } = __m["game/midbosses.js"];
+const { buildLayout, pickLayout, Flow } = __m["game/world.js"];
+const { RoomHazards } = __m["game/hazards.js"];
 
+//  floor: 바닥 무늬, edge: 테두리 벽 (rock | box), music: [곡, 재생 속도], guardian: 수호자 종류
+//  cover: 부서지는 엄폐물, haz: 위험 요소별 기본 개수 (깊이에 따라 늘어난다)
 const ZONES = {
   desert: {
     name: '사막 폐허', sun: { dir: [0.55, 0.62, 0.35], color: [1, 0.78, 0.62], k: 0.72 }, sky: [0.22, 0.23, 0.38], gnd: [0.17, 0.13, 0.15], fog: [0.09, 0.08, 0.14],
     floor: [[0.62, 0.5, 0.41], [0.56, 0.43, 0.37], [0.5, 0.38, 0.34]], wall: [[0.5, 0.38, 0.34], [0.58, 0.44, 0.37], [0.44, 0.33, 0.32]], stone: [[0.62, 0.58, 0.55], [0.5, 0.47, 0.46]],
+    pattern: 'noise', edge: 'rock', music: ['level1', 1], guardian: 'worm', cover: 'sandbag', haz: { mine: 4, barrel: 3 },
   },
   factory: {
     name: '폐공장', sun: { dir: [0.4, 0.75, 0.5], color: [0.85, 0.9, 1], k: 0.62 }, sky: [0.24, 0.27, 0.36], gnd: [0.16, 0.16, 0.18], fog: [0.06, 0.07, 0.1],
     floor: [[0.38, 0.4, 0.44], [0.33, 0.35, 0.39], [0.3, 0.31, 0.35]], wall: [[0.36, 0.38, 0.44], [0.3, 0.32, 0.37]], stone: [[0.2, 0.55, 0.55], [0.85, 0.45, 0.2]],
+    pattern: 'checker', edge: 'box', lamp: [1, 0.55, 0.15], music: ['level2', 1], guardian: 'crane', cover: 'crate', haz: { belt: 2, barrel: 3, elec: 1 },
   },
   crystal: {
     name: '수정 협곡', sun: { dir: [0.3, 0.8, 0.5], color: [0.62, 0.72, 1], k: 0.5 }, sky: [0.22, 0.2, 0.42], gnd: [0.12, 0.1, 0.2], fog: [0.05, 0.04, 0.1],
     floor: [[0.3, 0.27, 0.42], [0.26, 0.24, 0.38], [0.22, 0.2, 0.33]], wall: [[0.24, 0.22, 0.34], [0.3, 0.27, 0.4]], stone: [[0.45, 0.95, 1], [1, 0.45, 0.9]],
+    pattern: 'noise', edge: 'rock', shards: true, music: ['level3', 1], guardian: 'crane', cover: 'crystal', haz: { pylon: 2.5, mine: 1 },
+  },
+  foundry: {
+    name: '용암 주조소', sun: { dir: [0.5, 0.6, 0.4], color: [1, 0.6, 0.42], k: 0.55 }, sky: [0.3, 0.17, 0.15], gnd: [0.2, 0.1, 0.08], fog: [0.1, 0.04, 0.03],
+    floor: [[0.27, 0.22, 0.22], [0.23, 0.19, 0.19], [0.36, 0.2, 0.14]], wall: [[0.2, 0.17, 0.18], [0.26, 0.21, 0.2]], stone: [[1, 0.45, 0.12], [1, 0.7, 0.2]],
+    pattern: 'basalt', edge: 'rock', embers: true, music: ['level2', 0.92], guardian: 'crane', cover: 'slag', haz: { lava: 4, belt: 1, barrel: 2 },
+  },
+  tundra: {
+    name: '동토 설원', sun: { dir: [0.35, 0.7, 0.6], color: [0.85, 0.92, 1], k: 0.7 }, sky: [0.32, 0.36, 0.48], gnd: [0.24, 0.26, 0.32], fog: [0.12, 0.14, 0.2],
+    floor: [[0.74, 0.78, 0.85], [0.68, 0.72, 0.8], [0.6, 0.65, 0.75]], wall: [[0.45, 0.52, 0.62], [0.55, 0.62, 0.72], [0.38, 0.42, 0.5]], stone: [[0.6, 0.8, 0.95], [0.75, 0.88, 0.98]],
+    pattern: 'snow', edge: 'rock', music: ['level3', 0.9], guardian: 'worm', cover: 'iceblock', haz: { ice: 3, cryo: 2, barrel: 1 },
+  },
+  orbital: {
+    name: '궤도 정거장', sun: { dir: [0.2, 0.9, 0.3], color: [0.8, 0.85, 1], k: 0.48 }, sky: [0.2, 0.22, 0.32], gnd: [0.1, 0.11, 0.16], fog: [0.02, 0.02, 0.05],
+    floor: [[0.34, 0.36, 0.42], [0.29, 0.31, 0.37], [0.24, 0.26, 0.31]], wall: [[0.38, 0.4, 0.48], [0.32, 0.34, 0.42]], stone: [[0.3, 0.9, 1], [0.9, 0.35, 1]],
+    pattern: 'plates', edge: 'box', lamp: [0.3, 0.9, 1], space: true, music: ['level1', 1.1], guardian: 'crane', cover: 'panel', haz: { elec: 2, belt: 1.5, plasma: 3 },
   },
 };
-// 런 구성: 깊이별 구역 (마지막 = 보스)
+// 런 구성: 깊이 9칸 (0 출격, 2·5 수호자, 8 타이탄). 구역은 3칸씩 (newRun 에서 순서를 고른다)
 const RUN_ZONES = ['desert', 'desert', 'desert', 'factory', 'factory', 'factory', 'crystal', 'crystal', 'crystal'];
 const REWARDS = {
   part:     { name: '부품 캐시', icon: 'part', desc: '무기나 모듈 선택' },
@@ -7184,9 +8102,31 @@ const REWARDS = {
   boss:     { name: '타이탄', icon: 'boss', desc: '최종 보스' },
   start:    { name: '출격', icon: 'part', desc: '' },
 };
+// 특수 방: 일반 전투 방(깊이 2부터)에 가끔 붙는다. 버티면 정비 포인트 +1
+const SPECIALS = {
+  dark:  { name: '정전 구역', desc: '정전! 기체 조명 밖은 어둠 속이다' },
+  storm: { name: '수축 방어막', desc: '방어막 수축! 붉은 고리 밖은 피해를 입는다' },
+};
 
 const DOOR_HALF = 2.2;
 const SIDE = { W: [-1, 0], S: [0, -1], E: [1, 0], N: [0, 1] }; // 방향 → (x, z) 부호
+
+// 런 구역 순서: 지난 런의 첫 구역은 피하고, 지난 런에 안 나온 구역에 가중치 3
+function pickZones(seed) {
+  const R = rng(seed ^ 0x2545f491), ids = Object.keys(ZONES);
+  let last = [];
+  try { last = JSON.parse(localStorage.getItem('mechaforge.zones') || '[]'); } catch { /* 저장 불가 환경 */ }
+  const out = [];
+  while (out.length < 3) {
+    const pool = ids.filter((z) => !out.includes(z) && !(out.length === 0 && z === last[0]));
+    const w = pool.map((z) => (last.includes(z) ? 1 : 3));
+    let r = R() * w.reduce((a, b) => a + b, 0), i = 0;
+    while (i < pool.length - 1 && r > w[i]) r -= w[i++];
+    out.push(pool[i]);
+  }
+  try { localStorage.setItem('mechaforge.zones', JSON.stringify(out)); } catch { /* 무시 */ }
+  return out;
+}
 
 class Rooms {
   constructor(game) {
@@ -7194,7 +8134,13 @@ class Rooms {
     this.meshes = [];
     this.colliders = [];
     this.doors = [];
+    this.lights = [];
     this.hx = 12; this.hz = 12;
+    this.zones = RUN_ZONES.filter((z, i) => i % 3 === 0);
+    this.flow = new Flow();
+    this.hazards = new RoomHazards(game, this);
+    // 디버그: game.rooms.force = { zone: 'tundra', layout: 'ring', special: 'dark' }
+    this.force = {};
     // 문 차단막 / 보상 오브젝트 공용 지오메트리
     const bar = new Geometry();
     for (let i = -2; i <= 2; i++) bar.merge(Geometry.box(0.08, 2.2, 0.08), { position: [0, 0, i * 0.85] });
@@ -7204,6 +8150,7 @@ class Rooms {
   }
 
   get last() { return RUN_ZONES.length - 1; }
+  zoneAt(depth) { return this.zones[Math.min(this.zones.length - 1, Math.floor(Math.max(0, depth) / 3))]; }
 
   // ---- 난이도 ----
   // 플레이어 전력 지수 (시작 = 1): 레벨, 무기 수/레벨/진화, 화력 배율
@@ -7224,7 +8171,7 @@ class Rooms {
     };
   }
 
-  newRun() { this.depth = -1; this.path = []; this.seed = (Math.random() * 1e9) | 0; }
+  newRun() { this.depth = -1; this.path = []; this.seed = (Math.random() * 1e9) | 0; this.zones = pickZones(this.seed); this.lastLayout = null; this.lastSpecial = null; }
 
   // 다음 방 후보 (문 2개까지)
   rollExits(depth) {
@@ -7244,6 +8191,8 @@ class Rooms {
   clear() {
     for (const m of this.meshes) { this.game.scene.remove(m); if (m.geometry !== this.barGeo) m.geometry.dispose(this.game.engine.gl); }
     this.meshes = []; this.colliders = []; this.doors = [];
+    this.hazards.clear();
+    this.flow.solid = null; this.flow.ready = false;
   }
   addMesh(geo, mat) { const m = this.game.scene.add(new Mesh(geo, mat)); this.meshes.push(m); return m; }
 
@@ -7253,16 +8202,24 @@ class Rooms {
     this.clear();
     this.depth++;
     const depth = this.depth;
-    const zoneId = RUN_ZONES[Math.min(depth, this.last)];
+    const zoneId = this.force.zone || this.zoneAt(depth);
     const Z = ZONES[zoneId];
     this.zone = zoneId; this.reward = reward;
     const R = rng(this.seed + depth * 131 + 7);
     const boss = reward === 'boss';
     const big = boss || reward === 'guardian';
+    const combat = ['part', 'system', 'supply', 'xp', 'elite'].includes(reward);
     this.hx = big ? 16 : R.range(15, 18); this.hz = big ? 16 : R.range(15, 18);
     if (reward === 'workshop' || reward === 'start') { this.hx = 9; this.hz = 9; }
     const hx = this.hx, hz = this.hz;
-    this.path.push({ reward, zone: zoneId });
+    // 특수 방 (연속으로는 안 나온다). 수축 방어막은 막힌 구조물이 없는 방에서만
+    let special = this.force.special ?? null; // force.special: undefined = 무작위, null = 없음
+    if (this.force.special === undefined && combat && depth >= 2 && !this.lastSpecial && R() < 0.3) special = R() < 0.5 ? 'dark' : 'storm';
+    this.special = special; this.lastSpecial = special;
+    let layout = this.force.layout || pickLayout(R, reward, this.lastLayout);
+    if (special === 'storm' && !['open', 'pillars'].includes(layout)) layout = R() < 0.5 ? 'open' : 'pillars';
+    this.layout = this.lastLayout = layout;
+    this.path.push({ reward, zone: zoneId, layout, special });
 
     // 조명
     sc.sun.direction = Z.sun.dir; sc.sun.color = Z.sun.color; sc.sun.intensity = Z.sun.k;
@@ -7277,46 +8234,31 @@ class Rooms {
 
     // 바닥
     const S = Math.max(hx, hz) * 2 + 34;
-    const floor = Geometry.grid(S, S, 30, 30, () => 0, (c) => {
-      const inside = Math.abs(c[0]) < hx && Math.abs(c[2]) < hz;
-      const n = fbm(c[0] * 0.09 + depth * 3.1, c[2] * 0.09, 3);
-      let col;
-      if (zoneId === 'factory') col = Z.floor[((Math.floor(c[0] / 2) + Math.floor(c[2] / 2)) & 1) ? 0 : 1].slice();
-      else col = (n > 0.56 ? Z.floor[2] : n > 0.44 ? Z.floor[1] : Z.floor[0]).slice();
-      if (zoneId === 'factory' && inside && (Math.abs(c[0]) > hx - 1.2 || Math.abs(c[2]) > hz - 1.2)) col = ((Math.floor((c[0] + c[2]) * 0.7) & 1) ? [0.85, 0.7, 0.2] : [0.18, 0.18, 0.2]);
-      if (!inside) col = col.map((v) => v * 0.42);
-      return col;
-    });
+    const floor = Geometry.grid(S, S, 48, 48, () => 0, (c) => this.floorColor(Z, c, depth, S / 48));
     this.addMesh(floor, new Material());
 
     const geo = new Geometry(), glow = new Geometry();
     const pick = (a) => a[(R() * a.length) | 0];
-    const rock = (x, z, r, solid, col) => {
-      geo.merge(Geometry.icosphere(r, 0, col || pick(Z.wall), { jitter: 0.3, seed: (R() * 1e6) | 0, squashY: 0.8 }), { position: [x, r * 0.3, z], rotation: [0, R() * 6, 0] });
-      if (solid) this.colliders.push({ x, z, r: r * 0.9 });
-    };
-    const crystal = (x, z, h, solid) => {
-      const c = pick(Z.stone);
-      for (let k = 0; k < 3; k++) glow.merge(Geometry.cone(0.18 + R() * 0.15, h * (0.6 + R() * 0.5), 5, c), { position: [x + R.range(-0.3, 0.3), 0, z + R.range(-0.3, 0.3)], rotation: [R.range(-0.4, 0.4), R() * 6, R.range(-0.4, 0.4)] });
-      if (solid) this.colliders.push({ x, z, r: 0.6 });
-      return c;
-    };
+    const rock = (x, z, r, col) => geo.merge(Geometry.icosphere(r, 0, col || pick(Z.wall), { jitter: 0.3, seed: (R() * 1e6) | 0, squashY: 0.8 }), { position: [x, r * 0.3, z], rotation: [0, R() * 6, 0] });
     const doorAt = (side) => [...this.doors, this.entry].find((d) => d.side === side);
 
-    // 벽: 문 자리를 비우고 한 줄로 채운다. far = 높게, near = 낮게
+    // 테두리 벽: 문 자리를 비우고 한 줄로 채운다. far = 높게, near = 낮게
     const wallLine = (side) => {
       const [sx, sz] = SIDE[side], far = side === 'W' || side === 'S', len = sx ? hz : hx, door = doorAt(side);
       for (let t = -len - 1.5; t <= len + 1.5; t += far ? 1.6 : 2.2) {
         if (door && Math.abs(t) < DOOR_HALF + 0.6) continue;
         const x = sx ? sx * (hx + 0.8) : t, z = sz ? sz * (hz + 0.8) : t;
-        if (zoneId === 'factory') {
+        if (Z.edge === 'box') {
           const h = far ? R.range(2.4, 3.2) : R.range(0.5, 0.8);
           geo.merge(Geometry.box(sx ? 1 : 1.7, h, sx ? 1.7 : 1, pick(Z.wall)), { position: [x, 0, z] });
-          if (far && R() < 0.3) glow.merge(Geometry.box(0.25, 0.18, 0.25, [1, 0.55, 0.15]), { position: [x - sx * 0.55, h - 0.5, z - sz * 0.55] });
+          if (far && R() < 0.3) glow.merge(Geometry.box(0.25, 0.18, 0.25, Z.lamp), { position: [x - sx * 0.55, h - 0.5, z - sz * 0.55] });
           if (far && R() < 0.4) geo.merge(Geometry.cylinder(0.12, 0.12, h + 0.6, 5, [0.25, 0.27, 0.3]), { position: [x - sx * 0.6, 0, z - sz * 0.6] });
+          if (Z.space && far && R() < 0.25) glow.merge(Geometry.box(sx ? 0.06 : 1.2, 0.5, sx ? 1.2 : 0.06, [0.5, 0.7, 1]), { position: [x - sx * 0.52, h * 0.55, z - sz * 0.52] }); // 창문 너머 별빛
         } else {
-          rock(x, z, far ? R.range(1.2, 1.9) : R.range(0.5, 0.8), false);
-          if (far && zoneId === 'crystal' && R() < 0.35) crystal(x - sx * 0.8, z - sz * 0.8, R.range(1.2, 2.4), false);
+          rock(x, z, far ? R.range(1.2, 1.9) : R.range(0.5, 0.8));
+          if (far && Z.shards && R() < 0.35) for (let k = 0; k < 3; k++) glow.merge(Geometry.cone(0.18 + R() * 0.15, R.range(1.2, 2.4) * (0.6 + R() * 0.5), 5, pick(Z.stone)), { position: [x - sx * 0.8 + R.range(-0.3, 0.3), 0, z - sz * 0.8 + R.range(-0.3, 0.3)], rotation: [R.range(-0.4, 0.4), R() * 6, R.range(-0.4, 0.4)] });
+          if (far && Z.embers && R() < 0.3) glow.merge(Geometry.box(0.9, 0.06, 0.12, pick(Z.stone)), { position: [x - sx * 0.9, R.range(0.3, 1.2), z - sz * 0.9], rotation: [0, sx ? Math.PI / 2 : 0, R.range(-0.5, 0.5)] });
+          if (far && zoneId === 'tundra') geo.merge(Geometry.icosphere(R.range(0.8, 1.2), 0, [0.9, 0.93, 0.97], { squashY: 0.4, seed: (R() * 1e6) | 0 }), { position: [x, R.range(1.2, 1.6), z] });
         }
       }
     };
@@ -7340,34 +8282,22 @@ class Rooms {
       d.barrier.rotation = [0, sx ? 0 : Math.PI / 2, 0];
     }
 
-    // 내부 장애물
-    const free = (x, z, d) => Math.hypot(x, z) > 3.5 && Math.abs(x) < hx - 2 && Math.abs(z) < hz - 2 && !this.colliders.some((c) => Math.hypot(c.x - x, c.z - z) < c.r + d)
-      && Math.hypot(x - hx, z) > 4 && Math.hypot(x, z - hz) > 4 && Math.hypot(x + hx, z) > 4 && Math.hypot(x, z + hz) > 4;
-    const spot = (d = 2.5) => { for (let k = 0; k < 30; k++) { const x = R.range(-hx + 2, hx - 2), z = R.range(-hz + 2, hz - 2); if (free(x, z, d)) return [x, z]; } return null; };
-    const nProps = reward === 'workshop' ? 2 : boss ? 4 : 5 + ((R() * 4) | 0);
-    for (let i = 0; i < nProps; i++) {
-      const p = spot(); if (!p) continue;
-      const [x, z] = p;
-      if (zoneId === 'desert') {
-        if (R() < 0.5) { geo.merge(Geometry.cylinder(0.42, 0.48, R.range(1.6, 3.2), 6, pick(Z.stone)), { position: [x, 0, z] }); this.colliders.push({ x, z, r: 0.55 }); }
-        else { rock(x, z, R.range(0.8, 1.3), true); if (R() < 0.6) rock(x + 1, z + 0.6, 0.4, false); }
-      } else if (zoneId === 'factory') {
-        const t = R();
-        if (t < 0.4) { const yaw = R() < 0.5 ? 0 : Math.PI / 2; geo.merge(Geometry.box(1.3, 1.3, 2.6, pick(Z.stone)), { position: [x, 0, z], rotation: [0, yaw, 0] }); this.colliders.push({ x, z, r: 0.9 }, { x: x + (yaw ? 0.8 : 0), z: z + (yaw ? 0 : 0.8), r: 0.8 }, { x: x - (yaw ? 0.8 : 0), z: z - (yaw ? 0 : 0.8), r: 0.8 }); }
-        else if (t < 0.7) { for (let k = 0; k < 3; k++) geo.merge(Geometry.cylinder(0.32, 0.32, 0.9, 7, [0.75, 0.2, 0.18]), { position: [x + (k % 2) * 0.7, 0, z + (k > 1 ? 0.7 : 0)] }); this.colliders.push({ x: x + 0.35, z: z + 0.3, r: 0.85 }); }
-        else { geo.merge(Geometry.box(1.6, 1.5, 1.6, [0.4, 0.42, 0.46]), { position: [x, 0, z] }); geo.merge(Geometry.cylinder(0.15, 0.15, 2.2, 5, [0.6, 0.6, 0.62]), { position: [x + 0.5, 1.5, z] }); glow.merge(Geometry.box(0.5, 0.3, 0.05, [0.3, 1, 0.6]), { position: [x, 0.8, z + 0.82] }); this.colliders.push({ x, z, r: 1.05 }); }
-      } else {
-        if (R() < 0.6) { const c = crystal(x, z, R.range(1.6, 3), true); if (this.lights.length < 3) this.lights.push({ position: [x, 1.5, z], color: c, radius: 5, intensity: 0.55 }); }
-        else rock(x, z, R.range(0.8, 1.2), true);
-      }
-    }
+    // 내부: 레이아웃(벽, 기둥, 엄폐물, 소품) → 구역 위험 요소
+    const H = this.hazards;
+    const ctx = { R, hx, hz, zone: zoneId, Z, depth, reward, geo, glow, colliders: this.colliders, lights: this.lights, nProps: reward === 'workshop' ? 2 : boss ? 4 : undefined, cover: (x, z) => H.addProp(Z.cover, x, z) };
+    H.begin(ctx);
+    buildLayout(layout, ctx);
+    H.populate(ctx);
     // 바닥 잔돌
-    for (let i = 0; i < 40; i++) { const x = R.range(-hx, hx), z = R.range(-hz, hz); if (zoneId !== 'factory') rock(x, z, R.range(0.1, 0.2), false); }
-    if (zoneId === 'crystal') for (let i = 0; i < 10; i++) glow.merge(Geometry.cone(0.08, 0.35, 4, pick(Z.stone)), { position: [R.range(-hx, hx), 0, R.range(-hz, hz)], rotation: [R.range(-0.5, 0.5), 0, R.range(-0.5, 0.5)] });
+    for (let i = 0; i < 40; i++) { const x = R.range(-hx, hx), z = R.range(-hz, hz); if (Z.edge === 'rock') rock(x, z, R.range(0.1, 0.2), zoneId === 'tundra' ? [0.86, 0.9, 0.95] : null); }
+    if (Z.shards) for (let i = 0; i < 10; i++) glow.merge(Geometry.cone(0.08, 0.35, 4, pick(Z.stone)), { position: [R.range(-hx, hx), 0, R.range(-hz, hz)], rotation: [R.range(-0.5, 0.5), 0, R.range(-0.5, 0.5)] });
+    if (Z.embers) for (let i = 0; i < 14; i++) glow.merge(Geometry.box(R.range(0.2, 0.5), 0.03, 0.08, pick(Z.stone)), { position: [R.range(-hx, hx), 0.01, R.range(-hz, hz)], rotation: [0, R() * 3, 0] });
 
     this.addMesh(geo, new Material());
     if (glow.vertexCount) this.addMesh(glow, new Material({ emissive: 0.9, castShadow: false }));
     g.fx.extraLights = this.lights;
+    this.flow.build(hx, hz, this.colliders);
+    if (special) H.setupSpecial(special);
 
     // 보상 오브젝트 (클리어 후 등장)
     this.prize = null;
@@ -7376,8 +8306,8 @@ class Rooms {
     this.waveT = 1.2;
     // 물량전: 제한 시간 동안 버티며 쓸어버리기
     this.duration = boss ? 0 : (reward === 'elite' ? 60 : 34 + depth * 5);
-    this.roomT = 0; this.acc = 0; this.marks = new Set(); this.bossOn = false; this.guardOn = false; this.waitMid = false;
-    this.midAt = ['part', 'system', 'supply', 'xp', 'elite'].includes(reward) ? this.planMids() : [];
+    this.roomT = 0; this.acc = 0; this.marks = new Set(); this.bossOn = false; this.guardOn = false; this.waitMid = false; this.told = false;
+    this.midAt = combat ? this.planMids() : [];
     if (reward === 'guardian') { this.duration = 0; this.waveT = 1.5; }
     if (reward === 'workshop' || reward === 'start') { this.phase = 'clear'; this.waves = []; }
     if (reward === 'workshop') this.spawnPrize();
@@ -7390,6 +8320,37 @@ class Rooms {
     p.yaw = p.aimYaw = p.aimGoal = Math.atan2(-esx, -esz);
     p.place();
     g.ui.roomInfo(this);
+  }
+
+  // 바닥 색 (구역 무늬). 방 밖은 어둡게
+  floorColor(Z, c, depth, cs) {
+    // 무늬 바닥은 칸(삼각형 둘) 단위로 칠해서 삼각형 얼룩이 생기지 않게
+    const snap = (v) => (Z.pattern === 'plates' || Z.pattern === 'checker' ? (Math.floor(v / cs + 24) - 23.5) * cs : v);
+    const hx = this.hx, hz = this.hz, x = snap(c[0]), z = snap(c[2]);
+    const inside = Math.abs(x) < hx && Math.abs(z) < hz, border = inside && (Math.abs(x) > hx - 1.2 || Math.abs(z) > hz - 1.2);
+    const n = fbm(x * 0.09 + depth * 3.1, z * 0.09, 3);
+    const tone = (n > 0.56 ? Z.floor[2] : n > 0.44 ? Z.floor[1] : Z.floor[0]).slice();
+    let col = tone;
+    if (Z.pattern === 'checker') {
+      col = Z.floor[(((Math.floor(x / cs + 24) >> 1) + (Math.floor(z / cs + 24) >> 1)) & 1) ? 0 : 1].slice();
+      if (border) col = (Math.floor((x + z) * 0.7) & 1) ? [0.85, 0.7, 0.2] : [0.18, 0.18, 0.2];
+    } else if (Z.pattern === 'plates') {
+      // 2×2 칸 철판, 판마다 톤이 조금씩 다르고 한 귀퉁이는 어두운 볼트 자리
+      const ci = Math.floor(x / cs + 24), cj = Math.floor(z / cs + 24);
+      col = (ci & 1) && (cj & 1) ? [0.2, 0.21, 0.26] : Z.floor[((ci >> 1) * 7 + (cj >> 1) * 3) % 3].slice();
+      if (border) col = (Math.floor((x + z) * 0.6) & 1) ? [0.25, 0.6, 0.7] : [0.16, 0.17, 0.22];
+    } else if (Z.pattern === 'basalt') {
+      const m = fbm(x * 0.23 + 5, z * 0.23 - depth, 2);
+      col = m > 0.62 ? Z.floor[2].slice() : n > 0.5 ? Z.floor[1].slice() : Z.floor[0].slice(); // 붉게 달군 바위 줄기
+    } else if (Z.pattern === 'snow') {
+      const m = fbm(x * 0.05 - 2, z * 0.05 + depth, 2);
+      col = m > 0.6 ? [0.84, 0.87, 0.92] : tone; // 눈 더미
+    }
+    if (!inside) {
+      if (Z.space) return fbm(x * 1.7, z * 1.7, 1) > 0.84 ? [0.3, 0.32, 0.45] : [0.02, 0.02, 0.05]; // 정거장 밖 = 우주
+      col = col.map((v) => v * 0.42);
+    }
+    return col;
   }
 
   // 적 흐름: 초당 예산만큼 무리를 방 가장자리에 소환
@@ -7497,11 +8458,15 @@ class Rooms {
 
   update(dt) {
     const g = this.game, en = g.enemies, p = g.player;
+    // 지형: 위험 요소, 소품, 적 길찾기
+    this.hazards.update(dt);
+    this.flow.update(dt, p.x, p.z);
+    if (this.special && !this.told && this.phase === 'fight') { this.told = true; g.ui.toast(SPECIALS[this.special].desc); }
     // 웨이브 진행
     if (this.phase === 'fight') {
       if (this.reward === 'guardian') {
         this.waveT -= dt;
-        if (!this.guardOn && this.waveT <= 0) { this.guardOn = true; en.spawnGuardian(this.zone === 'desert' ? 'worm' : 'crane'); }
+        if (!this.guardOn && this.waveT <= 0) { this.guardOn = true; en.spawnGuardian(ZONES[this.zone].guardian); }
         if (en.guardian && !en.guardian.dead) this.stream(dt, 0.25);
         if (this.guardOn && en.guardian?.done) {
           this.guardOn = false; en.guardian = null;
@@ -7537,6 +8502,7 @@ class Rooms {
           en.detonateAll();
           g.ui.banner('구역 제압!');
           g.addChips(1);
+          if (this.special) g.addChips(1, `${SPECIALS[this.special].name} 돌파`);
           g.sfx.play('clear');
           g.fx.addTrauma(0.3);
           this.spawnPrize();
@@ -7586,6 +8552,7 @@ class Rooms {
     for (let k = 0; k < 20; k++) {
       const x = (Math.random() * 2 - 1) * (this.hx - 1.8), z = (Math.random() * 2 - 1) * (this.hz - 1.8);
       if (Math.hypot(x - p.x, z - p.z) < minD) continue;
+      if (this.hazards.outside(x, z, 1.5)) continue;
       if (this.colliders.some((c) => Math.hypot(c.x - x, c.z - z) < c.r + 0.8)) continue;
       return [x, z];
     }
@@ -7593,12 +8560,25 @@ class Rooms {
   }
 
   // 방 경계 + 장애물 충돌. 열린 출구 문 앞에서는 벽 밖으로 나갈 수 있다
+  //  적은 장애물에 밀리면 흐름장 방향으로 벽을 따라 미끄러져서 틈으로 돌아 나온다
   clamp(o, r, isPlayer = false) {
+    let px = 0, pz = 0;
     for (const c of this.colliders) {
       const dx = o.x - c.x, dz = o.z - c.z, rr = r + c.r;
       if (Math.abs(dx) > rr || Math.abs(dz) > rr) continue;
       const d = Math.hypot(dx, dz);
-      if (d < rr && d > 1e-4) { o.x = c.x + (dx / d) * rr; o.z = c.z + (dz / d) * rr; }
+      if (d < rr && d > 1e-4) { const k = (rr - d) / d; o.x += dx * k; o.z += dz * k; px += dx * k; pz += dz * k; }
+    }
+    if (!isPlayer && (px || pz)) {
+      const f = this.flow.dir(o.x, o.z);
+      if (f) {
+        const pl = Math.hypot(px, pz), nx = px / pl, nz = pz / pl, dot = f[0] * nx + f[1] * nz, s = Math.min(pl, 0.3);
+        if (dot > 0) { o.x += f[0] * s; o.z += f[1] * s; } // 길이 벽 반대쪽: 그쪽으로 빠져나간다
+        else {
+          const tx = f[0] - dot * nx, tz = f[1] - dot * nz, tl = Math.hypot(tx, tz);
+          if (tl > 0.15) { o.x += (tx / tl) * s; o.z += (tz / tl) * s; }
+        }
+      }
     }
     const lx = this.hx - 0.3 - r, lz = this.hz - 0.3 - r;
     const open = (side) => isPlayer && this.phase === 'exits' && this.doors.some((d) => d.side === side);
@@ -7613,7 +8593,7 @@ class Rooms {
   }
 }
 
-return { ZONES, RUN_ZONES, REWARDS, Rooms };
+return { ZONES, RUN_ZONES, REWARDS, SPECIALS, pickZones, Rooms };
 })();
 
 __m["game/install.js"] = (() => {
@@ -8192,7 +9172,7 @@ class Game {
     }, 260);
   }
 
-  zoneMusic() { const R = this.rooms; if (R.reward === 'boss') this.sfx.music('level2', 1.08); else this.sfx.music({ desert: 'level1', factory: 'level2', crystal: 'level3' }[R.zone] || 'level1'); }
+  zoneMusic() { const R = this.rooms; if (R.reward === 'boss') this.sfx.music('level2', 1.08); else this.sfx.music(...(ZONES[R.zone]?.music || ['level1'])); }
 
   // ---- 진행 ----
   addXp(v) {
