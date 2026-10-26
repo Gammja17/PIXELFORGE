@@ -169,9 +169,9 @@ export function laserHits(px, pz, x, z, yaw, len, w) {
 export class MidBoss {
   constructor(game, kind, x, z) {
     this.game = game; this.kind = kind; this.t = 0; this.dead = false;
-    const en = game.enemies, K = en.k, d = Math.max(1, game.rooms.depth);
+    const en = game.enemies, K = en.k;
     this.name = MIDBOSS_TYPES[kind].name;
-    const hp = 1500 * HP[kind] * (1 + d * 0.45) * Math.pow(K.pw, 0.6); // 일반 적보다 전력 보정이 약하다 (방이 늘어지지 않게)
+    const hp = 1500 * HP[kind] * game.rooms.midHp(K.pw); // 깊이별 기본값 × 전력 보정 (rooms.js CURVE mid). 일반 적보다 전력 보정이 약하다
     const e = this.e = en.spawn(kind, x, z, { force: true });
     e.ctrl = true; e.guard = this; e.hp = e.maxHp = hp; e.spawnT = 1; e.y = 16; e.under = true;
     this.vy = 0; this.state = 'drop'; this.st = 0; this.pat = (R() * 3) | 0; this.yaw = 0; this.spin = 0; this.lasers = [];

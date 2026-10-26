@@ -171,7 +171,7 @@ export class Guardian {
   constructor(game, kind) {
     this.game = game; this.kind = kind; this.t = 0; this.state = 'intro'; this.st = 0; this.dead = false;
     const en = game.enemies, d = Math.max(1, game.rooms.depth);
-    const pw = (0.6 + game.level * 0.1) * Math.pow(en.k.pw, 0.55); // 플레이어 성장(레벨 + 무기 전력)에 맞춰 체력 보정
+    const pw = (0.6 + game.level * 0.1) * Math.pow(en.k.pw, 0.55) * game.rooms.guardHp(); // 플레이어 성장(레벨 + 무기 전력)에 맞춰 체력 보정. 깊이별 배율 (rooms.js CURVE guard: 첫 수호자 ×0.6, 둘째 ×0.75)
     const mk = (type, hp, x, z) => { const e = en.spawn(type, x, z, { force: true }); e.ctrl = true; e.hp = e.maxHp = hp; e.guard = this; e.spawnT = 1; return e; };
     if (kind === 'worm') {
       this.name = '샌드웜';

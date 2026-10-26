@@ -102,7 +102,7 @@ export const ENEMY_TYPES = {
 
 Object.assign(ENEMY_TYPES, TROOP_TYPES, GUARDIAN_PARTS, MIDBOSS_TYPES);
 
-// 정예 특성: 방 2 이후 정예에 붙는다 (깊은 방은 2개). 몸 색 + 발밑 회전 고리(aura) 색으로 구분
+// 정예 특성: 깊이 3 이후 정예에 붙는다 (깊은 방은 2개). 몸 색 + 발밑 회전 고리(aura) 색으로 구분
 export const AFFIXES = {
   swift:    { name: '질풍', tint: [0.7, 1.35, 1.6], aura: [0.7, 1, 1] },       // 빠름
   armored:  { name: '중장갑', tint: [0.75, 0.85, 1.25], aura: [0.45, 0.55, 1] }, // 체력 ↑, 넉백 저항
@@ -152,6 +152,7 @@ export class Enemies {
     this.mids = [];
     this.hazards = new Hazards(game.scene);
     this.k = { hp: 1, swarmHp: 1, dmg: 1, dens: 1, pw: 1 }; // 난이도 배율 (rooms.scale(), 매 프레임 갱신)
+    this.keep = 1; this.keepAcc = 0; // 탄 솎기: 초반 수호자/중간 보스는 쏘는 탄 중 이 비율만 고르게 남긴다 (rooms CURVE bul)
     this.pending = [];
     this.blasts = [];
     this.bossCount = 0;
@@ -189,8 +190,8 @@ export class Enemies {
       speed: T.speed * (0.9 + Math.random() * 0.2) * (1 + Math.min(0.35, t / 600)), elite, seed: Math.random() * 10,
     };
     // 깊은 방: 정찰 드론 일부가 총을 든다
-    if (type === 'drone' && depth >= 3 && Math.random() < 0.08 + (depth - 3) * 0.03 && this.list.reduce((n, o) => n + !!o.gun, 0) < 14) e.gun = true;
-    if (elite && (depth >= 2 || affix) && !T.part) {
+    if (type === 'drone' && depth >= 4 && Math.random() < 0.08 + (depth - 4) * 0.03 && this.list.reduce((n, o) => n + !!o.gun, 0) < 14) e.gun = true; // 깊이 4 부터 (rooms.js FIRST.gunDrone)
+    if (elite && (depth >= 3 || affix) && !T.part) {
       const keys = affix || Object.keys(AFFIXES).filter((k) => !(k === 'blink' && NO_BLINK.has(type))).sort(() => Math.random() - 0.5).slice(0, depth >= 6 ? 2 : 1);
       e.affix = {}; for (const k of keys) e.affix[k] = true;
       e.affixes = keys;
@@ -205,7 +206,7 @@ export class Enemies {
   }
 
   // ---- 적 탄 (깊이/전력에 맞춰 피해 보정). 각도 a: atan2(dx, dz) ----
-  shoot(x, z, a, sp, dmg, kind = 'orb', y = 1) { this.game.shots.enemyShot(x, y, z, Math.sin(a) * sp, Math.cos(a) * sp, dmg * this.k.dmg, kind); }
+  shoot(x, z, a, sp, dmg, kind = 'orb', y = 1) { if (this.keep < 1 && (this.keepAcc += this.keep) < 1) return; if (this.keep < 1) this.keepAcc -= 1; this.game.shots.enemyShot(x, y, z, Math.sin(a) * sp, Math.cos(a) * sp, dmg * this.k.dmg, kind); }
   ring(x, z, n, sp, dmg, kind = 'orb', off = 0, y = 1) { for (let i = 0; i < n; i++) this.shoot(x, z, off + (i / n) * TAU, sp, dmg, kind, y); }
   fan(x, z, a, n, step, sp, dmg, kind = 'shell', y = 1) { for (let i = 0; i < n; i++) this.shoot(x, z, a + (i - (n - 1) / 2) * step, sp, dmg, kind, y); }
 
@@ -621,7 +622,7 @@ export class Enemies {
     else if (e.elite) g.pickups.drop('crate', e.x, e.z);
     if (e.guard) e.guard.onKill(e);
     if (e.type === 'brute') { g.hitStop(0.05); }
-    const xp = T.xp * (e.elite ? 5 : 1);
+    const xp = T.xp * (e.elite ? 5 : 1) * (this.k.xp || 1); // 초반 방은 경험치 보너스 (rooms CURVE)
     g.pickups.gem(e.x, e.z, xp);
     const r = Math.random();
     if ((!T.swarm && e.type !== 'drone' && r < 0.03) || r < 0.003) g.pickups.drop('kit', e.x + 0.5, e.z);
@@ -755,7 +756,7 @@ export class Enemies {
           if (depth >= 6 && e.shots % 2) e.cd = 0.3; // 빠른 2연발
           if (d < 14) {
             const a = Math.atan2(dx, dz), mx2 = e.x + Math.sin(a) * 0.9, mz2 = e.z + Math.cos(a) * 0.9;
-            this.fan(mx2, mz2, a, depth >= 6 ? 5 : depth >= 3 ? 3 : 1, 0.22, 7.5, T.dmg, 'shell', 0.75);
+            this.fan(mx2, mz2, a, depth >= 6 ? 5 : depth >= 4 ? 3 : 1, 0.22, 7.5, T.dmg, 'shell', 0.75);
             fx.muzzle([mx2, 0.75, mz2], [Math.sin(a), 0, Math.cos(a)], [1, 0.5, 0.2], 1);
             e.kx -= Math.sin(a) * 2; e.kz -= Math.cos(a) * 2;
           }
@@ -844,13 +845,15 @@ export class Enemies {
     }
     // 중간 보스 (체력 바: 가장 먼저 나온 것)
     if (this.mids.length) {
+      this.keep = this.k.bul ?? 1;
       for (const m of this.mids) m.update(dt);
+      this.keep = 1;
       this.mids = this.mids.filter((m) => !m.dead);
       const m = this.mids[0];
       g.ui.bossBar(m ? Math.max(0.001, m.e.hp / m.e.maxHp) : 0, m && (this.mids.length > 1 ? `${m.name} 외 ${this.mids.length - 1}` : m.name));
     }
     this.updateBoss(dt);
-    if (this.guardian) { this.guardian.update(dt); if (this.guardian.dead && !this.list.some((e) => e.guard === this.guardian)) this.guardian.done = true; }
+    if (this.guardian) { this.keep = this.k.bul ?? 1; this.guardian.update(dt); this.keep = 1; if (this.guardian.dead && !this.list.some((e) => e.guard === this.guardian)) this.guardian.done = true; }
     this.updateTracks(dt);
     this.updateStrikes(dt);
     this.hazards.flush();

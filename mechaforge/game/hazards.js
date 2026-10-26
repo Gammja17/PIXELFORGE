@@ -175,7 +175,7 @@ export class RoomHazards {
     const { R, Z, reward, depth } = ctx;
     if (reward === 'start' || reward === 'workshop') return;
     const big = reward === 'boss' || reward === 'guardian';
-    const mul = big ? 0.6 : 0.75 + depth * 0.07;
+    const mul = ctx.hazMul ?? (big ? 0.6 : 0.75 + depth * 0.07); // 깊이별 개수 배율 (rooms.js CURVE haz: 방 1 은 적게, 깊을수록 많이)
     for (const [kind, n0] of Object.entries(Z.haz || {})) {
       const n = Math.max(0, Math.round(n0 * mul + R.range(-0.6, 0.6)));
       for (let i = 0; i < n; i++) this.place(kind, ctx);
