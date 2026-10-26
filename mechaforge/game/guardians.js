@@ -82,7 +82,7 @@ export class Guardian {
   constructor(game, kind) {
     this.game = game; this.kind = kind; this.t = 0; this.state = 'intro'; this.st = 0; this.dead = false;
     const en = game.enemies, d = Math.max(1, game.rooms.depth);
-    const pw = 0.6 + game.level * 0.12; // 플레이어 성장에 맞춰 체력 보정
+    const pw = (0.6 + game.level * 0.1) * Math.pow(en.k.pw, 0.55); // 플레이어 성장(레벨 + 무기 전력)에 맞춰 체력 보정
     const mk = (type, hp, x, z) => { const e = en.spawn(type, x, z, { force: true }); e.ctrl = true; e.hp = e.maxHp = hp; e.guard = this; e.spawnT = 1; return e; };
     if (kind === 'worm') {
       this.name = '샌드웜';
@@ -155,15 +155,22 @@ export class Guardian {
   updateWorm(dt) {
     const g = this.game, p = g.player, fx = g.fx, en = g.enemies, H = this.head;
     const dx = p.x - this.hx, dz = p.z - this.hz, d = Math.hypot(dx, dz) || 1;
-    let speed = 4.4, targetY = 0;
+    if (!this.rage && (this.segs.filter((s) => s.dead).length >= this.total / 2 || H.hp < H.maxHp * 0.5)) { this.rage = true; g.ui.banner('샌드웜 분노!', true); g.sfx.play('alarm'); }
+    let speed = this.rage ? 5.2 : 4.4, targetY = 0;
     if (this.state === 'swim') {
       // 지그재그로 다가오며 마디에서 탄을 뿌린다
       const want = Math.atan2(dx, dz) + Math.sin(this.t * 1.3) * 0.9;
       this.hyaw += Math.max(-2.2 * dt, Math.min(2.2 * dt, angDiff(want, this.hyaw)));
       if (this.st <= 0) { this.state = 'dive'; this.st = 0.9; g.sfx.play('door'); }
       if ((this.shotT = (this.shotT || 2.5) - dt) <= 0) {
-        this.shotT = 3;
-        for (const s of this.segs) if (!s.dead && R() < 0.35) for (let k = 0; k < 4; k++) { const a = (k / 4) * Math.PI * 2 + this.t; g.shots.enemyShot(s.x, 1.2, s.z, Math.sin(a) * 5.5, Math.cos(a) * 5.5, 8, 'orb'); }
+        this.shotT = this.rage ? 2.2 : 3;
+        for (const s of this.segs) if (!s.dead && R() < 0.35) en.ring(s.x, s.z, 4, 5.5, 8, 'orb', this.t, 1.2);
+      }
+      // 머리: 조준 부채꼴 (반 이상 부서지면 더 넓게)
+      if ((this.fanT = (this.fanT ?? 1.5) - dt) <= 0) {
+        this.fanT = this.rage ? 1.4 : 2.2;
+        en.fan(this.hx, this.hz, Math.atan2(dx, dz), this.rage ? 7 : 5, 0.2, 7, 10, 'shell', 1);
+        fx.muzzle([this.hx, 1, this.hz], [Math.sin(this.hyaw), 0, Math.cos(this.hyaw)], [1, 0.5, 0.2], 2);
       }
     } else if (this.state === 'dive') {
       targetY = -3.2; speed = 7;
@@ -185,7 +192,10 @@ export class Guardian {
         this.erupted = true;
         fx.explosion(this.hx, 0.5, this.hz, 2.2, { color: [1, 0.7, 0.4], debris: [0.6, 0.5, 0.35] });
         g.sfx.play('bigboom'); fx.addTrauma(0.6);
-        if (Math.hypot(p.x - this.hx, p.z - this.hz) < 3.2) p.hurt(H.T.dmg * 1.3, p.x - this.hx, p.z - this.hz);
+        if (Math.hypot(p.x - this.hx, p.z - this.hz) < 3.2) p.hurt(H.T.dmg * 1.3 * en.k.dmg, p.x - this.hx, p.z - this.hz);
+        // 솟구칠 때 모래 파편 고리 (분노 상태는 두 겹)
+        en.ring(this.hx, this.hz, 16, 4.5, 9, 'shell', R(), 0.8);
+        if (this.rage) en.ring(this.hx, this.hz, 16, 3, 9, 'orb', R(), 0.8);
       }
       if (this.hy <= 0 && this.vy < 0) { this.hy = 0; this.state = 'swim'; this.st = 4 + R() * 2; fx.dust(this.hx, this.hz, 6); }
     }
@@ -213,7 +223,7 @@ export class Guardian {
       prev = q;
     }
     // 접촉 피해
-    for (const s of [H, ...alive]) if (!s.under && s.y < 1.5 && Math.hypot(p.x - s.x, p.z - s.z) < s.r + p.r) p.hurt(s.T.dmg, p.x - s.x, p.z - s.z);
+    for (const s of [H, ...alive]) if (!s.under && s.y < 1.5 && Math.hypot(p.x - s.x, p.z - s.z) < s.r + p.r) p.hurt(s.T.dmg * en.k.dmg, p.x - s.x, p.z - s.z);
   }
 
   // ---------- 크레인 워커 ----------
@@ -221,13 +231,14 @@ export class Guardian {
     const g = this.game, p = g.player, fx = g.fx, en = g.enemies;
     const C = this.core, dx = p.x - this.x, dz = p.z - this.z, d = Math.hypot(dx, dz) || 1;
     const exposed = this.gun.dead && this.claw.dead;
+    this.rage = this.gun.dead || this.claw.dead || C.hp < C.maxHp * 0.6; // 팔 하나를 잃으면 남은 팔이 사나워진다
     if (this.state === 'drop') {
       this.vy -= 50 * dt; this.y += this.vy * dt;
       en.warn.material.opacity = 0.35 + 0.35 * Math.sin(this.t * 30);
       if (this.y <= 0) {
         this.y = 0; en.warn.visible = false; this.state = 'walk'; this.st = 2;
         fx.explosion(this.x, 0.3, this.z, 2.6, { color: [1, 0.6, 0.3] }); fx.addTrauma(0.8); g.sfx.play('bigboom'); g.hitStop(0.1);
-        if (d < 4.5) p.hurt(C.T.dmg, dx, dz);
+        if (d < 4.5) p.hurt(C.T.dmg * en.k.dmg, dx, dz);
       }
     } else {
       // 천천히 플레이어 쪽으로 돌고 걷는다
@@ -241,7 +252,8 @@ export class Guardian {
         const opts = [];
         if (!this.gun.dead) opts.push('volley');
         if (!this.claw.dead && d < 9) opts.push('slam');
-        if (exposed) opts.push('ring', 'ring');
+        if (exposed) opts.push('ring', 'spiral');
+        else if (R() < 0.4) opts.push('ring'); // 팔이 있어도 가끔 몸통 고리탄
         if (!opts.length) opts.push('ring');
         this.state = opts[(R() * opts.length) | 0]; this.st = 0; this.shots = 0;
       }
@@ -250,7 +262,7 @@ export class Guardian {
         this.st += dt * 2;
         if (this.st > 0.5 + this.shots * 0.45 && this.shots < 3) {
           const m = [this.gun.x + Math.sin(this.yaw) * 1.3, 2.8, this.gun.z + Math.cos(this.yaw) * 1.3], a0 = Math.atan2(p.x - m[0], p.z - m[2]);
-          for (let k = -3; k <= 3; k++) { const a = a0 + k * 0.17; g.shots.enemyShot(m[0], 1.3, m[2], Math.sin(a) * 9, Math.cos(a) * 9, 12, 'shell'); }
+          en.fan(m[0], m[2], a0, this.rage ? 11 : 7, 0.15, 9, 12, 'shell', 1.3);
           fx.muzzle(m, [Math.sin(a0), 0, Math.cos(a0)], [1, 0.5, 0.2], 3); this.shots++;
         }
         if (this.st > 3) { this.state = 'walk'; this.st = 2.2; }
@@ -262,14 +274,20 @@ export class Guardian {
         if (this.st > 1.6 && this.slamAt) {
           const [sx, sz] = this.slamAt;
           fx.explosion(sx, 0.3, sz, 1.8, { color: [1, 0.55, 0.3], debris: [0.4, 0.4, 0.45] }); g.sfx.play('bigboom'); fx.addTrauma(0.5);
-          if (Math.hypot(p.x - sx, p.z - sz) < 3.1) p.hurt(this.claw.T.dmg, p.x - sx, p.z - sz);
+          if (Math.hypot(p.x - sx, p.z - sz) < 3.1) p.hurt(this.claw.T.dmg * en.k.dmg, p.x - sx, p.z - sz);
           this.slamAt = null; en.warn.visible = false;
         }
         if (this.st > 2.4) { this.state = 'walk'; this.st = 2; this.slamAt = null; en.warn.visible = false; }
       } else if (this.state === 'ring') {
         this.st += dt * 2;
-        if (this.st > 0.4 + this.shots * 0.5 && this.shots < 3) { for (let k = 0; k < 18; k++) { const a = (k / 18) * Math.PI * 2 + this.shots * 0.17; g.shots.enemyShot(this.x, 1.5, this.z, Math.sin(a) * 6.5, Math.cos(a) * 6.5, 12, 'orb'); } this.shots++; C.flash = 0.08; }
+        if (this.st > 0.4 + this.shots * 0.5 && this.shots < (exposed ? 4 : 3)) { const n = exposed ? 22 : 18; en.ring(this.x, this.z, n, 6.5, 12, 'orb', (this.shots % 2) * (Math.PI / n), 1.5); this.shots++; C.flash = 0.08; }
         if (this.st > 2.6) { this.state = 'walk'; this.st = 1.6; }
+      } else if (this.state === 'spiral') {
+        // 몸통 노출: 깜빡이며 예고 → 회전 나선 3팔 (불꽃이 튀는 원자로)
+        this.st += dt * 2; // update() 가 매 프레임 dt 를 빼므로 순증가 dt
+        if (this.st < 0.7) C.flash = Math.sin(this.st * 30) > 0 ? 0.04 : 0;
+        else if ((this.acc = (this.acc || 0) + dt) > 0.1) { this.acc = 0; this.spin = (this.spin || 0) + 0.22; for (let k = 0; k < 3; k++) en.shoot(this.x, this.z, this.spin + (k / 3) * Math.PI * 2, 5, 12, 'orb', 1.5); }
+        if (this.st > 3.4) { this.state = 'walk'; this.st = 1.4; }
       }
     }
     // 부위 배치 (팔은 몸통 옆에 붙어서 같이 돈다)
@@ -280,7 +298,7 @@ export class Guardian {
     if (!this.claw.dead) place(this.claw, -2.3);
     C.exposed = exposed;
     if (exposed && R() < 0.3) fx.sparks.emit({ position: [this.x + (R() - 0.5) * 2, 2.5, this.z + (R() - 0.5) * 2], velocity: [0, 3, 0], life: 0.3, size: 2, sizeEnd: 1, color: [1, 0.8, 0.3], colorEnd: [1, 0.3, 0.1], emissive: 1, gravity: 1 });
-    if (this.y < 1 && d < C.r + p.r) p.hurt(C.T.dmg, dx, dz);
+    if (this.y < 1 && d < C.r + p.r) p.hurt(C.T.dmg * en.k.dmg, dx, dz);
   }
 }
 
