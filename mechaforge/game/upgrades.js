@@ -7,28 +7,35 @@ import { MODULES, SLOT_IDS, partPreview } from './parts.js';
 import { STAT_UPS } from './player.js';
 import { pixURL } from './icons.js';
 
-export const MAX_WEAPONS = 5;
+// 시작 무기 1 + 런 무기 5 (판넬 비트 포함)
+export const MAX_WEAPONS = 6;
 
-// 무기를 놓을 빈 슬롯 (선호 슬롯 우선)
+// 무기를 놓을 빈 슬롯 (선호 슬롯 우선). 팔 무기 외에는 왼팔(armL)도 마지막 자리로 쓴다
+const SLOT_ORDER = {
+  arm: ['armR', 'armL', 'shR', 'shL'],
+  shoulder: ['shR', 'shL', 'hpR', 'hpL', 'back', 'armL'],
+  hip: ['hpR', 'hpL', 'shR', 'shL', 'back', 'armL'],
+  back: ['back', 'hpL', 'hpR', 'shL', 'shR', 'armL'],
+};
 export function freeSlot(weapons, prefer) {
   const used = new Set(weapons.map((w) => w.slot));
-  const order = prefer === 'back' ? ['back'] : prefer === 'shoulder' ? ['shR', 'shL', 'armL'] : ['armR', 'armL', 'shR', 'shL'];
-  return order.find((s) => !used.has(s) && SLOT_IDS.includes(s)) || null;
+  return (SLOT_ORDER[prefer] || SLOT_ORDER.arm).find((s) => !used.has(s) && SLOT_IDS.includes(s)) || null;
 }
-const SLOT_NAMES = { armR: '오른팔', armL: '왼팔', shR: '오른 어깨', shL: '왼 어깨', back: '등' };
+const SLOT_NAMES = { armR: '오른팔', armL: '왼팔', shR: '오른 어깨', shL: '왼 어깨', back: '등', hpR: '오른 허리', hpL: '왼 허리' };
 
 export function rollChoices(game, kind = 'any', n = 3) {
   const p = game.player, ws = game.weapons.list, mods = p.loadout.modules, ups = p.ups;
   const pool = [];
-  const armed = ws.filter((w) => w.id !== 'funnel').length;
   if (kind !== 'system') {
+    // 새 무기 후보: 시작 무기(격납고 전용)와 노획 무기(적에게서만)는 빼고, 후보가 많아도 카드가 무기로 도배되지 않게 가중치를 나눈다
+    const fresh = ws.length < MAX_WEAPONS ? Object.keys(WEAPONS).filter((id) => !WEAPONS[id].starter && !WEAPONS[id].salvage && !ws.some((w) => w.id === id)) : [];
+    const freshW = Math.min(3.2, 18 / (fresh.length || 1));
     for (const [id, W] of Object.entries(WEAPONS)) {
       const own = ws.find((w) => w.id === id);
       if (own) { if (own.level < MAX_LEVEL) pool.push({ kind: 'weapon', id, level: own.level + 1, w: 5, name: W.name, tag: W.tag, desc: W.levels[own.level].up, slot: own.slot }); }
-      else {
-        if (W.salvage) continue; // 노획 무기는 적에게서만
+      else if (fresh.includes(id)) {
         const slot = freeSlot(ws, W.prefer);
-        if ((id === 'funnel' ? !ws.some((w) => w.slot === 'back') : armed < MAX_WEAPONS) && slot) pool.push({ kind: 'weapon', id, level: 1, w: 3.2, name: W.name, tag: W.tag, desc: W.desc, isNew: true, slot });
+        if (slot) pool.push({ kind: 'weapon', id, level: 1, w: freshW, name: W.name, tag: W.tag, desc: W.desc, isNew: true, slot });
       }
     }
     for (const [id, M] of Object.entries(MODULES)) {
@@ -59,7 +66,7 @@ export function rollChoices(game, kind = 'any', n = 3) {
   while (out.length < n) out.push({ kind: 'heal', id: 'repair', level: 0, name: '긴급 수리', tag: 'REPAIR', desc: '체력 50% 회복' });
   for (const c of out) {
     if (c.kind === 'evolve') { c.where = '무기 진화'; continue; }
-    c.where = c.kind === 'weapon' ? `${SLOT_NAMES[c.slot] || ''}${c.slot?.startsWith('arm') ? ', 직접 조작' : ', 자동 사격'}` : c.kind === 'module' ? '몸통 부품' : c.kind === 'stat' ? '시스템 튜닝' : '정비';
+    c.where = c.kind === 'weapon' ? `${SLOT_NAMES[c.slot] || ''}${c.slot?.startsWith('arm') && WEAPONS[c.id].prefer === 'arm' ? ', 직접 조작' : ', 자동 사격'}` : c.kind === 'module' ? '몸통 부품' : c.kind === 'stat' ? '시스템 튜닝' : '정비';
   }
   return out;
 }
