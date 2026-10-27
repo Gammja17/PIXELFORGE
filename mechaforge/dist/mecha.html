@@ -10434,8 +10434,12 @@ class Rooms {
     }
     const m = this.addMesh(geo, new Material());
     const gl = this.addMesh(glowG, new Material({ emissive: 1, castShadow: false }));
-    this.prize = { mesh: m, glow: gl, x: 0, z: 0, y: 8, vy: 0, t: 0, col, taken: false };
-    this.colliders.push({ x: 0, z: 0, r: 0.75, prize: true });
+    // 떨어질 자리: 가운데부터 바깥으로 돌며 구조물, 위험 지대가 없는 첫 빈자리 (가운데가 막힌 배치에서도 주울 수 있게)
+    let px = 0, pz = 0;
+    const free = (x, z) => !this.colliders.some((c) => Math.hypot(c.x - x, c.z - z) < c.r + 1.6) && !this.hazards.outside(x, z, 1.5);
+    search: for (let r = 0; r < Math.min(this.hx, this.hz) - 2; r += 1.2) for (let k = 0; k < Math.max(1, Math.round(r * 4)); k++) { const a = (k / Math.max(1, Math.round(r * 4))) * Math.PI * 2, x = Math.cos(a) * r, z = Math.sin(a) * r; if (free(x, z)) { px = x; pz = z; break search; } }
+    this.prize = { mesh: m, glow: gl, x: px, z: pz, y: 8, vy: 0, t: 0, col, taken: false };
+    this.colliders.push({ x: px, z: pz, r: 0.75, prize: true });
   }
 
   openDoors() {
@@ -10494,11 +10498,11 @@ class Rooms {
     const P = this.prize;
     if (P && !P.taken) {
       P.t += dt;
-      if (P.y > 0) { P.vy -= 40 * dt; P.y = Math.max(0, P.y + P.vy * dt); if (P.y === 0) { g.fx.ring(0, 0.15, 0, 2.5, P.col, 0.35); g.fx.dust(0, 0, 6); g.fx.addTrauma(0.15); } }
+      if (P.y > 0) { P.vy -= 40 * dt; P.y = Math.max(0, P.y + P.vy * dt); if (P.y === 0) { g.fx.ring(P.x, 0.15, P.z, 2.5, P.col, 0.35); g.fx.dust(P.x, P.z, 6); g.fx.addTrauma(0.15); } }
       const bob = P.y === 0 ? Math.sin(P.t * 3) * 0.05 : 0;
-      P.mesh.position = [0, P.y, 0]; P.glow.position = [0, P.y + bob, 0];
+      P.mesh.position = [P.x, P.y, P.z]; P.glow.position = [P.x, P.y + bob, P.z];
       P.glow.material.color = [1, 1, 1].map(() => 0.8 + 0.2 * Math.sin(P.t * 5));
-      if (P.y === 0 && Math.hypot(p.x, p.z) < 1.9) { P.taken = true; this.claimPrize(); }
+      if (P.y === 0 && Math.hypot(p.x - P.x, p.z - P.z) < 1.9) { P.taken = true; this.claimPrize(); }
     }
     if (this.phase === 'reward' && P && P.taken && g.state === 'play') this.openDoors();
     if (this.phase === 'clear' && (this.reward === 'start' || (P && P.taken && g.state === 'play'))) this.openDoors();
@@ -10517,7 +10521,7 @@ class Rooms {
 
   claimPrize() {
     const g = this.game, P = this.prize, r = this.reward;
-    g.fx.explosion(0, 0.8, 0, 0.6, { color: P.col, ring: true, scorch: false, debris: [0.4, 0.4, 0.45] });
+    g.fx.explosion(P.x, 0.8, P.z, 0.6, { color: P.col, ring: true, scorch: false, debris: [0.4, 0.4, 0.45] });
     P.mesh.visible = false; P.glow.visible = false;
     this.colliders = this.colliders.filter((c) => !c.prize);
     if (r === 'supply') { g.player.heal(g.player.stats.maxHp * 0.4); g.addXp(g.xpNeed * 0.4); g.ui.toast('보급: 수리 40% + 경험치'); }
