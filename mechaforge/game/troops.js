@@ -360,7 +360,7 @@ export const TROOP_TYPES = {
     ai(en, e, c) {
       const g = c.g, p = c.p, fx = g.fx;
       if (e.state === 'walk') {
-        if (c.d < 0.9 + p.r && e.spawnT > 0.5 && p.dashT <= 0) { e.state = 'latch'; e.st = 0; e.oa = Math.atan2(-c.dx, -c.dz); g.sfx.play('tink', { pitch: 0.6 }); }
+        if (c.d < 0.9 + p.r && e.spawnT > 0.5 && p.dashT <= 0) { e.state = 'latch'; e.st = 0; e.oa = Math.atan2(-c.dx, -c.dz); g.sfx.play('tink', { pitch: 0.6 }); if (!g._leechTold) { g._leechTold = true; g.ui.toast('흡착 드론이 붙었다! 대시로 떼어내라'); } }
       } else if (e.state === 'latch') {
         c.sp = 0; e.kx = e.kz = 0;
         const a = e.oa + g.time * 0.5;
