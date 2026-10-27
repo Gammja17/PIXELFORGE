@@ -485,9 +485,9 @@ function fistGeo(P, kind) {
 
 // 무기 대표 색: 카드, 탄, 기체에 달린 무기의 발광 부분이 같은 색 (weapons.js 의 color 와 같게 유지)
 const SIG = {
-  mg: [1, 0.85, 0.3], shotgun: [1, 0.55, 0.2], missile: [1, 0.42, 0.25], laser: [0.45, 1, 1], saber: [1, 0.4, 0.85], flamer: [1, 0.5, 0.12], rod: [1, 0.65, 0.2],
-  saw: [0.85, 0.9, 1], tesla: [0.55, 0.85, 1], mine: [1, 0.3, 0.3], disc: [0.4, 1, 0.9], stomp: [1, 0.8, 0.45], gravity: [0.75, 0.45, 1], gauss: [1, 0.88, 0.35],
-  turret: [1, 0.35, 0.6], cluster: [1, 0.5, 0.3], ricochet: [0.75, 1, 0.45], cannon: [1, 0.62, 0.25], funnel: [0.45, 1, 0.95],
+  mg: [1, 0.85, 0.3], shotgun: [1, 0.55, 0.2], missile: [1, 0.42, 0.25], laser: [0.45, 1, 1], saber: [0.5, 0.72, 1], flamer: [1, 0.5, 0.12], rod: [1, 0.65, 0.2],
+  saw: [0.85, 0.9, 1], tesla: [0.55, 0.85, 1], mine: [1, 0.72, 0.25], disc: [0.4, 1, 0.9], stomp: [1, 0.8, 0.45], gravity: [0.75, 0.45, 1], gauss: [1, 0.88, 0.35],
+  turret: [0.4, 1, 0.55], cluster: [1, 0.5, 0.3], ricochet: [0.75, 1, 0.45], cannon: [1, 0.62, 0.25], funnel: [0.45, 1, 0.95],
 };
 
 // ===== 무기 외형 (원점 = 손/어깨 장착점, 앞 = +Z) =====
@@ -556,7 +556,7 @@ export const WEAPON_MODELS = {
     cbox(g, 0.26, 0.32, 0.32, P.main, [0, 0.08, 0.02]);
     zcyl(g, 0.06, 0.32, GREY, [0, 0, 0.14]);
     const glow = new Geometry();
-    cbox(glow, 0.1, 0.1, 1.5, [1, 0.45, 0.85], [0, 0.05, 1.18]);
+    cbox(glow, 0.1, 0.1, 1.5, [0.5, 0.72, 1], [0, 0.05, 1.18]);
     return { geo: g, glow, muzzle: [0, 0, 0.6], blade: true };
   },
   funnel: (P) => {

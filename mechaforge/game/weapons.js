@@ -59,7 +59,7 @@ export const WEAPONS = {
     range: 18,
   },
   saber: {
-    color: [1, 0.4, 0.85], name: '빔 사벨', tag: 'SABER', starter: true, prefer: 'arm', desc: '3단 콤보 베기, 마지막 타격이 적을 띄운다. 특수기: 회전 베기.',
+    color: [0.5, 0.72, 1], name: '빔 사벨', tag: 'SABER', starter: true, prefer: 'arm', desc: '3단 콤보 베기, 마지막 타격이 적을 띄운다. 특수기: 회전 베기.',
     levels: [
       { dmg: 26, cd: 1.1, radius: 2.7, arc: 2.6 },
       { dmg: 33, cd: 1.0, radius: 2.9, arc: 2.8, up: '피해 증가, 범위 +' },
@@ -117,7 +117,7 @@ export const WEAPONS = {
     range: 10,
   },
   mine: {
-    color: [1, 0.3, 0.3], name: '지뢰 살포기', tag: 'MINE', prefer: 'hip', desc: '주위에 지뢰를 뿌린다. 적이 밟으면 폭발.',
+    color: [1, 0.72, 0.25], name: '지뢰 살포기', tag: 'MINE', prefer: 'hip', desc: '주위에 지뢰를 뿌린다. 적이 밟으면 폭발.',
     levels: [
       { dmg: 30, cd: 2.2, count: 1, aoe: 2.2 },
       { dmg: 36, cd: 2.0, count: 2, aoe: 2.3, up: '지뢰 +1' },
@@ -172,7 +172,7 @@ export const WEAPONS = {
     range: 22,
   },
   turret: {
-    color: [1, 0.35, 0.6], name: '회전 레이저 포탑', tag: 'TURRET', prefer: 'back', passive: true, desc: '등의 포탑이 빔을 켠 채 빙글빙글 돈다.',
+    color: [0.4, 1, 0.55], name: '회전 레이저 포탑', tag: 'TURRET', prefer: 'back', passive: true, desc: '등의 포탑이 빔을 켠 채 빙글빙글 돈다.',
     levels: [
       { dmg: 12, beams: 1, len: 5, spin: 3 },
       { dmg: 15, beams: 1, len: 5.5, spin: 3.2, up: '피해 증가, 길이 +' },
@@ -446,7 +446,7 @@ export class Shots {
       if (dead) { this.enemyList.splice(i, 1); continue; }
       const pulse = 1 + Math.sin(s.t * 18) * 0.18;
       const sc = (s.kind === 'orb' ? 1.15 : 1) * pulse;
-      const col = s.kind === 'orb' ? [1, 0.15, 0.6] : [1, 0.4, 0.1];
+      const col = s.kind === 'orb' ? [1, 0.15, 0.6] : [1, 0.18, 0.22];
       this.enemyMesh.setAt(ne, m4.fromTRS([s.x, s.y, s.z], [0, s.t * 4, 0], [sc, sc, sc]), col, 1);
       this.enemyCore.setAt(ne, m4.fromTRS([s.x, s.y, s.z], [0, 0, 0], [1, 1, 1]), [1, 0.95, 0.9], 1);
       this.enemyShadow.setAt(ne, m4.fromTRS([s.x, 0.04, s.z], [0, 0, 0], [sc, 1, sc]), [1, 1, 1], 0);
@@ -485,7 +485,7 @@ export class Shots {
       const mvk = m.vk || (m.vk = g.weapons?.vk(m.src) || 1), ms = 1.5 * Math.sqrt(mvk);
       this.mineMesh.setAt(n++, m4.fromTRS([x, y, z], [0, m.t * (k < 1 ? 14 : 0), 0], [ms, ms, ms]), blink ? [1.8, 0.6, 0.5] : [1.1, 1.1, 1.1], blink ? 0.8 : 0.1);
       // 깔린 지뢰: 붉은 점이 깜빡여 위치를 알린다
-      if (k >= 1 && dt > 0 && (g.frame & 15) === 0) fx.pxr.emit({ position: [x, y + 0.35, z], velocity: [0, 0, 0], life: 0.12, size: 3, sizeEnd: 2, ramp: [[1, 0.35, 0.3]], emissive: 0.9, hard: true });
+      if (k >= 1 && dt > 0 && (g.frame & 15) === 0) fx.pxr.emit({ position: [x, y + 0.35, z], velocity: [0, 0, 0], life: 0.12, size: 3, sizeEnd: 2, ramp: [[1, 0.8, 0.3]], emissive: 0.9, hard: true });
     }
     this.mineMesh.count = n; this.mineMesh.dirty = true;
 
@@ -622,6 +622,8 @@ const SPECIAL_NAMES = { mg: '탄막 사격', shotgun: '슬러그 폭발', laser:
 // 직접 조작 무기 = 팔에 단 arm 무기. 나머지는 팔에 달려도 자동 사격
 const isManual = (w) => w.slot.startsWith('arm') && WEAPONS[w.id].prefer === 'arm';
 const wrapA = (a) => ((a + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+// 쏘기 직전 모으는 동작이 있는 무기 (초): 예고 → 발사 → 사라짐 순서가 보이게
+const CHARGE = { gauss: 0.4, cannon: 0.25, cluster: 0.3, tesla: 0.3, missile: 0.2, gravity: 0.35 };
 
 export class WeaponSystem {
   constructor(game) {
@@ -633,7 +635,7 @@ export class WeaponSystem {
     this.turretBeams = [];
     const bg = beamGeo();
     for (let i = 0; i < 4; i++) {
-      const m = game.scene.add(new Mesh(bg, new Material({ color: [1, 0.35, 0.5], emissive: 1, outline: false, castShadow: false })));
+      const m = game.scene.add(new Mesh(bg, new Material({ color: [0.4, 1, 0.55], emissive: 1, outline: false, castShadow: false })));
       const core = game.scene.add(new Mesh(bg, new Material({ color: [1, 1, 1], emissive: 1, outline: false, castShadow: false })));
       m.visible = core.visible = false;
       this.turretBeams.push({ m, core });
@@ -742,7 +744,7 @@ export class WeaponSystem {
       if (da > arc / 2 + 0.25 && Math.hypot(e.x - p.x, e.z - p.z) > e.r + 0.9) return;
       const d = Math.hypot(e.x - p.x, e.z - p.z) || 1, c = Math.random() < st.crit;
       en.hit(e, c ? D * 2 : D, (e.x - p.x) / d, (e.z - p.z) / d, fin ? 16 : 7, { crit: c, launch: fin ? 9 : 0, stun: fin ? 0.5 : 0.25 });
-      fx.hitSpark([e.x, 1, e.z], w ? [1, 0.45, 0.85] : [1, 0.8, 0.4], 4);
+      fx.hitSpark([e.x, 1, e.z], w ? [0.5, 0.72, 1] : [1, 0.8, 0.4], 4);
       // 베인 자국: 칼이 지나가는 방향으로 흰 불꽃이 길게 튄다
       const tx = Math.sin(yaw + (k === 2 ? -1.57 : 1.57)), tz = Math.cos(yaw + (k === 2 ? -1.57 : 1.57));
       for (let j = 0; j < 5; j++) fx.sparks.emit({ position: [e.x, 1 + (e.y || 0), e.z], velocity: [tx * rr(6, 12) + rr(-1, 1), rr(0.5, 2.5), tz * rr(6, 12) + rr(-1, 1)], life: rr(0.12, 0.22), size: 2, sizeEnd: 1, color: [1, 1, 1], colorEnd: w ? [1, 0.4, 0.8] : [1, 0.7, 0.3], emissive: 1, gravity: 0.2 });
@@ -754,8 +756,8 @@ export class WeaponSystem {
     if (w) Object.assign(w, sw); else this.fistSwing = sw;
     g.sfx.play('swing', { pitch: fin ? 0.85 : 1 });
     if (n) { g.hitStop(fin ? 0.07 : 0.035, true); fx.addTrauma(fin ? 0.18 : 0.04); g.sfx.play('hit', { pitch: fin ? 0.8 : 1 }); }
-    fx.light([p.x + Math.sin(yaw), 1.4, p.z + Math.cos(yaw)], w ? [1, 0.45, 0.85] : [1, 0.75, 0.4], radius + 1, fin ? 1 : 0.6, 0.15);
-    if (fin) fx.ring(p.x + Math.sin(yaw) * 1.4, 0.12, p.z + Math.cos(yaw) * 1.4, radius, w ? [1, 0.5, 0.85] : [1, 0.8, 0.4], 0.25);
+    fx.light([p.x + Math.sin(yaw), 1.4, p.z + Math.cos(yaw)], w ? [0.5, 0.72, 1] : [1, 0.75, 0.4], radius + 1, fin ? 1 : 0.6, 0.15);
+    if (fin) fx.ring(p.x + Math.sin(yaw) * 1.4, 0.12, p.z + Math.cos(yaw) * 1.4, radius, w ? [0.5, 0.72, 1] : [1, 0.8, 0.4], 0.25);
   }
 
   // 원거리 발사 (팔 무기 직접 사격, 자동 무기 공용)
@@ -764,6 +766,7 @@ export class WeaponSystem {
     const W = WEAPONS[w.id], L = lvOf(w);
     const mz = p.mech.muzzle(w.slot);
     const dir = [Math.sin(yaw), 0, Math.cos(yaw)];
+    w.fireT = g.time; // 발사 표시: 기체 무기 발광 + 무기 슬롯 HUD 번쩍
     const crit = () => Math.random() < st.crit;
     const D = L.dmg * st.dmgMul * mul;
     const SS = st.sets || new Set(), art = SS.has('artillery') && (w.id === 'cannon' || w.id === 'missile');
@@ -1140,7 +1143,7 @@ export class WeaponSystem {
       const sw = { swing: 0, swingYaw: yaw + Math.PI, swingArc: 6.28, swingR: radius, dir: 1, slot: 'armR', fist: !w, fin: true, T: 0.3 };
       if (w) Object.assign(w, sw); else this.fistSwing = sw;
       fx.ring(p.x, 0.15, p.z, radius, w ? [1, 0.5, 0.85] : [1, 0.75, 0.4], 0.35);
-      const sc = w ? [1, 0.45, 0.85] : [1, 0.75, 0.35];
+      const sc = w ? [0.5, 0.72, 1] : [1, 0.75, 0.35];
       // 원 둘레로 십자 섬광이 차례로 터지고, 접선 방향으로 칼바람 줄기
       for (let k = 0; k < 12; k++) {
         const a = (k / 12) * 6.28, q = [p.x + Math.sin(a) * radius * 0.85, 1, p.z + Math.cos(a) * radius * 0.85];
@@ -1186,7 +1189,7 @@ export class WeaponSystem {
     const moved = Math.abs(ease(k1) - ease(Math.max(0, k0))) * w.swingArc;
     // 칼날 궤적: 현재 칼끝까지의 꼬리 (최대 1.7rad)
     const span = Math.min(w.swingArc * ease(k1), w.fist ? 1.1 : 1.7) + 0.05;
-    const col = w.col || (w.fist ? [1, 0.6, 0.2] : w.evo ? [0.7, 0.4, 1] : [1, 0.3, 0.75]);
+    const col = w.col || (w.fist ? [1, 0.6, 0.2] : w.evo ? [0.85, 0.75, 1] : [0.45, 0.68, 1]);
     const sz = p.size || 1;
     if (moved > 0.01 || k0 <= 0) this.smear(p.x, 1.05 * sz, p.z, aNow, w.swingR * (w.fist ? 0.85 : 1), span, w.dir, col, w.thick || (w.fin ? 0.55 : w.fist ? 0.35 : 0.42), w.fin ? 0.16 : 0.11);
     // 칼끝 불꽃 몇 개
@@ -1204,6 +1207,12 @@ export class WeaponSystem {
     const g = this.game, p = g.player, en = g.enemies;
     for (const w of this.list) {
       const W = WEAPONS[w.id];
+      const ch = CHARGE[w.id];
+      if (ch && w.cd > 0 && w.cd < ch && !isManual(w) && (g.frame & 1) && en.nearest(p.x, p.z, W.range * p.stats.rangeMul)) {
+        const mz = p.mech.muzzle(w.slot), c = W.color, k = 1 - w.cd / ch;
+        for (let i = 0; i < 2; i++) { const a = Math.random() * 6.28, b = rr(-1, 1), r = 0.9 - k * 0.4; g.fx.pxr.emit({ position: [mz[0] + Math.cos(a) * r, mz[1] + b * r * 0.6, mz[2] + Math.sin(a) * r], velocity: [-Math.cos(a) * r / 0.12, -b * r * 0.6 / 0.12, -Math.sin(a) * r / 0.12], life: 0.12, size: 2, sizeEnd: 1, ramp: [c, [1, 1, 1]], emissive: 0.8, hard: true }); }
+        if (k > 0.6) g.fx.pxr.emit({ position: [...mz], velocity: [0, 0, 0], life: 0.04, size: Math.round(2 + k * 3), sizeEnd: 2, ramp: [[1, 1, 1], c], emissive: 0.8, hard: true });
+      }
       if (isManual(w) || w.id === 'funnel' || W.passive || w.cd > 0) continue;
       const mz = p.mech.muzzle(w.slot);
       const target = en.nearest(p.x, p.z, W.range * p.stats.rangeMul);
@@ -1232,7 +1241,7 @@ export class WeaponSystem {
         const a = saw.ang * sp + (i / cnt) * Math.PI * 2, x = p.x + Math.sin(a) * r, z = p.z + Math.cos(a) * r;
         if (live) en.each(x, z, 0.45 * big, (e) => {
           if ((e._saw || 0) > now) return;
-          e._saw = now + 0.3;
+          e._saw = now + 0.3; saw.fireT = now;
           const c = Math.random() < st.crit, D = L.dmg * st.dmgMul;
           en.hit(e, c ? D * 2 : D, Math.sin(a + 1.57 * sp), Math.cos(a + 1.57 * sp), 4, { crit: c, quiet: !c });
           fx.shrapnel([x, 1, z], 5, [[1, 1, 0.8], [1, 0.8, 0.3], [1, 0.5, 0.15]], { dir: [Math.sin(a + 1.57 * sp), Math.cos(a + 1.57 * sp)], spread: 1.2, speed: [4, 9], life: [0.12, 0.25], up: [1, 3] });
@@ -1250,12 +1259,14 @@ export class WeaponSystem {
       g.dmgSrc = 'turret';
       const L = lvOf(tur), len = L.len * st.rangeMul, vk = this.vk('turret'), mz = [p.x, 1.0 * (p.size || 1), p.z];
       tur.ang = (tur.ang || 0) + L.spin * Math.sqrt(st.rateMul) * dt;
+      const tsi = p.mech.slotInfo[tur.slot];
+      if (tsi) tsi.inner.rotation[1] = tur.ang - (p.mech.root.rotation?.[1] || 0) - (p.mech.upper?.rotation?.[1] || 0);
       if (live) en.each(p.x, p.z, len, (e) => {
         if ((e._tur || 0) > now) return;
         const dx = e.x - p.x, dz = e.z - p.z, d = Math.hypot(dx, dz) || 1, ea = Math.atan2(dx, dz);
         for (let i = 0; i < nb; i++) {
           if (Math.abs(wrapA(ea - tur.ang - (i / nb) * Math.PI * 2)) * d > 0.35 + e.r) continue;
-          e._tur = now + 0.22;
+          e._tur = now + 0.22; tur.fireT = now;
           const c = Math.random() < st.crit, D = L.dmg * st.dmgMul;
           en.hit(e, c ? D * 2 : D, dx / d, dz / d, 2, { crit: c, quiet: !c });
           fx.hitSpark([e.x, 1, e.z], [1, 0.4, 0.55], 3);
@@ -1267,7 +1278,7 @@ export class WeaponSystem {
         const on = i < nb;
         b.m.visible = b.core.visible = on;
         if (!on) return;
-        const a = tur.ang + (i / nb) * Math.PI * 2, w = (0.46 + Math.sin(now * 40 + i) * 0.05) * vk, sa = Math.sin(a), ca = Math.cos(a), col = tur.evo ? [0.6, 0.85, 1] : [1, 0.35, 0.55];
+        const a = tur.ang + (i / nb) * Math.PI * 2, w = (0.46 + Math.sin(now * 40 + i) * 0.05) * vk, sa = Math.sin(a), ca = Math.cos(a), col = tur.evo ? [0.75, 1, 0.9] : [0.4, 1, 0.55];
         const o = [mz[0] + sa * 0.6, mz[1], mz[2] + ca * 0.6];
         b.m.position = b.core.position = o;
         b.m.rotation = b.core.rotation = [0, a, 0];
@@ -1281,7 +1292,7 @@ export class WeaponSystem {
           const d = rr(0.5, len); fx.pxr.emit({ position: [o[0] + sa * d, o[1] + rr(-0.2, 0.2) * w, o[2] + ca * d], velocity: [0, rr(0.5, 1.5), 0], life: 0.15, size: 2, sizeEnd: 1, ramp, emissive: 0.8, hard: true });
         }
       });
-      if (live && Math.random() < 0.3) fx.light([mz[0], 1.5, mz[2]], tur.evo ? [0.6, 0.85, 1] : [1, 0.35, 0.5], len, 0.5, 0.1);
+      if (live && Math.random() < 0.3) fx.light([mz[0], 1.5, mz[2]], tur.evo ? [0.75, 1, 0.9] : [0.4, 1, 0.55], len, 0.5, 0.1);
     } else for (const b of this.turretBeams) b.m.visible = b.core.visible = false;
   }
   hideOrbitals() { this.sawMesh.count = 0; this.sawMesh.dirty = true; for (const b of this.turretBeams) b.m.visible = b.core.visible = false; }
@@ -1314,6 +1325,7 @@ export class WeaponSystem {
       if (t) yaw = Math.atan2(t.x - b.x, t.z - b.z);
       if (t && b.cd <= 0) {
         b.cd = L.cd * rr(0.9, 1.1) * (p.stats.sets?.has('hive') ? 0.67 : 1);
+        w.fireT = g.time;
         const c = R() < p.stats.crit, D = L.dmg * p.stats.dmgMul;
         const dx = t.x - b.x, dz = t.z - b.z, d = Math.hypot(dx, dz) || 1;
         g.shots.add({ x: b.x, y: b.y - 0.5, z: b.z, vx: (dx / d) * 34, vz: (dz / d) * 34, dmg: c ? D * 2 : D, crit: c, life: 0.5, color: [0.45, 1, 0.95], scale: [0.15, 0.15, 0.9], knock: 1.5, quiet: !c });

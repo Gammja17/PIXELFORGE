@@ -12,6 +12,7 @@ import { THREATS, PILOTS, ACHIEVEMENTS, REWARD_PAINTS, runMods, threatScrapMul, 
 import { SETS, setProgress, setOf } from './sets.js';
 import { applySkin } from './skin.js';
 import { applyStatMods } from './runhooks.js';
+import { cardImage } from './upgrades.js';
 import { GALMURI } from './font-data.js';
 
 // 도트 글꼴 (UI 를 게임 화면의 픽셀 느낌과 맞춘다)
@@ -183,7 +184,7 @@ function start() {
       const low = (g.state === 'play' || g.state === 'install') && p.hp > 0 && p.hp < p.stats.maxHp * 0.3;
       if (low !== lowOn) { lowOn = low; $('hpbox').classList.toggle('low', low); $('lowhp').classList.toggle('on', low); }
       if (g.state === 'hangar') { $('odcall').hidden = true; drawCallouts(g); return; }
-      drawDoors(g); drawPins(g);
+      drawDoors(g); drawPins(g); drawRack(g);
       const cb = $('combo');
       if (g.combo >= 5 && g.comboT > 0) {
         cb.hidden = false; cb.classList.remove('fade');
@@ -267,6 +268,35 @@ function start() {
   let confirmScrap = null;
 
   // 출구 문 위의 보상 표지 (하데스처럼 다음 방 보상을 미리 보여줌)
+  // ---- 무기 슬롯 (아머드코어식): 장착 자리, 무기 그림, 레벨, 재장전 막대. 쏘는 순간 그 칸이 번쩍 ----
+  const MOUNT = { armR: 'R-ARM', armL: 'L-ARM', shR: 'R-SHLD', shL: 'L-SHLD', back: 'BACK', hpR: 'R-HIP', hpL: 'L-HIP' };
+  const MORDER = ['armR', 'armL', 'shR', 'shL', 'back', 'hpR', 'hpL'];
+  let rackKey = '', rackEls = [];
+  function drawRack(g) {
+    const box = $('rack'), on = g.state === 'play' || g.state === 'install';
+    box.hidden = !on;
+    if (!on) return;
+    const ws = [...g.weapons.list].sort((a, b) => MORDER.indexOf(a.slot) - MORDER.indexOf(b.slot));
+    const key = ws.map((w) => `${w.id}${w.level}${w.evo ? 'E' : ''}${w.slot}`).join('|');
+    if (key !== rackKey) {
+      rackKey = key; box.innerHTML = '';
+      rackEls = ws.map((w) => {
+        const W = WEAPONS[w.id], c = W.color || [1, 1, 1], el = document.createElement('div');
+        el.className = 'rslot'; el.style.setProperty('--c', `rgb(${c.map((v) => Math.round(v * 255)).join(',')})`);
+        el.innerHTML = `<div class="in"><span class="mnt">${MOUNT[w.slot] || ''}</span><img class="px-img" alt="" src="${cardImage(g, { kind: 'weapon', id: w.id })}"><b>${W.tag}</b><span class="lv">${w.evo ? 'EVO' : 'LV' + w.level}</span><span class="cd"><i></i></span></div>`;
+        box.appendChild(el);
+        return { el, w, bar: el.querySelector('.cd i') };
+      });
+    }
+    for (const r of rackEls) {
+      const w = r.w, W = WEAPONS[w.id], L = W.levels[Math.min(W.levels.length, w.level) - 1] || {};
+      const k = W.passive ? 1 : w.id === 'funnel' ? 1 : L.cd ? Math.max(0, Math.min(1, 1 - (w.cd || 0) / L.cd)) : 1;
+      r.bar.style.width = `${Math.round(k * 100)}%`;
+      r.el.classList.toggle('fire', g.time - (w.fireT ?? -9) < 0.12);
+      r.el.classList.toggle('ready', k >= 1);
+    }
+  }
+
   // 작전 목표 표지 (거점, 비콘, 황금 드론): 화면 밖이면 가장자리에 화살표로
   const pinEls = [];
   function drawPins(g) {

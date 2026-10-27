@@ -430,7 +430,12 @@ export class Player {
     this.updateAimGuide();
     for (const w of g.weapons.list) {
       const si = m.slotInfo[w.slot];
-      if (si && w.id !== 'saber') si.inner.position[2] = -(w.kick || 0) * 0.5;
+      if (!si) continue;
+      if (w.id !== 'saber') si.inner.position[2] = -(w.kick || 0) * 0.5;
+      // 쏜 순간: 그 무기의 발광 부분이 번쩍 + 살짝 커졌다 돌아온다 (어느 무기가 쐈는지 기체에서 보이게)
+      const ft = g.time - (w.fireT ?? -9), fl = ft < 0.1;
+      if (si.blade && w.id !== 'saber') si.blade.material.color = fl ? [2.2, 2.2, 2.2] : [1, 1, 1];
+      if (w.id !== 'saber' && w.id !== 'rod' && w.swing === undefined && si.base) { const b = si.base * (1 + Math.max(0, 0.12 - ft) * 1.6); si.inner.scale = [b, b, b]; }
     }
     const blink = this.invuln > 0 && this.hitFlash <= 0 && Math.floor(g.engine.time * 20) % 2 === 0;
     const hf = this.hitFlash > 0, bf = this.buildFlash > 0;

@@ -554,6 +554,55 @@
   /* 튜토리얼 안내/팁: 가운데 아래(알림 자리)와 겹치지 않게 왼쪽 위, 상태판 아래로 */
   body #tut, body #tuttip { left: calc(var(--sal) + 12px) !important; right: auto !important; transform: none !important; top: calc(var(--sat) + 84px) !important; bottom: auto !important; max-width: 340px !important; }
   body.paused #tut, body.paused #tuttip { display: none !important; }
+
+  /* ==== 메카 UI (v7): 조종석 화면 느낌. 얇은 강철 테두리 + 모서리 호박색 브래킷 + 옅은 주사선 ==== */
+  :root { --mk: #ffb43d; --medge: #3b4357; --mbg: rgba(8, 10, 16, .9); }
+  #hud .pix, #toast.pix, .card.pix, #paused .modal, #hint.pix, #dots.pix {
+    border: 2px solid var(--medge) !important; border-image: none !important;
+    background:
+      linear-gradient(var(--mk) 0 0) 0 0 / 12px 3px no-repeat, linear-gradient(var(--mk) 0 0) 0 0 / 3px 12px no-repeat,
+      linear-gradient(var(--mk) 0 0) 100% 0 / 12px 3px no-repeat, linear-gradient(var(--mk) 0 0) 100% 0 / 3px 12px no-repeat,
+      linear-gradient(var(--mk) 0 0) 0 100% / 12px 3px no-repeat, linear-gradient(var(--mk) 0 0) 0 100% / 3px 12px no-repeat,
+      linear-gradient(var(--mk) 0 0) 100% 100% / 12px 3px no-repeat, linear-gradient(var(--mk) 0 0) 100% 100% / 3px 12px no-repeat,
+      repeating-linear-gradient(0deg, rgba(255, 255, 255, .03) 0 1px, transparent 1px 3px),
+      var(--mbg) !important;
+    box-shadow: 0 3px 0 rgba(0, 0, 0, .5) !important;
+  }
+  #hud .pix.dark, #hint.pix, #dots.pix { --mk: #5a6584; }
+  .card.pix { --mk: var(--cc); border-width: 2px !important; }
+  .card.pix:hover, .card.pix:focus-visible { outline: 2px solid var(--cc); outline-offset: 2px; }
+  .card .art { border-image: none !important; border: 2px solid #232838 !important; }
+  #toast.pix { --mk: #5fe0ff; padding: 4px 14px; }
+  #paused .modal { --mk: var(--accent); }
+
+  /* ---- 무기 슬롯 ---- */
+  #rack { position: fixed; left: calc(var(--sal) + 10px); bottom: calc(var(--sab) + 10px); display: flex; gap: 6px; pointer-events: none; zoom: var(--uiz); }
+  .rslot { padding: 2px; background: var(--c); opacity: .9; clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px); transition: transform .06s steps(2); }
+  .rslot .in { width: 66px; height: 82px; box-sizing: border-box; padding-top: 3px; display: grid; justify-items: center; align-content: start; gap: 1px;
+    background: repeating-linear-gradient(0deg, rgba(255, 255, 255, .03) 0 1px, transparent 1px 3px), #0a0c13; clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px); }
+  .rslot .mnt { font-size: 12px; color: #8d96b3; line-height: 1; }
+  .rslot img { width: 40px; height: 40px; }
+  .rslot b { font-size: 12px; color: var(--c); line-height: 1; text-shadow: 0 1px 0 #000; }
+  .rslot .lv { font-size: 12px; color: #fff; line-height: 1; }
+  .rslot .cd { width: 54px; height: 4px; background: #1d2130; margin-top: 2px; box-shadow: 0 0 0 1px #000; }
+  .rslot .cd i { display: block; height: 100%; width: 0; background: var(--c); }
+  .rslot:not(.ready) img { opacity: .55; }
+  .rslot.fire { opacity: 1; transform: translateY(-3px); }
+  .rslot.fire .in { background: color-mix(in srgb, var(--c) 35%, #0a0c13); }
+  .rslot.fire img { filter: brightness(1.6); }
+  /* 폰: 슬롯을 작게, 화면 위쪽 상태판 아래로 (아래는 손가락 자리) */
+  @media (pointer: coarse) {
+    #rack { bottom: auto; top: calc(var(--sat) + 62px); left: calc(var(--sal) + 6px); gap: 3px; }
+    .rslot .in { width: 44px; height: 52px; padding-top: 2px; }
+    .rslot .mnt, .rslot .lv { display: none; }
+    .rslot img { width: 28px; height: 28px; }
+    .rslot .cd { width: 34px; }
+    body #tut, body #tuttip { top: calc(var(--sat) + 124px) !important; }
+  }
+  @media (pointer: coarse) {
+    .ui-narrow #rack, .ui-tiny #rack { top: calc(var(--sat) + 142px); }
+    .ui-narrow body #tut, .ui-narrow body #tuttip, .ui-tiny body #tut, .ui-tiny body #tuttip { top: calc(var(--sat) + 206px) !important; }
+  }
 </style>
 </head>
 <body>
@@ -590,6 +639,7 @@
   <div id="boss" class="pix" hidden><div id="bossname">타이탄</div><div id="bossbar" class="track"><div id="bossfill"></div></div></div>
 </div>
 
+<div id="rack" hidden></div>
 <div id="banner" class="pix dark" hidden></div>
 <div id="combo" hidden><b class="px">0</b><span>연속 처치</span><i></i></div>
 <div id="cutin" hidden></div>
