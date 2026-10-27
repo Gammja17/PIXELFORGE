@@ -5,6 +5,7 @@ import { LEGS, FRAMES, HEADS, PAINTS, HANGAR_PAINTS, MODULES, partPreview } from
 import { WEAPONS, weaponName, MAX_LEVEL } from './weapons.js';
 import { computeStats, MODES, STAT_UPS } from './player.js';
 import { ZONES, REWARDS } from './rooms.js';
+import { OPS } from './ops.js';
 import { pixURL } from './icons.js';
 import { RESEARCH, researchCost } from './meta.js';
 import { THREATS, PILOTS, ACHIEVEMENTS, REWARD_PAINTS, runMods, threatScrapMul, rewardText } from './progress.js';
@@ -57,7 +58,9 @@ function start() {
     },
     roomInfo(rooms) {
       const Z = ZONES[rooms.zone];
+      const O = OPS[rooms.op];
       $('roomname').innerHTML = `${Z.name} <span style="color:var(--accent)">${rooms.reward === 'start' ? '출격 지점' : REWARDS[rooms.reward]?.name || ''}</span>`;
+      $('roomop').hidden = !O; if (O) { $('roomop').style.color = O.color; $('roomop').dataset.name = O.name; }
       const path = $('roompath');
       path.innerHTML = '';
       for (let i = 0; i <= rooms.last; i++) {
@@ -170,7 +173,7 @@ function start() {
       const low = (g.state === 'play' || g.state === 'install') && p.hp > 0 && p.hp < p.stats.maxHp * 0.3;
       if (low !== lowOn) { lowOn = low; $('hpbox').classList.toggle('low', low); $('lowhp').classList.toggle('on', low); }
       if (g.state === 'hangar') { $('odcall').hidden = true; drawCallouts(g); return; }
-      drawDoors(g);
+      drawDoors(g); drawPins(g);
       const cb = $('combo');
       if (g.combo >= 5 && g.comboT > 0) {
         cb.hidden = false; cb.classList.remove('fade');
@@ -192,9 +195,12 @@ function start() {
       $('odline').classList.toggle('full', odFull); $('odline').classList.toggle('on', odOn);
       $('odbtn').hidden = !coarse || !odFull || g.state !== 'play';
       $('odcall').hidden = coarse || !odFull || g.state !== 'play';
-      const R = g.rooms, timed = R.phase === 'fight' && R.duration > 0;
-      $('roomtime').hidden = !timed;
-      if (timed) $('roomtime').firstChild.style.width = `${Math.min(1, R.roomT / R.duration) * 100}%`;
+      const R = g.rooms, oi = R.opInfo?.(), timed = !oi && R.phase === 'fight' && R.duration > 0;
+      $('roomtime').hidden = !timed && !oi;
+      if (oi) $('roomtime').firstChild.style.width = `${oi[0] * 100}%`;
+      else if (timed) $('roomtime').firstChild.style.width = `${Math.min(1, R.roomT / R.duration) * 100}%`;
+      if (oi && (frameN & 7) === 0) $('roomop').textContent = `${$('roomop').dataset.name}  ${oi[1]}`;
+      else if (!oi && R.phase !== 'fight' && !$('roomop').hidden && (frameN & 7) === 0) $('roomop').textContent = `${$('roomop').dataset.name || ''}  완료`;
       if (++frameN % 6) return;
       $('chipline').textContent = `정비 포인트 ${g.chips || 0}`;
       $('hptext').textContent = `${Math.max(0, Math.ceil(p.hp))} / ${Math.round(p.stats.maxHp)}`;
@@ -251,6 +257,25 @@ function start() {
   let confirmScrap = null;
 
   // 출구 문 위의 보상 표지 (하데스처럼 다음 방 보상을 미리 보여줌)
+  // 작전 목표 표지 (거점, 비콘, 황금 드론): 화면 밖이면 가장자리에 화살표로
+  const pinEls = [];
+  function drawPins(g) {
+    const list = g.state === 'play' ? g.rooms.pins?.() || [] : [], dpr = g.engine.dpr, W = innerWidth, H = innerHeight;
+    while (pinEls.length < list.length) { const el = document.createElement('div'); el.className = 'pin'; $('doors').appendChild(el); pinEls.push(el); }
+    pinEls.forEach((el, i) => {
+      const q = list[i];
+      el.hidden = !q;
+      if (!q) return;
+      const s = g.project([q.x, q.y, q.z]);
+      if (!s) { el.hidden = true; return; }
+      const x = s[0] / dpr, y = s[1] / dpr, m = 22, cx = Math.min(W - m, Math.max(m, x)), cy = Math.min(H - m, Math.max(m + 60, y));
+      const edge = cx !== x || cy !== y;
+      el.style.setProperty('--c', q.color);
+      el.textContent = edge ? (Math.abs(cy - y) > Math.abs(cx - x) ? (y < cy ? '▲' : '▼') : (x < cx ? '◀' : '▶')) : (q.label ? `▼ ${q.label}` : '▼');
+      el.classList.toggle('edge', edge);
+      el.style.transform = `translate(${Math.round(cx)}px, ${Math.round(cy)}px) translate(-50%, -100%)`;
+    });
+  }
   function drawDoors(g) {
     const R = g.rooms, dpr = g.engine.dpr;
     const show = (g.state === 'play' || g.state === 'install' || g.state === 'levelup') && R.doors?.length && R.phase !== 'fight';
@@ -268,7 +293,8 @@ function start() {
         const rw = REWARDS[d.reward];
         el = document.createElement('div');
         el.className = 'door pix dark' + (d.reward === 'boss' ? ' boss' : '');
-        el.innerHTML = `<img class="px-img" alt="" src="${pixURL(rw.icon, 3)}"><b>${rw.name}</b><small>${rw.desc}</small>`;
+        const O = OPS[d.op];
+        el.innerHTML = `<img class="px-img" alt="" src="${pixURL(rw.icon, 3)}"><b>${rw.name}</b><small>${rw.desc}</small>` + (O ? `<em class="opt" style="--c:${O.color}">${O.name}<span>${O.short}</span></em>` : '');
         $('doors').appendChild(el);
         doorEls.set(key, el);
       }

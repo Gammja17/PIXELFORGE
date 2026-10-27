@@ -8,6 +8,7 @@ import { buildMech, animateMech } from './parts.js';
 import { GUARDIAN_PARTS, Guardian } from './guardians.js';
 import { MIDBOSS_TYPES, MidBoss, Hazards, laserHits } from './midbosses.js';
 import { TROOP_TYPES } from './troops.js';
+import { OP_TYPES } from './ops.js';
 
 const TAU = Math.PI * 2;
 const add = (g, part, position = [0, 0, 0], rotation = [0, 0, 0]) => g.merge(part, { position, rotation });
@@ -100,7 +101,7 @@ export const ENEMY_TYPES = {
   },
 };
 
-Object.assign(ENEMY_TYPES, TROOP_TYPES, GUARDIAN_PARTS, MIDBOSS_TYPES);
+Object.assign(ENEMY_TYPES, TROOP_TYPES, GUARDIAN_PARTS, MIDBOSS_TYPES, OP_TYPES);
 
 // 정예 특성: 깊이 3 이후 정예에 붙는다 (깊은 방은 2개). 몸 색 + 발밑 회전 고리(aura) 색으로 구분
 export const AFFIXES = {
@@ -581,7 +582,7 @@ export class Enemies {
     }
     const k = knock / (e.mass || e.T.mass);
     e.kx += dirX * k; e.kz += dirZ * k;
-    if (!e.boss) {
+    if (!e.boss && !e.T.anchor) {
       if (launch) e.vy = Math.max(e.vy || 0, launch / Math.sqrt(e.T.mass));   // 띄우기
       if (stun) e.stun = Math.max(e.stun || 0, stun);
     }
@@ -634,7 +635,9 @@ export class Enemies {
     }
     // 연쇄 폭발: 자폭 드론은 항상, 나머지는 '연쇄 기폭' 능력치 확률로
     g.player.addOd(T.xp * 0.0045 * (e.elite ? 6 : 1));
-    const chain = g.player.stats.chain || 0;
+    // 섬멸전 방: 연쇄 폭발 확률 +20%
+    const chain = (g.player.stats.chain || 0) + (g.rooms.op === 'horde' && g.rooms.phase === 'fight' ? 0.2 : 0);
+    if (T.loot) T.loot(g, e);
     if (e.affix?.volatile && e.doomT === undefined) { this.blast(e.x, e.z, 2.8, T.dmg * 2.5 * this.k.dmg, true, 0.35); this.ring(e.x, e.z, 12, 4.2, T.dmg, 'orb', Math.random()); fx.ring(e.x, 0.15, e.z, 2.8, [1, 0.3, 0.2], 0.4); }
     if (e.doomT === undefined) {
       if (T.split) this.spill(T.split, e.x, e.z, e.elite ? 6 : 3, 7);  // 분열: 조각이 튀어나온다

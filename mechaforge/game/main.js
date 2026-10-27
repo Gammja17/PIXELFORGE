@@ -155,7 +155,7 @@ export class Game {
   }
 
   // ---- 방 이동 ----
-  nextRoom(reward, entry) {
+  nextRoom(reward, entry, op = null) {
     if (this.state !== 'play') return;
     this.state = 'transition';
     // 남은 경험치 결정은 자동 회수
@@ -163,7 +163,7 @@ export class Game {
     this.ui.fade(true);
     setTimeout(() => {
       this.enemies.clear(); this.shots.clear(); this.pickups.clear();
-      this.rooms.enter(reward, entry);
+      this.rooms.enter(reward, entry, op);
       this.zoneMusic();
       this.player.invuln = 0.8;
       this.state = 'play';
@@ -559,7 +559,7 @@ export class Game {
       spawn(type, n = 10, d = 6) { for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2; const e = g.enemies.spawn(type, g.player.x + Math.cos(a) * d, g.player.z + Math.sin(a) * d); if (e) e.spawnT = 1; } },
       xp(v) { g.addXp(v); },
       cards(kind = 'part') { g.offerCards(kind, '테스트'); },
-      room(reward = 'part') { g.nextRoom(reward, 'E'); },
+      room(reward = 'part', op = null) { g.nextRoom(reward, 'E', op); },
       clear() { for (const e of g.enemies.list) e.hp = 0, g.enemies.kill(e); g.enemies.list = []; g.enemies.pending = []; g.rooms.roomT = g.rooms.duration; },
       od() { g.player.od = 1; },
       level(n) { for (let i = 0; i < n; i++) g.addXp(g.xpNeed - g.xp + 0.01); },

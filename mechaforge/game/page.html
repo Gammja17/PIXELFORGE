@@ -230,6 +230,12 @@
   #odbtn::before { content: ""; position: absolute; inset: -6px; border-radius: 50%; box-shadow: 0 0 0 3px var(--od), 0 0 16px 4px rgba(255, 138, 42, .8); pointer-events: none; }
   #odbtn b { display: block; font-size: 22px; letter-spacing: .04em; }
   @keyframes odpulse { 50% { filter: brightness(1.35) drop-shadow(0 0 12px rgba(255, 138, 42, .95)); transform: scale(1.06); } }
+  #roomop { font-size: 12px; font-weight: 800; white-space: nowrap; text-shadow: 0 2px 0 #000; }
+  .door .opt { grid-column: 1 / 3; font-style: normal; font-size: 13px; font-weight: 800; color: var(--c); white-space: nowrap; padding: 2px 0 0 4px; }
+  .door .opt span { color: #cfcfda; font-weight: 700; font-size: 11px; margin-left: 6px; }
+  .pin { position: absolute; left: 0; top: 0; font-size: 13px; font-weight: 800; color: var(--c); text-shadow: 0 2px 0 #000, 0 0 6px #000; white-space: nowrap; animation: pinbob 0.8s ease-in-out infinite alternate; }
+  .pin.edge { font-size: 18px; }
+  @keyframes pinbob { to { margin-top: -5px; } }
   #roomtime { width: 100%; height: 12px; position: relative; box-sizing: border-box; }
   #roomtime i { position: absolute; inset: 0 auto 0 0; width: 0; background: linear-gradient(180deg, #ffe39a 0 2px, var(--accent) 2px); }
   #dashbtn { --b: var(--btn-dash); --bon: var(--btn-dash-on); right: 16px; bottom: 118px; width: 72px; height: 72px; }
@@ -540,7 +546,7 @@
       <div class="hrow" id="spline"><kbd class="k">K</kbd><span id="spname">특수기</span><span class="pip bar" id="sppip"><i></i></span></div>
       <div class="hrow" id="odline"><kbd class="k">Q</kbd><span>오버드라이브</span><span class="pip bar" id="odpip"><i></i></span><span id="odkey" class="px">0%</span></div>
     </div>
-    <div id="mid"><div id="roombox" class="pix"><div id="roomname">사막 폐허</div><div id="roompath" class="screenbox"></div><div id="roomtime" class="track" hidden><i></i></div><div id="chipline">정비 포인트 0</div></div></div>
+    <div id="mid"><div id="roombox" class="pix"><div id="roomname">사막 폐허</div><div id="roomop" hidden></div><div id="roompath" class="screenbox"></div><div id="roomtime" class="track" hidden><i></i></div><div id="chipline">정비 포인트 0</div></div></div>
     <div id="side">
       <div id="kills" class="pix px">0<span>처치</span></div>
       <button type="button" id="pausebtn" class="pix" aria-label="일시정지">

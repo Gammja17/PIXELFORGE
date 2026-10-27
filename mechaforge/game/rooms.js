@@ -12,6 +12,7 @@ import { MIDBOSS_KINDS } from './midbosses.js';
 import { buildLayout, pickLayout, Flow } from './world.js';
 import { RoomHazards } from './hazards.js';
 import { pickGuardian } from './guardians.js';
+import { OPS, pickOp } from './ops.js';
 
 //  floor: 바닥 무늬, edge: 테두리 벽 (rock | box), music: [곡, 재생 속도], guardian: 수호자 종류
 //  cover: 부서지는 엄폐물, haz: 위험 요소별 기본 개수 (깊이에 따라 늘어난다)
@@ -55,6 +56,7 @@ export const REWARDS = {
   supply:   { name: '보급 상자', icon: 'supply', desc: '수리 + 경험치' },
   xp:       { name: '데이터 코어', icon: 'xp', desc: '대량 경험치' },
   elite:    { name: '정예 부대', icon: 'elite', desc: '강적 + 부품' },
+  cargo:    { name: '황금 수송선', icon: 'cargo', desc: '경험치 + 정비 포인트' },
   guardian: { name: '구역 수호자', icon: 'boss', desc: '중간 보스 + 부품' },
   workshop: { name: '정비 드론 기지', icon: 'workshop', desc: '부품 강화, 분해, 수리' },
   boss:     { name: '타이탄', icon: 'boss', desc: '최종 보스' },
@@ -180,7 +182,7 @@ export class Rooms {
     if (depth + 1 >= this.last) return ['boss'];
     if (depth + 1 === 2 || depth + 1 === 5) return ['guardian'];
     const pool = ['part', 'part', 'system', 'supply', 'xp', 'elite'];
-    if (depth >= 1) pool.push('workshop');
+    if (depth >= 1) pool.push('workshop', 'cargo');
     if (depth <= 1) pool.splice(pool.indexOf('elite'), 1);
     const n = depth === 0 ? 2 : R() < 0.75 ? 2 : 1;
     const out = [];
@@ -198,7 +200,7 @@ export class Rooms {
   addMesh(geo, mat) { const m = this.game.scene.add(new Mesh(geo, mat)); this.meshes.push(m); return m; }
 
   // ---- 방 만들기 ----
-  enter(reward, entrySide = 'E') {
+  enter(reward, entrySide = 'E', op = null) {
     const g = this.game, sc = g.scene;
     this.clear();
     this.depth++;
@@ -209,18 +211,21 @@ export class Rooms {
     const R = rng(this.seed + depth * 131 + 7);
     const boss = reward === 'boss';
     const big = boss || reward === 'guardian';
-    const combat = ['part', 'system', 'supply', 'xp', 'elite'].includes(reward);
+    const combat = ['part', 'system', 'supply', 'xp', 'elite', 'cargo'].includes(reward);
+    // 작전 (ops.js): 문에서 정해 온 것, 없으면 여기서 고른다
+    this.op = combat ? (this.force.op || op || pickOp(reward, depth, R, [this.lastOp])) : null;
+    this.lastOp = this.op;
     this.hx = big ? 16 : R.range(15, 18); this.hz = big ? 16 : R.range(15, 18);
     if (reward === 'workshop' || reward === 'start') { this.hx = 9; this.hz = 9; }
     const hx = this.hx, hz = this.hz;
     // 특수 방 (연속으로는 안 나온다). 수축 방어막은 막힌 구조물이 없는 방에서만
     let special = this.force.special ?? null; // force.special: undefined = 무작위, null = 없음
-    if (this.force.special === undefined && combat && depth >= 4 && !this.lastSpecial && R() < 0.3) special = R() < 0.5 ? 'dark' : 'storm';
+    if (this.force.special === undefined && this.op === 'survive' && depth >= 4 && !this.lastSpecial && R() < 0.45) special = R() < 0.5 ? 'dark' : 'storm';
     this.special = special; this.lastSpecial = special;
     let layout = this.force.layout || pickLayout(R, reward, this.lastLayout);
     if (special === 'storm' && !['open', 'pillars'].includes(layout)) layout = R() < 0.5 ? 'open' : 'pillars';
     this.layout = this.lastLayout = layout;
-    this.path.push({ reward, zone: zoneId, layout, special });
+    this.path.push({ reward, zone: zoneId, layout, special, op: this.op });
 
     // 조명
     sc.sun.direction = Z.sun.dir; sc.sun.color = Z.sun.color; sc.sun.intensity = Z.sun.k;
@@ -230,7 +235,8 @@ export class Rooms {
     // 출구 문 (먼 벽: W, S), 입구 문 (가까운 벽)
     const exits = this.rollExits(depth);
     const farSides = exits.length === 1 ? [R() < 0.5 ? 'W' : 'S'] : ['W', 'S'];
-    this.doors = exits.map((rw, i) => ({ side: farSides[i], reward: rw, open: false, fade: 0 }));
+    const taken = [this.op];
+    this.doors = exits.map((rw, i) => { const o = pickOp(rw, depth + 1, R, taken); taken.push(o); return { side: farSides[i], reward: rw, op: o, open: false, fade: 0 }; });
     this.entry = { side: entrySide, reward: null, open: false, entry: true, fade: 0 };
 
     // 바닥
@@ -306,9 +312,9 @@ export class Rooms {
     this.waves = boss ? [{ boss: true }] : [];
     this.waveT = 1.2;
     // 물량전: 제한 시간 동안 버티며 쓸어버리기
-    this.duration = boss ? 0 : (reward === 'elite' ? 60 : 34 + depth * 5);
+    this.duration = boss ? 0 : 34 + depth * 5;
     this.roomT = 0; this.acc = 0; this.marks = new Set(); this.bossOn = false; this.guardOn = false; this.waitMid = false; this.told = false;
-    this.midAt = combat ? this.planMids() : [];
+    this.midAt = [];
     if (reward === 'guardian') { this.duration = 0; this.waveT = 1.5; }
     if (reward === 'workshop' || reward === 'start') { this.phase = 'clear'; this.waves = []; }
     if (reward === 'workshop') this.spawnPrize();
@@ -320,8 +326,15 @@ export class Rooms {
     p.vx = p.vz = p.ex = p.ez = 0;
     p.yaw = p.aimYaw = p.aimGoal = Math.atan2(-esx, -esz);
     p.place();
+    // 작전 시작 (플레이어 위치가 정해진 뒤: 비콘, 거점은 플레이어에게서 떨어진 곳에)
+    this.k0 = g.stats.kills;
+    if (this.op) { OPS[this.op].begin(this); setTimeout(() => g.ui.banner(OPS[this.op]?.banner || ''), 700); }
     g.ui.roomInfo(this);
   }
+  glowMat(opacity = 1) { return new Material({ emissive: 1, outline: false, castShadow: false, opacity }); }
+  // 작전 진행도 [0~1, 문구], 화면 표지
+  opInfo() { return this.op && this.phase === 'fight' ? OPS[this.op].info(this) : null; }
+  pins() { return this.op && this.phase === 'fight' && OPS[this.op].pins ? OPS[this.op].pins(this) : []; }
 
   // 바닥 색 (구역 무늬). 방 밖은 어둡게
   floorColor(Z, c, depth, cs) {
@@ -355,7 +368,7 @@ export class Rooms {
   }
 
   // 적 흐름: 초당 예산만큼 무리를 방 가장자리에 소환
-  stream(dt, mul) {
+  stream(dt, mul, swarmOnly = false) {
     const en = this.game.enemies, d = this.depth, K = en.k;
     if (en.list.length > 400) return;
     this.acc += dt * (3.8 + d * 1.4) * mul * K.dens;
@@ -366,6 +379,12 @@ export class Rooms {
       if (!pt) { this.acc = 0; break; }
       // 역할 기체 (troops.js): 깊이 3부터, 깊을수록 비중 ↑ (CURVE troop: 10% → 30%)
       const pool = TROOPS.filter((q) => d >= FIRST[q[0]]);
+      if (swarmOnly) {
+        if (r < 0.2) { const n = 2 + ((R() * 3) | 0) + (d >> 1); en.pack('bomber', pt[0], pt[1], n, 1.2); this.acc -= n * 1.2; }
+        else if (r < 0.4) { const n = 4 + ((R() * 3) | 0) + (d >> 1); en.pack('drone', pt[0], pt[1], n, 1.4); this.acc -= n; }
+        else { const n = 12 + ((R() * 8) | 0) + d * 2; en.pack('mite', pt[0], pt[1], n | 0, 2.2); this.acc -= n * 0.4; }
+        continue;
+      }
       if (pool.length && R() < curveAt(d).troop) {
         const q = pool[(R() * pool.length) | 0], n = q[2] + (d >= q[3] ? 1 : 0);
         en.pack(q[0], pt[0], pt[1], n, 1.2); this.acc -= n * q[1];
@@ -394,6 +413,17 @@ export class Rooms {
       if (d >= 3 && i % 4 === 2) en.pack(d >= 5 && i % 8 === 2 ? 'spinner' : 'tank', x, z, 1, 0.5, i * 0.05);
       else if (d >= 4 && i % 4 === 0) en.pack('shield', x, z, 1, 0.5, i * 0.05); // 방패 기체가 포위망 앞을 막는다
       else en.pack(d >= 3 && i % 3 === 0 ? 'bomber' : 'mite', x, z, n, 1.4, i * 0.05); // 초반 포위망은 벌레만 (쓸어 담는 맛)
+    }
+  }
+  // 한 지점을 둘러싸고 몰려오는 무리 (거점 장악)
+  surgeAt(cx, cz, rad) {
+    const g = this.game, en = g.enemies, d = this.depth, packs = 6 + Math.min(4, d);
+    g.sfx.play('alarm');
+    for (let i = 0; i < packs; i++) {
+      const a = (i / packs) * Math.PI * 2 + Math.random() * 0.4;
+      const x = Math.max(-this.hx + 1, Math.min(this.hx - 1, cx + Math.cos(a) * rad)), z = Math.max(-this.hz + 1, Math.min(this.hz - 1, cz + Math.sin(a) * rad));
+      if (d >= 3 && i % 3 === 1) en.pack('tank', x, z, 1, 0.5, i * 0.05);
+      else en.pack(i % 2 ? 'drone' : 'mite', x, z, i % 2 ? 3 + (d >> 1) : 6 + d, 1.4, i * 0.05);
     }
   }
   spawnElite() {
@@ -503,20 +533,10 @@ export class Rooms {
         }
       } else {
         this.roomT += dt;
-        const k = Math.min(1, this.roomT / this.duration), d = this.depth, midOn = en.mids.length > 0;
-        this.stream(dt, (0.6 + 0.95 * k) * (midOn ? 0.5 : 1)); // 중간 보스가 있으면 물량은 절반 (탄막에 집중)
-        // 대규모 접근: 사방에서 벌레 떼가 원형으로 몰려온다
-        for (const m of d >= 6 ? [0.3, 0.58, 0.85] : [0.38, 0.78]) if (k >= m && !this.marks.has(m)) { this.marks.add(m); this.surge(); }
-        // 정예 기체 (처치하면 부품 상자)
-        const eliteAt = this.reward === 'elite' ? [0.15, 0.35, 0.55, 0.75] : d >= 6 ? [0.2, 0.5, 0.8] : d >= 3 ? [0.3, 0.65] : [0.5];
-        for (const m of eliteAt) if (k >= m && !this.marks.has('e' + m)) { this.marks.add('e' + m); this.spawnElite(); }
-        for (const m of this.midAt) if (k >= m && !this.marks.has('m' + m)) { this.marks.add('m' + m); this.spawnMid(); }
-        // 시간이 끝나도 중간 보스가 남아 있으면 쓰러뜨릴 때까지 계속
-        if (k >= 1 && midOn) { if (!this.waitMid) { this.waitMid = true; g.ui.banner('중간 보스를 격파하라!', true); } }
-        else if (k >= 1) {
+        if (OPS[this.op].update(this, dt)) {
           this.phase = 'reward';
           en.detonateAll();
-          g.ui.banner('구역 제압!');
+          g.ui.banner('작전 완료!');
           g.addChips(1);
           if (this.special) g.addChips(1, `${SPECIALS[this.special].name} 돌파`);
           g.sfx.play('clear');
@@ -546,7 +566,7 @@ export class Rooms {
     // 문 통과
     if (this.phase === 'exits') for (const d of this.doors) {
       const [sx, sz] = SIDE[d.side];
-      if ((sx && p.x * sx > this.hx + 0.6) || (sz && p.z * sz > this.hz + 0.6)) { g.nextRoom(d.reward, d.side === 'W' ? 'E' : 'N'); break; }
+      if ((sx && p.x * sx > this.hx + 0.6) || (sz && p.z * sz > this.hz + 0.6)) { g.nextRoom(d.reward, d.side === 'W' ? 'E' : 'N', d.op); break; }
     }
   }
 
@@ -558,6 +578,7 @@ export class Rooms {
     if (r === 'supply') { g.player.heal(g.player.stats.maxHp * 0.4); g.addXp(g.xpNeed * 0.4); g.ui.toast('보급: 수리 40% + 경험치'); }
     else if (r === 'xp') { g.addXp(g.xpNeed * 1.05); g.ui.toast('데이터 코어: 경험치 대량 획득'); }
     else if (r === 'part' || r === 'elite') g.offerCards('part', '부품 캐시');
+    else if (r === 'cargo') { g.player.heal(g.player.stats.maxHp * 0.25); g.ui.toast('수송선 화물: 수리 25%'); }
     else if (r === 'guardian') { g.player.heal(g.player.stats.maxHp * 0.5); g.offerCards('part', '수호자 잔해'); }
     else if (r === 'system') g.offerCards('system', '시스템 튜닝');
     else if (r === 'workshop') { g.player.heal(g.player.stats.maxHp * 0.3); g.addChips(2, '정비 기지'); g.openStation(); }
