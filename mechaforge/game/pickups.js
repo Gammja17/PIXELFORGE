@@ -31,7 +31,7 @@ export class Pickups {
     this.items = [];
     this.parts = [];
     const gg = Geometry.icosphere(0.16, 0, [1, 1, 1], { squashY: 1.4 });
-    this.gemMesh = game.scene.add(new InstancedMesh(gg, new Material({ emissive: 0.75, castShadow: false }), 450));
+    this.gemMesh = game.scene.add(new InstancedMesh(gg, new Material({ emissive: 0.4, castShadow: false }), 450));
     const ig = new Geometry();
     ig.merge(Geometry.box(0.42, 0.42, 0.42, [0.9, 0.9, 0.9]), { position: [0, -0.21, 0] });
     ig.merge(Geometry.box(0.46, 0.12, 0.12, [1, 1, 1]), { position: [0, -0.06, 0] });
@@ -94,7 +94,7 @@ export class Pickups {
       q.beam.material.opacity = 0.35 + 0.2 * Math.sin(q.t * 8);
       q.beam.material.color = PART_COLORS[q.kind];
       this.frame(q.x, q.z, q.t, PART_COLORS[q.kind], 1.25);
-      if (Math.random() < 0.15) fx.sparks.emit({ position: [q.x, q.y + 0.3, q.z], velocity: [0, 2, 0], life: 0.4, size: 2, sizeEnd: 1, color: [1, 0.9, 0.5], colorEnd: [1, 0.5, 0.1], emissive: 1, gravity: -0.2 });
+      if (Math.random() < 0.03) fx.sparks.emit({ position: [q.x, q.y + 0.3, q.z], velocity: [0, 2, 0], life: 0.4, size: 2, sizeEnd: 1, color: [1, 0.9, 0.5], colorEnd: [1, 0.5, 0.1], emissive: 1, gravity: -0.2 });
       const dx = p.x - q.x, dz = p.z - q.z, d = Math.hypot(dx, dz);
       if (q.t > 0.6 && d < p.r + 0.9 && g.state === 'play') {
         this.parts.splice(i, 1);
@@ -131,7 +131,7 @@ export class Pickups {
       }
       const T = GEM_TIERS.find((t) => q.value >= t.min);
       const s = T.s;
-      this.gemMesh.setAt(n++, m4.fromTRS([q.x, q.y + Math.sin(q.t * 4) * 0.08, q.z], [0, q.t * 2, 0], [s, s, s]), T.color, 0.75);
+      this.gemMesh.setAt(n++, m4.fromTRS([q.x, q.y + Math.sin(q.t * 4) * 0.08, q.z], [0, q.t * 2, 0], [s, s, s]), T.color, 0.4);
     }
     this.gemMesh.count = n;
     this.gemMesh.dirty = true;

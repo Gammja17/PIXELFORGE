@@ -12,6 +12,10 @@ import { THREATS, PILOTS, ACHIEVEMENTS, REWARD_PAINTS, runMods, threatScrapMul, 
 import { SETS, setProgress, setOf } from './sets.js';
 import { applySkin } from './skin.js';
 import { applyStatMods } from './runhooks.js';
+import { GALMURI } from './font-data.js';
+
+// 도트 글꼴 (UI 를 게임 화면의 픽셀 느낌과 맞춘다)
+try { const ff = new FontFace('Galmuri', `url(data:font/woff2;base64,${GALMURI})`, { weight: '100 900' }); document.fonts.add(ff); ff.load(); } catch { /* 글꼴 실패 시 기본 글꼴 */ }
 
 const $ = (id) => document.getElementById(id);
 const fmt = (t) => `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
@@ -48,7 +52,7 @@ function start() {
   const ui = {
     banner(text, warn = false) { const b = $('banner'); b.textContent = text; b.hidden = false; b.classList.toggle('warn', warn); bannerT = warn ? 2.4 : 1.8; },
     toast(text) { const t = $('toast'); t.textContent = text; t.hidden = false; toastT = 1.6; },
-    hurtFlash() { const h = $('hurt'); h.classList.add('on'); setTimeout(() => h.classList.remove('on'), 90); },
+    hurtFlash() { const h = $('hurt'); h.classList.add('on'); setTimeout(() => h.classList.remove('on'), 200); },
     fade(on) { $('fade').classList.toggle('on', on); },
     bossBar(k, name) {
       $('boss').hidden = k <= 0;
@@ -157,7 +161,7 @@ function start() {
       const dt = 1 / 60;
       if (bannerT > 0 && (bannerT -= dt) <= 0) $('banner').hidden = true;
       // 배너는 HUD(보스 체력 막대 포함) 밑으로. banner 는 zoom 이 걸려 있어서 px 를 uiz 로 나눈다
-      if (bannerT > 0) { const hb = $('hud').hidden ? 0 : $('hud').getBoundingClientRect().bottom; $('banner').style.top = `${Math.max(innerHeight * 0.36, hb + 10) / uiz}px`; }
+      if (bannerT > 0) { const hb = $('hud').hidden ? 0 : $('hud').getBoundingClientRect().bottom; $('banner').style.top = `${Math.max(innerHeight * 0.2, hb + 10) / uiz}px`; }
       if (toastT > 0 && (toastT -= dt) <= 0) $('toast').hidden = true;
       $('skip').hidden = g.state !== 'install';
       const s = g.engine.input.stick;
@@ -591,7 +595,7 @@ function start() {
   {
     let folded = true;
     try { folded = localStorage.getItem('mf-hudfold') !== '0'; } catch { /* 무시 */ }
-    const apply = () => { $('hud').classList.toggle('folded', folded); $('hudfold').textContent = folded ? '상태 ▸' : '◂'; };
+    const apply = () => { $('hud').classList.toggle('folded', folded); $('hudfold').textContent = folded ? '상태 ▶' : '◀'; };
     $('hudfold').addEventListener('click', () => { folded = !folded; apply(); try { localStorage.setItem('mf-hudfold', folded ? '1' : '0'); } catch { /* 무시 */ } });
     apply();
   }

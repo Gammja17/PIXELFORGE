@@ -307,6 +307,9 @@ export class Player {
     fx.number([this.x, 2.4, this.z], d, { color: [1, 0.3, 0.3], big: true });
     g.sfx.play('hurt');
     fx.hitSpark([this.x, 1.3, this.z], [1, 0.4, 0.3], 8);
+    // 내가 맞은 건 확실하게: 붉은 8갈래 섬광 + 충격 고리
+    fx.flare([this.x, 1.3 * (this.size || 1), this.z], 'star8', [1, 0.25, 0.2], 3.2, 0.25, { spin: 3 });
+    fx.ring(this.x, 0.15, this.z, 2.2, [1, 0.3, 0.25], 0.25);
     fx.addTrauma(0.45);
     g.hitStop(0.07);
     g.ui.hurtFlash();
@@ -433,9 +436,10 @@ export class Player {
     const hf = this.hitFlash > 0, bf = this.buildFlash > 0;
     for (const mesh of m.meshes) {
       const od = this.odT > 0 ? 0.1 + 0.08 * Math.sin(g.engine.time * 12) : 0;
-      mesh.material.color = hf ? [2.4, 0.6, 0.5] : bf ? [0.9 + this.buildFlash * 3, 1.2 + this.buildFlash * 3, 2 + this.buildFlash * 2] : od ? [1 + od * 2, 1 + od, 1 - od] : [1, 1, 1];
-      mesh.material.emissive = hf ? 0.6 : bf ? this.buildFlash * 1.5 : od;
-      mesh.material.opacity = blink ? 0.55 : 1;
+      const hw = this.hitFlash > 0.11;
+      mesh.material.color = hw ? [2.4, 2.4, 2.4] : hf ? [2.2, 0.45, 0.4] : bf ? [0.9 + this.buildFlash * 3, 1.2 + this.buildFlash * 3, 2 + this.buildFlash * 2] : od ? [1 + od * 2, 1 + od, 1 - od] : [1, 1, 1];
+      mesh.material.emissive = hf ? 1 : bf ? this.buildFlash * 1.5 : od;
+      mesh.material.opacity = blink ? 0.3 : 1;
     }
     for (const gl of m.glows) gl.material.color = [1, 1, 1].map((v) => v * (0.85 + Math.random() * 0.3));
     if (m.bubble) {

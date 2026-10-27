@@ -386,7 +386,7 @@ export class RoomHazards {
         if (st === 'idle') M.color = fight ? [0.28, 0.28, 0.32] : [0.12, 0.12, 0.14];
         else if (st === 'warn') { const on = Math.sin(this.t * (24 + k * 30)) > 0; M.color = on ? [1.5, 1.5, 1.5] : [0.25, 0.25, 0.3]; }
         else {
-          const f = 1.8 + Math.random() * 0.8; M.color = [f, f, f];
+          const f = 1 + Math.random() * 0.5; M.color = [0.45 * f, 1.1 * f, 1.5 * f];
           if (Math.random() < 0.7) { const [x, z] = h.tiles[(Math.random() * h.tiles.length) | 0]; fx.sparks.emit({ position: [x + (Math.random() - 0.5) * 1.6, 0.15, z + (Math.random() - 0.5) * 1.6], velocity: [(Math.random() - 0.5) * 4, 2 + Math.random() * 3, (Math.random() - 0.5) * 4], life: 0.18, size: 2, sizeEnd: 1, color: [0.9, 1, 1], colorEnd: [0.3, 0.7, 1], emissive: 1, gravity: 0.4 }); }
           if (h.burst) { fx.light([h.x, 1, h.z], [0.4, 0.8, 1], 6, 1.1, h.live); if (near(h.x, h.z)) g.sfx.play('beam', { vol: 0.3 }); }
           if ((h.tick -= dt) <= 0) {

@@ -139,7 +139,7 @@ export class Fx {
     this.flare([x, y + 0.2, z], 'burst', [1, 0.92, 0.6], 1 + size * 1.3, 0.2, { spin: rr(-3, 3) });
     this.flare([x, y + 0.2, z], 'burst', color, 1.5 + size * 1.7, 0.3, { spin: rr(-2, 2), grow: true });
     this.streaks([x, y + 0.2, z], Math.round(6 + size * 6), [1, 0.85, 0.45], { speed: [7, 16 + size * 6], len: 0.5 + size * 0.25, life: 0.26 });
-    const n = Math.round(10 + size * 14);
+    const n = Math.round(3 + size * 5);
     for (let i = 0; i < n; i++) {
       const a = R() * Math.PI * 2, e = rr(-0.2, 1), sp = rr(3, 9) * Math.sqrt(size);
       this.sparks.emit({
@@ -154,7 +154,7 @@ export class Fx {
       });
     }
     // 화염 덩어리 (큰 발광 점)
-    for (let i = 0; i < Math.round(2 + size * 3); i++) {
+    for (let i = 0; i < Math.round(size * 2); i++) {
       this.trail.emit({ position: [x + rr(-0.3, 0.3) * size, y + rr(0, 0.4), z + rr(-0.3, 0.3) * size], velocity: [rr(-1.5, 1.5), rr(1, 3), rr(-1.5, 1.5)], life: rr(0.2, 0.4), size: rr(5, 8) * Math.min(1.8, 0.5 + size * 0.5), sizeEnd: 2, color: [1, 0.9, 0.5], colorEnd: [1, 0.3, 0.1], emissive: 1 });
     }
     for (let i = 0; i < Math.round(size * 3); i++) this.chunk(x, y, z, debris, 5 + size * 2);
@@ -168,11 +168,10 @@ export class Fx {
   pop(x, y, z, color = [1, 0.6, 0.25]) {
     this.flare([x, y + 0.1, z], 'burst', [1, 0.85, 0.45], 0.8, 0.14, { spin: rr(-4, 4) });
     this.streaks([x, y + 0.1, z], 3, color, { speed: [5, 10], len: 0.35, life: 0.15 });
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < 2; i++) {
       const a = R() * Math.PI * 2, sp = rr(2, 5);
       this.sparks.emit({ position: [x, y, z], velocity: [Math.cos(a) * sp, rr(2, 5), Math.sin(a) * sp], life: rr(0.18, 0.4), size: rr(2, 3), sizeEnd: 1, color: [1, 0.95, 0.6], colorEnd: color, emissive: 1, gravity: 0.8 });
     }
-    this.trail.emit({ position: [x, y + 0.1, z], velocity: [0, 1, 0], life: 0.16, size: 6, sizeEnd: 2, color: [1, 0.9, 0.55], colorEnd: [1, 0.35, 0.1], emissive: 1 });
     if (R() < 0.3) this.chunk(x, y, z, [0.35, 0.25, 0.2], 4);
   }
 
@@ -246,10 +245,9 @@ export class Fx {
 
   hitSpark(p, color = [1, 0.9, 0.6], n = 4) {
     // 맞은 자리: 십자 섬광 + 사방으로 튀는 불꽃 줄기 (원형 점만 있던 것보다 날카롭게)
-    this.flare(p, 'star4', [1, 1, 1], 0.3 + n * 0.03, 0.1);
-    this.flare(p, 'star4', color, 0.75 + n * 0.06, 0.16, { rot: Math.PI / 4 });
-    this.streaks(p, Math.min(6, 2 + (n >> 1)), color, { speed: [5, 11], len: 0.35, life: 0.16 });
-    for (let i = 0; i < n; i++) {
+    this.flare(p, 'star4', color, 0.7 + n * 0.05, 0.14, { rot: Math.PI / 4 });
+    this.streaks(p, Math.min(5, 2 + (n >> 1)), color, { speed: [5, 11], len: 0.35, life: 0.16 });
+    for (let i = 0; i < (n >> 2); i++) {
       const a = R() * Math.PI * 2, sp = rr(3, 7);
       this.sparks.emit({ position: p, velocity: [Math.cos(a) * sp, rr(1, 5), Math.sin(a) * sp], life: rr(0.12, 0.28), size: 2, sizeEnd: 1, color: [1, 1, 1], colorEnd: color, emissive: 1 });
     }

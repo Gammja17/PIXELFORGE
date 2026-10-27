@@ -39,9 +39,9 @@ const CSS = `
 #tut .th { display: flex; align-items: center; gap: 12px; width: 100%; justify-content: space-between; }
 #tut .ts { font-family: var(--font-tech, monospace); font-size: 12px; font-weight: 700; letter-spacing: .16em; color: var(--cyan, #5fe0ff); white-space: nowrap; }
 #tut .tx { pointer-events: auto; font: 700 13px var(--font-body, sans-serif); color: var(--paper, #ece8df); min-height: 30px; padding: 0 6px; white-space: nowrap; }
-#tut b.tt { font-family: var(--font-tech, monospace), var(--font-body, sans-serif); font-size: 28px; font-weight: 800; line-height: 1.1; color: var(--accent, #ffc93d); text-shadow: 0 2px 0 #000; letter-spacing: .02em; }
-#tut p, #tuttip p { margin: 0; font-size: 18px; font-weight: 700; line-height: 1.3; text-shadow: 0 2px 0 #000; }
-#tut .tk, #tuttip .tk { display: flex; flex-wrap: wrap; gap: 6px 14px; justify-content: center; font-size: 15px; font-weight: 700; }
+#tut b.tt { font-family: var(--font-tech, monospace), var(--font-body, sans-serif); font-size: 24px; font-weight: 800; line-height: 1.1; color: var(--accent, #ffc93d); text-shadow: 0 2px 0 #000; letter-spacing: .02em; }
+#tut p, #tuttip p { margin: 0; font-size: 12px; font-weight: 700; line-height: 1.3; text-shadow: 0 2px 0 #000; }
+#tut .tk, #tuttip .tk { display: flex; flex-wrap: wrap; gap: 6px 14px; justify-content: center; font-size: 12px; font-weight: 700; }
 #tut .tk span, #tuttip .tk span { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 #tut .tk em, #tuttip .tk em { font-style: normal; font: 700 11px var(--font-tech, monospace); letter-spacing: .12em; color: var(--muted, #9a978f); margin-right: 2px; }
 #tut kbd, #tuttip kbd { font: 800 15px var(--font-tech, monospace); color: #15161b; background: var(--accent, #ffc93d); box-shadow: inset 0 -3px 0 #a87a10, 0 0 0 2px #000; padding: 1px 7px 3px; min-width: 14px; }
@@ -63,19 +63,19 @@ const CSS = `
 /* 낮은 화면 (폰 가로): 맨 위 HUD 사이 빈칸에 한 덩어리로. 제목 줄에 단계와 건너뛰기 */
 #tut.compact { grid-template-columns: auto 1fr auto; grid-template-areas: "s t x" "p p p" "k k k" "b b b"; gap: 1px 8px; padding: 0 8px 3px; align-items: center; }
 #tut.compact .th { display: contents; }
-#tut.compact .ts { grid-area: s; font-size: 10px; letter-spacing: .08em; }
-#tut.compact b.tt { grid-area: t; font-size: 19px; }
-#tut.compact .tx { grid-area: x; min-height: 0; font-size: 11px; padding: 0 2px; border-image-width: 8px; border-width: 8px; }
-#tut.compact p { grid-area: p; font-size: 14px; }
+#tut.compact .ts { grid-area: s; font-size: 12px; letter-spacing: .08em; }
+#tut.compact b.tt { grid-area: t; font-size: 24px; }
+#tut.compact .tx { grid-area: x; min-height: 0; font-size: 12px; padding: 0 2px; border-image-width: 8px; border-width: 8px; }
+#tut.compact p { grid-area: p; font-size: 12px; }
 #tut.compact .tk { grid-area: k; font-size: 12px; gap: 2px 10px; }
-#tut.compact kbd, #tuttip.compact kbd { font-size: 11px; padding: 0 5px 2px; }
+#tut.compact kbd, #tuttip.compact kbd { font-size: 12px; padding: 0 5px 2px; }
 #tut.compact .tb { grid-area: b; height: 4px; }
 #tut.compact.low { top: calc(var(--sat, 0px) + 2px); bottom: auto; grid-template-columns: auto auto auto; grid-template-areas: "t p x"; }
 #tut.compact.low .ts, #tut.compact.low .tk, #tut.compact.low .tb { display: none; }
 #tuttip.compact { padding: 0 10px 3px; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0 10px; }
 #tuttip.compact.low { top: calc(var(--sat, 0px) + 2px) !important; bottom: auto; }
 #tuttip.compact.low .tk { display: none; }
-#tuttip.compact b { font-size: 18px; } #tuttip.compact p { font-size: 14px; } #tuttip.compact .tk { font-size: 12px; }
+#tuttip.compact b { font-size: 12px; } #tuttip.compact p { font-size: 12px; } #tuttip.compact .tk { font-size: 12px; }
 
 `;
 

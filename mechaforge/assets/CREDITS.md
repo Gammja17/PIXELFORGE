@@ -24,3 +24,6 @@
 
 ## 음악 (CC0)
 - Juhani Junkala (SubspaceAudio), "5 Chiptunes (Action)" (https://opengameart.org/content/5-chiptunes-action)
+
+# 글꼴
+- Galmuri11 Bold: quiple (https://github.com/quiple/galmuri), SIL Open Font License 1.1 (assets/fonts/Galmuri-OFL.txt)

@@ -308,10 +308,10 @@ export class Shots {
     this.missileMesh = sc.add(new InstancedMesh(mg, new Material({ castShadow: false, emissive: 0.3 }), 120));
     // 적 탄: 흰 심 + 디더링된 색 껍질 + 바닥 그림자 (어디로 오는지 잘 보이게)
     this.enemyCore = sc.add(new InstancedMesh(Geometry.icosphere(0.17, 1), new Material({ emissive: 1, castShadow: false, outline: false }), 300));
-    this.enemyMesh = sc.add(new InstancedMesh(Geometry.icosphere(0.32, 1), new Material({ emissive: 1, castShadow: false, opacity: 0.55 }), 300));
+    this.enemyMesh = sc.add(new InstancedMesh(Geometry.icosphere(0.32, 1), new Material({ emissive: 1, castShadow: false }), 300));
     const disc = new Geometry();
     for (let i = 0; i < 10; i++) { const a0 = (i / 10) * Math.PI * 2, a1 = ((i + 1) / 10) * Math.PI * 2; disc.quad([0, 0, 0], [0, 0, 0], [Math.cos(a1) * 0.3, 0, Math.sin(a1) * 0.3], [Math.cos(a0) * 0.3, 0, Math.sin(a0) * 0.3], [0, 0, 0], null, [0, 1, 0]); }
-    this.enemyShadow = sc.add(new InstancedMesh(disc, new Material({ color: [0.05, 0.02, 0.06], castShadow: false, outline: false, opacity: 0.5 }), 300));
+    this.enemyShadow = sc.add(new InstancedMesh(disc, new Material({ color: [0.05, 0.02, 0.06], castShadow: false, outline: false }), 300));
     // 빔 풀
     this.beams = [];
     const bg = beamGeo();
@@ -754,7 +754,7 @@ export class WeaponSystem {
       fx.muzzle(mz, dir, [1, 0.8, 0.3], 1);
       g.sfx.play('mg', { vol: w.slot.startsWith('arm') ? 1 : 0.6, pitch: w.evo ? 1.25 : 1 });
       if (w.slot.startsWith('arm')) p.recoil = Math.max(p.recoil || 0, 0.18);
-      this.casing(mz, yaw, w.slot === 'armL' ? -1 : 1);
+      if (Math.random() < 0.35) this.casing(mz, yaw, w.slot === 'armL' ? -1 : 1);
       fx.light(mz, [1, 0.8, 0.4], 2.5, 0.6, 0.05);
     } else if (w.id === 'shotgun') {
       for (let k = 0; k < L.pellets; k++) {
@@ -992,7 +992,7 @@ export class WeaponSystem {
   // 탄피: 옆으로 튀어 바닥에 떨어진다
   casing(mz, yaw, side = 1, big = false) {
     const fx = this.game.fx, sx = Math.cos(yaw) * side, sz = -Math.sin(yaw) * side;
-    fx.sparks.emit({ position: [mz[0] - Math.sin(yaw) * 0.4, mz[1] + 0.05, mz[2] - Math.cos(yaw) * 0.4], velocity: [sx * rr(2, 4) - Math.sin(yaw), rr(2.5, 4), sz * rr(2, 4) - Math.cos(yaw)], life: rr(0.35, 0.55), size: big ? 3 : 2, sizeEnd: big ? 2 : 1, color: big ? [0.9, 0.25, 0.2] : [1, 0.85, 0.4], colorEnd: big ? [0.6, 0.15, 0.1] : [0.8, 0.6, 0.2], emissive: 0.4, gravity: 2.2 });
+    fx.sparks.emit({ position: [mz[0] - Math.sin(yaw) * 0.4, mz[1] + 0.05, mz[2] - Math.cos(yaw) * 0.4], velocity: [sx * rr(2, 4) - Math.sin(yaw), rr(2.5, 4), sz * rr(2, 4) - Math.cos(yaw)], life: rr(0.35, 0.55), size: big ? 3 : 2, sizeEnd: big ? 2 : 1, color: big ? [0.9, 0.25, 0.2] : [0.8, 0.65, 0.35], colorEnd: big ? [0.6, 0.15, 0.1] : [0.5, 0.4, 0.2], emissive: 0, gravity: 2.2 });
   }
 
   beam(mz, yaw, len, width, D, color, launch = 0, critAdd = 0) {
