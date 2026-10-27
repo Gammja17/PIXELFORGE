@@ -544,6 +544,8 @@ export class Shots {
       this.wellMesh.setAt(n, m4.fromTRS([w.x, 1, w.z], [0, w.t * 3, 0], [s, s, s]), [0.6, 0.3, 1], 1);
       this.wellCore.setAt(n++, m4.fromTRS([w.x, 1, w.z], [0, 0, 0], [s, s, s]), [1, 1, 1], 0);
       if (Math.random() < 0.15) fx.light([w.x, 1.4, w.z], [0.7, 0.4, 1], w.r + 1, 0.8, 0.2);
+      // 범위 테두리: 보라 점이 원을 따라 돈다
+      if (dt > 0) for (let k = 0; k < 4; k++) { const a = w.t * 2.5 + (k / 4) * Math.PI * 2 + R() * 0.3; fx.pxr.emit({ position: [w.x + Math.cos(a) * w.r, 0.15, w.z + Math.sin(a) * w.r], velocity: [0, 0, 0], life: 0.25, size: 2, sizeEnd: 1, ramp: [[0.9, 0.7, 1], [0.6, 0.35, 1], [0.35, 0.15, 0.6]], emissive: 0.7, hard: true }); }
     }
     this.wellMesh.count = this.wellCore.count = n; this.wellMesh.dirty = this.wellCore.dirty = true;
 
@@ -962,8 +964,9 @@ export class WeaponSystem {
       const p = pts[i], q = pts[i + 1], n = Math.max(2, Math.ceil(Math.hypot(q[0] - p[0], q[1] - p[1], q[2] - p[2]) / 0.11));
       for (let k = 0; k < n; k++) {
         const t = k / n, pos = [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, p[2] + (q[2] - p[2]) * t];
-        fx.pxr.emit({ position: pos, velocity: [0, 0, 0], life: 0.13, size: 3, sizeEnd: 2, ramp: core, emissive: 1, hard: true });
-        if (k % 2 === 0) fx.pxr.emit({ position: pos, velocity: [0, 0, 0], life: 0.1, size: 6, sizeEnd: 3, ramp: glow, emissive: 0.7, hard: true });
+        const vk = this.vk(this.game.dmgSrc);
+        fx.pxr.emit({ position: pos, velocity: [0, 0, 0], life: 0.22, size: Math.round(3 * Math.min(1.5, vk)), sizeEnd: 2, ramp: core, emissive: 1, hard: true });
+        if (k % 2 === 0) fx.pxr.emit({ position: pos, velocity: [0, 0, 0], life: 0.16, size: Math.round(6 * Math.min(1.5, vk)), sizeEnd: 3, ramp: glow, emissive: 0.7, hard: true });
       }
     }
     fx.starPx(b, 4, col, 0.7, 0.12, Math.random());
