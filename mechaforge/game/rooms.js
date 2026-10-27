@@ -13,6 +13,7 @@ import { buildLayout, pickLayout, Flow } from './world.js';
 import { RoomHazards } from './hazards.js';
 import { pickGuardian } from './guardians.js';
 import { OPS, pickOp } from './ops.js';
+import { BESTIARY } from './bestiary.js';
 
 //  floor: 바닥 무늬, edge: 테두리 벽 (rock | box), music: [곡, 재생 속도], guardian: 수호자 종류
 //  cover: 부서지는 엄폐물, haz: 위험 요소별 기본 개수 (깊이에 따라 늘어난다)
@@ -107,6 +108,15 @@ const TROOPS = [
   ['charger', 3, 1, 6], ['splitter', 2.5, 2, 6], ['shield', 3, 1, 6], ['sniper', 3.5, 1, 7],
   ['miner', 3, 1, 9], ['assassin', 3.5, 1, 7], ['medic', 4, 1, 9],
 ];
+// 구역 세력: 구역마다 자주 나오는 역할 적 (같은 적 구성이 반복되지 않고 구역마다 성격이 다르게)
+export const FACTIONS = {
+  desert:  { name: '고철 약탈단', troops: ['splitter', 'miner', 'charger'] },
+  factory: { name: '공장 경비대', troops: ['shield', 'charger', 'medic'] },
+  crystal: { name: '수정 공명체', troops: ['sniper', 'assassin', 'splitter'] },
+  foundry: { name: '주조소 중장대', troops: ['charger', 'shield', 'miner'] },
+  tundra:  { name: '설원 저격대', troops: ['sniper', 'shield', 'medic'] },
+  orbital: { name: '궤도 방위군', troops: ['assassin', 'sniper', 'medic'] },
+};
 const DOOR_HALF = 2.2;
 const SIDE = { W: [-1, 0], S: [0, -1], E: [1, 0], N: [0, 1] }; // 방향 → (x, z) 부호
 
@@ -331,6 +341,9 @@ export class Rooms {
     this.k0 = g.stats.kills;
     this.dmg0 = { ...(g.stats.byWeapon || {}) };
     if (this.op) { OPS[this.op].begin(this); setTimeout(() => g.ui.banner(OPS[this.op]?.banner || ''), 700); }
+    // 새 구역에 들어서면 그 구역 세력 알림
+    if (zoneId !== this.lastZone && FACTIONS[zoneId] && depth > 0) { const F = FACTIONS[zoneId]; setTimeout(() => g.ui.toast(`이 구역 세력: ${F.name} (${F.troops.map((t) => BESTIARY[t]?.role).join(', ')})`), 2200); }
+    this.lastZone = zoneId;
     g.ui.roomInfo(this);
   }
   // 이번 방에서 어떤 무기가 일했는지 (상위 3개 비중)
@@ -396,7 +409,10 @@ export class Rooms {
         continue;
       }
       if (pool.length && R() < curveAt(d).troop) {
-        const q = pool[(R() * pool.length) | 0], n = q[2] + (d >= q[3] ? 1 : 0);
+        // 70% 는 이 구역 세력의 적 중에서 (나온 깊이가 된 것만)
+        const fac = FACTIONS[this.zone]?.troops, fpool = fac ? pool.filter((t) => fac.includes(t[0])) : [];
+        const src = fpool.length && R() < 0.7 ? fpool : pool;
+        const q = src[(R() * src.length) | 0], n = q[2] + (d >= q[3] ? 1 : 0);
         en.pack(q[0], pt[0], pt[1], n, 1.2); this.acc -= n * q[1];
         continue;
       }

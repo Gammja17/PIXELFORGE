@@ -230,12 +230,12 @@ export class Guardian {
     if (e === this.main) return this.die();
     if (this.kind === 'worm') {
       g.ui.toast('마디 파괴! 머리 장갑이 약해진다');
-      if (this.segs.filter((s) => s.dead).length % 4 === 1) g.pickups.salvage('module', 'armor', e.x, e.z);
+      if (this.segs.filter((s) => s.dead).length % 4 === 1) g.pickups.salvage('module', 'armor', e.x, e.z, '샌드웜 마디', true);
       g.hitStop(0.05); g.fx.addTrauma(0.3);
     } else if (this.kind === 'spider') {
       const left = this.legs.filter((l) => !l.dead).length;
       g.ui.toast(left ? `다리 파괴! 몸통 장갑 약화 (남은 다리 ${left})` : '다리 전부 파괴!');
-      if (left === 3 || left === 1) g.pickups.salvage('module', left === 3 ? 'booster' : 'armor', e.x, e.z);
+      if (left === 3 || left === 1) g.pickups.salvage('module', left === 3 ? 'booster' : 'armor', e.x, e.z, '거미 다리', true);
       g.hitStop(0.08); g.fx.addTrauma(0.45); g.sfx.play('bigboom');
       if (left === 1) g.ui.banner('거미 전차 주저앉음! 도약 불가', true);
       if (!left) g.ui.banner('몸통 노출! 지금이다');
@@ -243,13 +243,14 @@ export class Guardian {
       const left = this.heads.filter((h) => !h.dead).length;
       g.ui.toast(`${{ laser: '레이저', flak: '산탄', mortar: '박격' }[e.kind]} 머리 절단!`);
       this.necks[e.i].forEach((n, i) => { n.doomT = 0.05 + i * 0.07; });
-      if (e.kind === 'laser') g.pickups.salvage('weapon', 'laser', e.x, e.z);
-      else if (e.kind === 'flak') g.pickups.salvage('weapon', 'shotgun', e.x, e.z);
+      if (e.kind === 'laser') g.pickups.salvage('weapon', 'laser', e.x, e.z, '히드라 레이저 머리', true);
+      else if (e.kind === 'flak') g.pickups.salvage('weapon', 'shotgun', e.x, e.z, '히드라 산탄 머리', true);
+      else g.pickups.salvage('weapon', 'cluster', e.x, e.z, '히드라 박격 머리', true);
       g.hitStop(0.08); g.fx.addTrauma(0.45); g.sfx.play('bigboom');
       if (!left) g.ui.banner('몸통 노출! 지금이다');
     } else {
       g.ui.toast(e === this.gun ? '미사일 팔 파괴!' : '집게 팔 파괴!');
-      g.pickups.salvage(e === this.gun ? 'weapon' : 'module', e === this.gun ? 'missile' : 'spike', e.x, e.z);
+      g.pickups.salvage(e === this.gun ? 'weapon' : 'module', e === this.gun ? 'missile' : 'spike', e.x, e.z, e === this.gun ? '크레인 미사일 팔' : '크레인 집게 팔', true);
       g.hitStop(0.08); g.fx.addTrauma(0.45); g.sfx.play('bigboom');
       if (this.gun.dead && this.claw.dead) g.ui.banner('몸통 노출! 지금이다');
     }

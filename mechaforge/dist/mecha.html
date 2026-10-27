@@ -6280,12 +6280,12 @@ class Guardian {
     if (e === this.main) return this.die();
     if (this.kind === 'worm') {
       g.ui.toast('마디 파괴! 머리 장갑이 약해진다');
-      if (this.segs.filter((s) => s.dead).length % 4 === 1) g.pickups.salvage('module', 'armor', e.x, e.z);
+      if (this.segs.filter((s) => s.dead).length % 4 === 1) g.pickups.salvage('module', 'armor', e.x, e.z, '샌드웜 마디', true);
       g.hitStop(0.05); g.fx.addTrauma(0.3);
     } else if (this.kind === 'spider') {
       const left = this.legs.filter((l) => !l.dead).length;
       g.ui.toast(left ? `다리 파괴! 몸통 장갑 약화 (남은 다리 ${left})` : '다리 전부 파괴!');
-      if (left === 3 || left === 1) g.pickups.salvage('module', left === 3 ? 'booster' : 'armor', e.x, e.z);
+      if (left === 3 || left === 1) g.pickups.salvage('module', left === 3 ? 'booster' : 'armor', e.x, e.z, '거미 다리', true);
       g.hitStop(0.08); g.fx.addTrauma(0.45); g.sfx.play('bigboom');
       if (left === 1) g.ui.banner('거미 전차 주저앉음! 도약 불가', true);
       if (!left) g.ui.banner('몸통 노출! 지금이다');
@@ -6293,13 +6293,14 @@ class Guardian {
       const left = this.heads.filter((h) => !h.dead).length;
       g.ui.toast(`${{ laser: '레이저', flak: '산탄', mortar: '박격' }[e.kind]} 머리 절단!`);
       this.necks[e.i].forEach((n, i) => { n.doomT = 0.05 + i * 0.07; });
-      if (e.kind === 'laser') g.pickups.salvage('weapon', 'laser', e.x, e.z);
-      else if (e.kind === 'flak') g.pickups.salvage('weapon', 'shotgun', e.x, e.z);
+      if (e.kind === 'laser') g.pickups.salvage('weapon', 'laser', e.x, e.z, '히드라 레이저 머리', true);
+      else if (e.kind === 'flak') g.pickups.salvage('weapon', 'shotgun', e.x, e.z, '히드라 산탄 머리', true);
+      else g.pickups.salvage('weapon', 'cluster', e.x, e.z, '히드라 박격 머리', true);
       g.hitStop(0.08); g.fx.addTrauma(0.45); g.sfx.play('bigboom');
       if (!left) g.ui.banner('몸통 노출! 지금이다');
     } else {
       g.ui.toast(e === this.gun ? '미사일 팔 파괴!' : '집게 팔 파괴!');
-      g.pickups.salvage(e === this.gun ? 'weapon' : 'module', e === this.gun ? 'missile' : 'spike', e.x, e.z);
+      g.pickups.salvage(e === this.gun ? 'weapon' : 'module', e === this.gun ? 'missile' : 'spike', e.x, e.z, e === this.gun ? '크레인 미사일 팔' : '크레인 집게 팔', true);
       g.hitStop(0.08); g.fx.addTrauma(0.45); g.sfx.play('bigboom');
       if (this.gun.dead && this.claw.dead) g.ui.banner('몸통 노출! 지금이다');
     }
@@ -10125,6 +10126,7 @@ const { buildLayout, pickLayout, Flow } = __m["game/world.js"];
 const { RoomHazards } = __m["game/hazards.js"];
 const { pickGuardian } = __m["game/guardians.js"];
 const { OPS, pickOp } = __m["game/ops.js"];
+const { BESTIARY } = __m["game/bestiary.js"];
 
 //  floor: 바닥 무늬, edge: 테두리 벽 (rock | box), music: [곡, 재생 속도], guardian: 수호자 종류
 //  cover: 부서지는 엄폐물, haz: 위험 요소별 기본 개수 (깊이에 따라 늘어난다)
@@ -10219,6 +10221,15 @@ const TROOPS = [
   ['charger', 3, 1, 6], ['splitter', 2.5, 2, 6], ['shield', 3, 1, 6], ['sniper', 3.5, 1, 7],
   ['miner', 3, 1, 9], ['assassin', 3.5, 1, 7], ['medic', 4, 1, 9],
 ];
+// 구역 세력: 구역마다 자주 나오는 역할 적 (같은 적 구성이 반복되지 않고 구역마다 성격이 다르게)
+const FACTIONS = {
+  desert:  { name: '고철 약탈단', troops: ['splitter', 'miner', 'charger'] },
+  factory: { name: '공장 경비대', troops: ['shield', 'charger', 'medic'] },
+  crystal: { name: '수정 공명체', troops: ['sniper', 'assassin', 'splitter'] },
+  foundry: { name: '주조소 중장대', troops: ['charger', 'shield', 'miner'] },
+  tundra:  { name: '설원 저격대', troops: ['sniper', 'shield', 'medic'] },
+  orbital: { name: '궤도 방위군', troops: ['assassin', 'sniper', 'medic'] },
+};
 const DOOR_HALF = 2.2;
 const SIDE = { W: [-1, 0], S: [0, -1], E: [1, 0], N: [0, 1] }; // 방향 → (x, z) 부호
 
@@ -10443,6 +10454,9 @@ class Rooms {
     this.k0 = g.stats.kills;
     this.dmg0 = { ...(g.stats.byWeapon || {}) };
     if (this.op) { OPS[this.op].begin(this); setTimeout(() => g.ui.banner(OPS[this.op]?.banner || ''), 700); }
+    // 새 구역에 들어서면 그 구역 세력 알림
+    if (zoneId !== this.lastZone && FACTIONS[zoneId] && depth > 0) { const F = FACTIONS[zoneId]; setTimeout(() => g.ui.toast(`이 구역 세력: ${F.name} (${F.troops.map((t) => BESTIARY[t]?.role).join(', ')})`), 2200); }
+    this.lastZone = zoneId;
     g.ui.roomInfo(this);
   }
   // 이번 방에서 어떤 무기가 일했는지 (상위 3개 비중)
@@ -10508,7 +10522,10 @@ class Rooms {
         continue;
       }
       if (pool.length && R() < curveAt(d).troop) {
-        const q = pool[(R() * pool.length) | 0], n = q[2] + (d >= q[3] ? 1 : 0);
+        // 70% 는 이 구역 세력의 적 중에서 (나온 깊이가 된 것만)
+        const fac = FACTIONS[this.zone]?.troops, fpool = fac ? pool.filter((t) => fac.includes(t[0])) : [];
+        const src = fpool.length && R() < 0.7 ? fpool : pool;
+        const q = src[(R() * src.length) | 0], n = q[2] + (d >= q[3] ? 1 : 0);
         en.pack(q[0], pt[0], pt[1], n, 1.2); this.acc -= n * q[1];
         continue;
       }
@@ -10757,7 +10774,7 @@ class Rooms {
   }
 }
 
-return { ZONES, RUN_ZONES, REWARDS, SPECIALS, CURVE, curveAt, FIRST, pickZones, Rooms };
+return { ZONES, RUN_ZONES, REWARDS, SPECIALS, CURVE, curveAt, FIRST, FACTIONS, pickZones, Rooms };
 })();
 
 __m["game/install.js"] = (() => {
