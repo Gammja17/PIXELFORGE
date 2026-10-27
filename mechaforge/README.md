@@ -71,5 +71,5 @@
 
 ## 사운드 출처
 모두 CC0. 자세한 목록은 `assets/CREDITS.md`.
-- 효과음: Kenney (Sci-Fi Sounds, Impact Sounds, Digital Audio, UI Audio, Music Jingles), rubberduck, Ogrebane (OpenGameArt)
+- 효과음: Michel Baradari 외 (Open Realms of Stars 수록, CC BY 3.0 / CC0)
 - 음악: Juhani Junkala, "5 Chiptunes (Action)" (OpenGameArt)

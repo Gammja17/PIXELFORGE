@@ -489,7 +489,55 @@ export class Game {
     ctx.clearRect(0, 0, o.width, o.height);
     const px = Math.max(2, Math.round(2 * this.engine.dpr));
     this.pickups.drawLabels(ctx, (q) => this.project(q), px);
+    if (this.state === 'play' || this.state === 'dying') this.drawPlayerGauge(ctx, px);
     this.fx.drawNumbers(ctx, (q) => { const s = this.project(q); return s && s[0] > -50 && s[1] > -50 && s[0] < c.width + 50 && s[1] < c.height + 50 ? s : null; }, px);
+  }
+
+  // 기체 발밑 게이지: 체력 바 + 대시 칸 + 특수기, 그리고 탄이 가까우면 판정 코어
+  drawPlayerGauge(ctx, px) {
+    const p = this.player, st = p.stats, dpr = this.engine.dpr, sz = p.size || 1;
+    const base = this.project([p.x, 0, p.z]);
+    if (!base) return;
+    const u = Math.round(dpr), W = Math.round(64 * dpr), H = Math.round(7 * dpr);
+    const x0 = Math.round(base[0] - W / 2), y0 = Math.round(base[1] + 12 * dpr);
+    const k = Math.max(0, p.hp / st.maxHp);
+    this.lagHp = this.lagHp == null ? k : Math.max(k, this.lagHp - 0.6 / 60);
+    // 바탕 + 지연 바(흰색) + 체력
+    ctx.fillStyle = '#05060a'; ctx.fillRect(x0 - 2 * u, y0 - 2 * u, W + 4 * u, H + 4 * u);
+    ctx.fillStyle = '#2a1018'; ctx.fillRect(x0, y0, W, H);
+    ctx.fillStyle = '#fff2c2'; ctx.fillRect(x0, y0, Math.round(W * this.lagHp), H);
+    ctx.fillStyle = k < 0.3 ? (Math.floor(this.engine.time * 8) % 2 ? '#ff2a48' : '#ff8a9a') : k < 0.6 ? '#ffb13d' : '#4dff88';
+    ctx.fillRect(x0, y0, Math.round(W * k), H);
+    ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.fillRect(x0, y0, Math.round(W * k), u);
+    // 25 단위 눈금
+    ctx.fillStyle = '#05060a';
+    for (let v = 25; v < st.maxHp; v += 25) ctx.fillRect(x0 + Math.round(W * v / st.maxHp), y0, u, H);
+    // 대시 칸
+    const n = st.dashCharges, pw = Math.round(9 * dpr), ph = Math.round(3 * dpr), gy = y0 + H + 4 * u;
+    for (let i = 0; i < n; i++) {
+      const xx = x0 + i * (pw + 2 * u);
+      ctx.fillStyle = '#05060a'; ctx.fillRect(xx - u, gy - u, pw + 2 * u, ph + 2 * u);
+      const f = i < p.charges ? 1 : i === p.charges ? p.chargeT / st.dashCd : 0;
+      ctx.fillStyle = '#5fe0ff'; ctx.fillRect(xx, gy, Math.round(pw * f), ph);
+    }
+    // 특수기 (오른쪽 정렬)
+    const sk = 1 - Math.min(1, this.weapons.specialT / st.specialCd), sw = Math.round(24 * dpr);
+    ctx.fillStyle = '#05060a'; ctx.fillRect(x0 + W - sw - u, gy - u, sw + 2 * u, ph + 2 * u);
+    ctx.fillStyle = sk >= 1 ? '#ff6bc8' : '#8a3a6e'; ctx.fillRect(x0 + W - sw, gy, Math.round(sw * sk), ph);
+    // 판정 코어: 적 탄이 가까울 때 또렷하게
+    const dg = this.shots.danger || 0;
+    this.shots.danger = Math.max(0, dg - 0.08);
+    if (dg > 0.02) {
+      const c = this.project([p.x, 0.9 * sz, p.z]);
+      if (c) {
+        const r = Math.max(3 * u, (p.hit / (this.engine.camera.pixelWorld || 0.05)) * this.engine.scale);
+        ctx.globalAlpha = Math.min(1, dg * 1.6);
+        ctx.fillStyle = '#05060a'; ctx.beginPath(); ctx.arc(c[0], c[1], r + 3 * u, 0, 6.29); ctx.fill();
+        ctx.fillStyle = '#ff3355'; ctx.beginPath(); ctx.arc(c[0], c[1], r + 1.5 * u, 0, 6.29); ctx.fill();
+        ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(c[0], c[1], r, 0, 6.29); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+    }
   }
 
   // 테스트/디버그용

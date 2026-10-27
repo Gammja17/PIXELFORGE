@@ -51,6 +51,7 @@ function start() {
     fade(on) { $('fade').classList.toggle('on', on); },
     bossBar(k, name) {
       $('boss').hidden = k <= 0;
+      $('hud').classList.toggle('bossing', k > 0); document.body.classList.toggle('bossing', k > 0);
       if (name) $('bossname').textContent = name;
       $('bossfill').style.width = `${Math.max(0, k) * 100}%`;
     },
@@ -107,9 +108,10 @@ function start() {
     closeLevelUp() { $('levelup').hidden = true; $('pad').hidden = !coarse; $('view').focus(); },
     pause(v) {
       $('paused').hidden = !v;
+      if (v) $('pausebuild').dataset.chips = game.chips || 0;
       if (!v) $('view').focus();
       if (v) renderSets($('pausesets'));
-      if (v) $('pausebuild').textContent = `장착: ${game.weapons.list.map((w) => w.evo ? weaponName(w) : `${weaponName(w)} Lv${w.level}`).join(', ')}`;
+      if (v) $('pausebuild').textContent = `정비 포인트 ${game.chips || 0}\n장착: ${game.weapons.list.map((w) => w.evo ? weaponName(w) : `${weaponName(w)} Lv${w.level}`).join(', ')}`;
     },
     result(s) {
       $('restitle').textContent = s.win ? '작전 성공! 타이탄 격파' : `기체 대파 (${s.zone})`;
@@ -558,6 +560,15 @@ function start() {
   let lastHover = null;
   document.addEventListener('click', (e) => { const b = e.target.closest?.('button'); if (b && !b.closest('#pad') && !b.classList.contains('card')) game.sfx.play(b.id === 'launch' ? 'select' : 'click'); }, true);
   document.addEventListener('pointerover', (e) => { const b = e.target.closest?.('.opt, .tab, .card'); if (b && e.pointerType === 'mouse' && b !== lastHover) { lastHover = b; game.sfx.play('hover'); } });
+
+  // ---- 상태판 접기 (기본: 접힘. 체력은 기체 발밑에 보인다) ----
+  {
+    let folded = true;
+    try { folded = localStorage.getItem('mf-hudfold') !== '0'; } catch { /* 무시 */ }
+    const apply = () => { $('hud').classList.toggle('folded', folded); $('hudfold').textContent = folded ? '상태 ▸' : '◂'; };
+    $('hudfold').addEventListener('click', () => { folded = !folded; apply(); try { localStorage.setItem('mf-hudfold', folded ? '1' : '0'); } catch { /* 무시 */ } });
+    apply();
+  }
 
   // ---- 버튼 ----
   $('strepair').addEventListener('click', () => { game.stationAct('repair'); renderStation(); });

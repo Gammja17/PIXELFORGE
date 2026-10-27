@@ -484,6 +484,39 @@
   .ui-vshort #hpbar { height: 26px; }
   .ui-vshort #toast { bottom: calc(var(--sab) + 96px); }
   .ui-vshort #banner { top: 38%; font-size: 21px; }
+  /* ---- 화면 가림 줄이기 (v5) ----
+     체력/대시/특수기는 기체 발밑 게이지로 옮겼으니 왼쪽 위 상태판은 접어 둔다 (버튼으로 펼침) */
+  #hudfold { pointer-events: auto; height: 34px; padding: 0 10px; font-size: 13px; font-weight: 800; white-space: nowrap; align-self: flex-start; }
+  #hud.folded #hpbox { display: none; }
+  #pausebuild { white-space: pre-line; }
+  #chipline { display: none; }
+  /* 보스 체력: 판넬 없이 얇은 줄. 보스전엔 방 정보 자리를 대신 쓴다 */
+  #boss { position: fixed; left: 50%; transform: translateX(-50%); top: calc(var(--sat) + 26px); width: min(460px, 52vw); border-image: none !important; border-width: 0; background: none; padding: 0; gap: 2px; }
+  #bossname { font-size: 12px; letter-spacing: .06em; }
+  #bossbar { height: 9px; }
+  #hud.bossing #mid { visibility: hidden; }
+  .ui-tiny #boss { top: calc(var(--sat) + 62px); width: 76vw; }
+  @media (pointer: coarse) { body.bossing #tut, body.bossing #tuttip { top: calc(var(--sat) + 96px) !important; } .ui-tiny #tut, .ui-tiny #tuttip { top: calc(var(--sat) + 148px) !important; } }
+  /* 배너: 작게, 위쪽으로 */
+  #banner { top: 30%; font-size: 18px; padding: 2px 22px; max-width: min(560px, 84vw); white-space: normal; }
+  .ui-short #banner, .ui-narrow #banner { top: 19%; font-size: 14px; padding: 1px 16px; }
+  .ui-short #roompath, .ui-tiny #roompath { display: none; }
+  .ui-short #roombox, .ui-tiny #roombox { min-width: 0; padding: 0 6px; }
+  .ui-short #roomname, .ui-tiny #roomname { font-size: 12px; }
+  .ui-short #combo b, .ui-narrow #combo b { font-size: 24px; }
+  .ui-short #combo, .ui-narrow #combo { top: 26%; opacity: .85; }
+  .ui-short #kills, .ui-tiny #kills { font-size: 16px; min-width: 30px; }
+  .ui-short #pausebtn, .ui-tiny #pausebtn { width: 38px; height: 38px; }
+  /* 폰: 튜토리얼과 팁은 왼쪽 위에 작게 (전장 가운데를 가리지 않게) */
+  @media (pointer: coarse) {
+    body #tut, body #tuttip { left: calc(var(--sal) + 8px) !important; right: auto !important; transform: none !important; top: calc(var(--sat) + 64px) !important; bottom: auto !important; max-width: min(300px, 58vw) !important; padding: 0 8px 3px !important; opacity: .93; }
+    body #tut b.tt, body #tuttip b { font-size: 15px !important; }
+    body #tut p, body #tuttip p { font-size: 12px !important; white-space: normal; }
+    body #tut .tk, body #tuttip .tk { font-size: 11px !important; }
+    body #tut .ts { font-size: 9px !important; }
+    body #tut .tx { font-size: 10px !important; min-height: 0 !important; }
+    body #tut kbd, body #tuttip kbd { font-size: 10px !important; padding: 0 4px 1px !important; }
+  }
   @media (prefers-reduced-motion: reduce) { .card, #banner, #banner.warn, #roompath i.now, #odcall, #odbtn, .badge, #lowhp.on { animation: none; } #lowhp.on { opacity: .7; } }
 </style>
 
@@ -497,6 +530,7 @@
 <div id="hud" hidden>
   <div id="xprow"><span id="xplv" class="px">LV 1</span><div id="xpbar" class="track"><div id="xpfill"></div></div></div>
   <div id="hudrow">
+    <button type="button" id="hudfold" class="pix dark" aria-label="상태판 펼치기">상태 ▸</button>
     <div id="hpbox" class="pix">
       <div id="hpline"><img id="hpicon" class="px-img" alt="체력"><div id="hpbar" class="track"><div id="hplag"></div><div id="hpfill"></div><span id="hptext" class="px">100 / 100</span></div></div>
       <div id="ablrow">

@@ -122,6 +122,8 @@ export class Player {
     this.mech.root.rotation = [0, this.yaw, 0];
     this.mech.root.scale = [k, k, k];
     this.r = 0.65 * Math.pow(k, 0.6);
+    // 탄 판정은 몸집과 따로: 가운데 작은 코어만 (탄막 사이로 빠져나갈 수 있게)
+    this.hit = 0.3 * Math.pow(k, 0.25);
   }
 
   // ---- 성장: 레벨이 오를수록 기체가 커진다 ----

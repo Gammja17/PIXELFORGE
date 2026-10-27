@@ -172,6 +172,16 @@ export class Enemies {
     }
     this.aura = game.scene.add(new InstancedMesh(dash, new Material({ emissive: 1, outline: false, castShadow: false, opacity: 0.8 }), 96));
     this.bubble = game.scene.add(new InstancedMesh(Geometry.icosphere(1, 1, [1, 1, 1]), new Material({ emissive: 1, outline: false, castShadow: false, opacity: 0.3 }), 48));
+    // 가독성: 모든 적 발밑에 붉은 고리 + 공격 예고(돌진 경로, 조준선, 폭발 범위)
+    const ringG = new Geometry();
+    for (let i = 0; i < 20; i++) { const a0 = (i / 20) * TAU, a1 = ((i + 1) / 20) * TAU, p = (a, r) => [Math.cos(a) * r, 0, Math.sin(a) * r]; ringG.quad(p(a0, 0.8), p(a1, 0.8), p(a1, 1), p(a0, 1), [1, 1, 1], null, [0, 1, 0]); }
+    this.marker = game.scene.add(new InstancedMesh(ringG, new Material({ emissive: 1, outline: false, castShadow: false, opacity: 0.7 }), 480));
+    const lane = new Geometry();
+    lane.quad([-0.5, 0, 0], [0.5, 0, 0], [0.5, 0, 1], [-0.5, 0, 1], [1, 1, 1], null, [0, 1, 0]);
+    this.tele = game.scene.add(new InstancedMesh(lane, new Material({ emissive: 1, outline: false, castShadow: false, opacity: 0.45 }), 96));
+    const disc = new Geometry();
+    for (let i = 0; i < 20; i++) { const a0 = (i / 20) * TAU, a1 = ((i + 1) / 20) * TAU; disc.quad([0, 0, 0], [0, 0, 0], [Math.cos(a1), 0, Math.sin(a1)], [Math.cos(a0), 0, Math.sin(a0)], [1, 1, 1], null, [0, 1, 0]); }
+    this.teleDisc = game.scene.add(new InstancedMesh(disc, new Material({ emissive: 1, outline: false, castShadow: false, opacity: 0.35 }), 64));
     this.tracks = [];  // 움직임을 나중에 바꾸는 적 탄 (휘는 탄, 멈췄다 터지는 탄)
     this.strikes = []; // 바닥 표식 포격
   }
@@ -866,8 +876,28 @@ export class Enemies {
   render(time) {
     const counts = {};
     for (const id in this.meshes) counts[id] = 0;
-    let na = 0, nb = 0;
+    let na = 0, nb = 0, nm = 0, nt = 0, nd = 0;
+    const p = this.game.player, RED = [1, 0.18, 0.25], blink = 0.6 + 0.4 * Math.sin(time * 22);
     for (const e of this.list) {
+      // 발밑 고리: 적이 어디 있는지, 얼마나 큰지 한눈에
+      if (!e.under && (e.vis ?? 1) > 0.3 && nm < this.marker.capacity && !e.guard) {
+        const r = e.r * 1.25 + 0.12;
+        this.marker.setAt(nm++, m4.fromTRS([e.x, 0.05, e.z], [0, 0, 0], [r, 1, r]), e.elite ? [1, 0.8, 0.2] : e.T.fly ? [0.9, 0.3, 0.55] : [1, 0.25, 0.3], 1);
+      }
+      // 공격 예고
+      if (nt < this.tele.capacity) {
+        if (e.state === 'wind') {
+          // 돌진: 진행 방향으로 붉은 길
+          const yaw = e.cx !== undefined ? Math.atan2(e.cx, e.cz) : e.yaw, len = e.type === 'brute' ? 8 : 5;
+          this.tele.setAt(nt++, m4.fromTRS([e.x, 0.06, e.z], [0, yaw, 0], [e.r * 2.1, 1, len]), RED.map((v) => v * blink), 1);
+        } else if (e.charging && (e.T.shoots || e.type === 'tank')) {
+          // 포격 조준선
+          const yaw = Math.atan2(p.x - e.x, p.z - e.z);
+          this.tele.setAt(nt++, m4.fromTRS([e.x, 0.07, e.z], [0, yaw, 0], [0.16, 1, Math.min(14, Math.hypot(p.x - e.x, p.z - e.z) + 1)]), [1, 0.5, 0.15].map((v) => v * blink), 1);
+        }
+      }
+      // 자폭: 폭발 범위 원
+      if (e.state === 'fuse' && nd < this.teleDisc.capacity) this.teleDisc.setAt(nd++, m4.fromTRS([e.x, 0.05, e.z], [0, 0, 0], [2.2, 1, 2.2]), RED.map((v) => v * blink), 1);
       const M = this.meshes[e.type], i = counts[e.type]++;
       const pop = Math.min(1, e.spawnT / 0.25);
       const s = (e.elite ? 1.35 : 1) * (pop < 1 ? pop * (1.3 - 0.3 * pop) : 1) * (e.vis ?? 1);
@@ -896,6 +926,8 @@ export class Enemies {
     }
     for (const id in this.meshes) { this.meshes[id].body.count = counts[id]; this.meshes[id].glow.count = counts[id]; }
     this.aura.count = na; this.bubble.count = nb;
+    this.marker.count = nm; this.tele.count = nt; this.teleDisc.count = nd;
+    this.marker.dirty = this.tele.dirty = this.teleDisc.dirty = true;
   }
 
   clear() {

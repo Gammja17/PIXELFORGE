@@ -424,7 +424,9 @@ export class Shots {
       s.x += s.vx * dt; s.z += s.vz * dt;
       const dx = p.x - s.x, dz = p.z - s.z;
       let dead = s.life <= 0;
-      if (dx * dx + dz * dz < (p.r + 0.25) ** 2) {
+      const d2 = dx * dx + dz * dz;
+      if (d2 < 16) this.danger = Math.max(this.danger || 0, 1 - Math.sqrt(d2) / 4); // 근처에 적 탄: 판정 코어 표시
+      if (d2 < ((p.hit || 0.3) + 0.22) ** 2) {
         if (p.hurt(s.dmg, s.vx * 0.1, s.vz * 0.1)) { dead = true; fx.hitSpark([s.x, s.y, s.z], [1, 0.5, 0.3], 6); }
       }
       if (dead) { this.enemyList.splice(i, 1); continue; }
