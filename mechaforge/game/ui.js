@@ -97,6 +97,9 @@ function start() {
       choices.forEach((c, i) => {
         const b = document.createElement('button');
         b.type = 'button'; b.className = 'card pix'; b.dataset.kind = c.kind;
+        // 무기 카드는 그 무기의 대표 색 (게임 속 탄 색과 같다)
+        const wc = (c.kind === 'weapon' || c.kind === 'evolve') && WEAPONS[c.id]?.color;
+        if (wc) b.style.setProperty('--cc', `rgb(${wc.map((v) => Math.round(v * 255)).join(',')})`);
         // 이름 → 종류/자리 → 하는 일 → 레벨 (Lv 2 → 3 + 칸)
         const max = c.kind === 'weapon' ? MAX_LEVEL : c.kind === 'module' ? MODULES[c.id]?.max : c.kind === 'stat' ? STAT_UPS[c.id]?.max : 0;
         const badge = c.isEvo ? '<span class="badge evo">EVOLVE</span>' : c.isNew ? '<span class="badge">NEW</span>' : max && c.level >= max ? '<span class="badge max">MAX</span>' : '';

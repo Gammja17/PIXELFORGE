@@ -74,9 +74,11 @@ export function rollChoices(game, kind = 'any', n = 3) {
 // 카드 그림 (dataURL). 썸네일은 엔진으로 한 번 렌더한 뒤 캐시
 export function cardImage(game, c) {
   const paint = game.player.loadout.paint;
-  if (c.kind === 'evolve') return game.thumbs.get(`e-${c.id}-${paint}`, () => partPreview('weapon', c.id, paint), { size: 72, dots: 24 });
-  if (c.kind === 'weapon') return game.thumbs.get(`w-${c.id}-${paint}`, () => partPreview('weapon', c.id, paint), { size: 72, dots: 30 });
-  if (c.kind === 'module') return game.thumbs.get(`m-${c.id}-${paint}`, () => partPreview('module', c.id, paint), { size: 72, dots: 30 });
+  // 무기는 옆모습 (총 모양이 한눈에)
+  const side = Math.PI / 2 + 0.4;
+  if (c.kind === 'evolve') return game.thumbs.get(`e2-${c.id}-${paint}`, () => partPreview('weapon', c.id, paint), { size: 104, dots: 34, yaw: side });
+  if (c.kind === 'weapon') return game.thumbs.get(`w2-${c.id}-${paint}`, () => partPreview('weapon', c.id, paint), { size: 104, dots: 34, yaw: side });
+  if (c.kind === 'module') return game.thumbs.get(`m2-${c.id}-${paint}`, () => partPreview('module', c.id, paint), { size: 104, dots: 34 });
   if (c.kind === 'stat') return pixURL(c.id, 6);
   return pixURL('repair', 6);
 }

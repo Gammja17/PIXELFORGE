@@ -782,10 +782,12 @@ export function buildMech(loadout) {
     used.add(w.slot);
     const inner = n.add(new Node('weapon'));
     if (w.slot.startsWith('sh') && w.id !== 'missile') inner.position = [0, 0.16, 0];
-    if (w.evo) inner.scale = [1.45, 1.45, 1.45];
+    // 무기는 기체보다 눈에 띄게 크게 (팔 1.15, 어깨/등/허리 1.3, 진화하면 더)
+    const base = (w.evo ? 1.45 : 1) * (w.slot.startsWith('arm') ? 1.15 : 1.3);
+    inner.scale = [base, base, base];
     mk(inner, model.geo, 0, 'w:' + w.slot);
     const blade = model.glow ? mk(inner, model.glow, 0.9, 'w:' + w.slot) : null;
-    slotInfo[w.slot] = { node: n, inner, muzzle: model.muzzle, blade };
+    slotInfo[w.slot] = { node: n, inner, muzzle: model.muzzle, blade, base };
   }
   for (const s of ['armR', 'armL']) if (!used.has(s)) mk(slotNodes[s], cached(key('fist-' + (F.fist || '')), () => fistGeo(P, F.fist)));
 

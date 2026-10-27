@@ -32,21 +32,30 @@ export class Thumbs {
     const W = Math.min(px, engine.canvas.width), H = Math.min(px, engine.canvas.height);
     // 노드 경계 상자로 화면 맞추기
     node.updateWorld();
-    let lo = [1e9, 1e9, 1e9], hi = [-1e9, -1e9, -1e9];
+    // 화면에 보이는 모양 기준으로 꽉 차게 맞춘다 (길쭉한 총도 작게 남지 않게)
+    const cam = this.cam;
+    cam.yaw = yaw ?? Math.PI / 4 + 0.5;
+    const cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
+    const fwd = [-Math.sin(cam.yaw) * cp, -sp, -Math.cos(cam.yaw) * cp];
+    const rl = Math.hypot(fwd[2], fwd[0]) || 1, right = [-fwd[2] / rl, 0, fwd[0] / rl];
+    const up = [right[1] * fwd[2] - right[2] * fwd[1], right[2] * fwd[0] - right[0] * fwd[2], right[0] * fwd[1] - right[1] * fwd[0]];
+    let lo = [1e9, 1e9, 1e9], hi = [-1e9, -1e9, -1e9], r0 = 1e9, r1 = -1e9, u0 = 1e9, u1 = -1e9;
     node.traverse((n) => {
       if (!n.geometry || !n.visible) return n.visible === false ? false : undefined;
       const p = n.geometry.pos, m = n.world;
       for (let i = 0; i < p.length; i += 3) {
         const x = m[0] * p[i] + m[4] * p[i + 1] + m[8] * p[i + 2] + m[12], y = m[1] * p[i] + m[5] * p[i + 1] + m[9] * p[i + 2] + m[13], z = m[2] * p[i] + m[6] * p[i + 1] + m[10] * p[i + 2] + m[14];
         lo = [Math.min(lo[0], x), Math.min(lo[1], y), Math.min(lo[2], z)]; hi = [Math.max(hi[0], x), Math.max(hi[1], y), Math.max(hi[2], z)];
+        const pr = x * right[0] + y * right[1] + z * right[2], pu = x * up[0] + y * up[1] + z * up[2];
+        r0 = Math.min(r0, pr); r1 = Math.max(r1, pr); u0 = Math.min(u0, pu); u1 = Math.max(u1, pu);
       }
     });
-    if (lo[0] > hi[0]) { lo = [-0.5, 0, -0.5]; hi = [0.5, 1, 0.5]; }
+    if (lo[0] > hi[0]) { lo = [-0.5, 0, -0.5]; hi = [0.5, 1, 0.5]; r0 = u0 = -0.5; r1 = u1 = 0.5; }
     const ext = Math.max(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]);
-    const cam = this.cam;
-    cam.yaw = yaw ?? Math.PI / 4 + 0.5;
-    cam.target = [(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2];
-    cam.viewHeight = ext * 1.25 + 0.1;
+    const c3 = [(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2];
+    const dr = (r0 + r1) / 2 - (c3[0] * right[0] + c3[1] * right[1] + c3[2] * right[2]), du = (u0 + u1) / 2 - (c3[0] * up[0] + c3[1] * up[1] + c3[2] * up[2]);
+    cam.target = [c3[0] + right[0] * dr + up[0] * du, c3[1] + right[1] * dr + up[1] * du, c3[2] + right[2] * dr + up[2] * du];
+    cam.viewHeight = Math.max(r1 - r0, u1 - u0) * 1.12 + 0.05;
     cam.snap = false;
     this.scene.children = [];
     this.scene.add(node);

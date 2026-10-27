@@ -15,7 +15,7 @@ const R = Math.random, rr = (a, b) => a + (b - a) * R();
 // levels[i] = 레벨 i+1 의 수치. up = 그 레벨로 올릴 때 카드 설명
 export const WEAPONS = {
   mg: {
-    name: '머신건', tag: 'MG', starter: true, prefer: 'arm', desc: '누르고 있으면 연사. 특수기: 부채꼴 탄막.',
+    color: [1, 0.85, 0.3], name: '머신건', tag: 'MG', starter: true, prefer: 'arm', desc: '누르고 있으면 연사. 특수기: 부채꼴 탄막.',
     levels: [
       { dmg: 7, cd: 0.16, count: 1, pierce: 0 },
       { dmg: 9, cd: 0.15, count: 1, pierce: 0, up: '피해 +30%' },
@@ -26,7 +26,7 @@ export const WEAPONS = {
     range: 13,
   },
   shotgun: {
-    name: '샷건', tag: 'SG', starter: true, prefer: 'arm', desc: '근거리 산탄, 강한 넉백. 특수기: 슬러그 폭발.',
+    color: [1, 0.55, 0.2], name: '샷건', tag: 'SG', starter: true, prefer: 'arm', desc: '근거리 산탄, 강한 넉백. 특수기: 슬러그 폭발.',
     levels: [
       { dmg: 6, cd: 0.95, pellets: 6 },
       { dmg: 7, cd: 0.9, pellets: 7, up: '산탄 +1, 피해 증가' },
@@ -37,7 +37,7 @@ export const WEAPONS = {
     range: 7.5,
   },
   missile: {
-    name: '미사일 포드', tag: 'MSL', starter: true, prefer: 'shoulder', desc: '어깨에 달려 자동으로 유도 미사일 발사.',
+    color: [1, 0.42, 0.25], name: '미사일 포드', tag: 'MSL', starter: true, prefer: 'shoulder', desc: '어깨에 달려 자동으로 유도 미사일 발사.',
     levels: [
       { dmg: 16, cd: 1.7, count: 2, aoe: 1.8 },
       { dmg: 20, cd: 1.55, count: 2, aoe: 2.0, up: '피해, 폭발 범위 증가' },
@@ -48,7 +48,7 @@ export const WEAPONS = {
     range: 17,
   },
   laser: {
-    name: '빔 라이플', tag: 'BEAM', starter: true, prefer: 'arm', desc: '모든 적을 관통하는 빔. 특수기: 메가 빔.',
+    color: [0.45, 1, 1], name: '빔 라이플', tag: 'BEAM', starter: true, prefer: 'arm', desc: '모든 적을 관통하는 빔. 특수기: 메가 빔.',
     levels: [
       { dmg: 28, cd: 2.2, width: 0.55 },
       { dmg: 36, cd: 2.0, width: 0.65, up: '피해 증가, 빔 굵기 +' },
@@ -59,7 +59,7 @@ export const WEAPONS = {
     range: 18,
   },
   saber: {
-    name: '빔 사벨', tag: 'SABER', starter: true, prefer: 'arm', desc: '3단 콤보 베기, 마지막 타격이 적을 띄운다. 특수기: 회전 베기.',
+    color: [1, 0.4, 0.85], name: '빔 사벨', tag: 'SABER', starter: true, prefer: 'arm', desc: '3단 콤보 베기, 마지막 타격이 적을 띄운다. 특수기: 회전 베기.',
     levels: [
       { dmg: 26, cd: 1.1, radius: 2.7, arc: 2.6 },
       { dmg: 33, cd: 1.0, radius: 2.9, arc: 2.8, up: '피해 증가, 범위 +' },
@@ -70,7 +70,7 @@ export const WEAPONS = {
     range: 3.4,
   },
   flamer: {
-    name: '화염 방사기', tag: 'FLAME', starter: true, prefer: 'arm', desc: '누르고 있으면 부채꼴로 불길을 뿜는다. 불붙은 적은 계속 탄다. 특수기: 화염 폭풍.',
+    color: [1, 0.5, 0.12], name: '화염 방사기', tag: 'FLAME', starter: true, prefer: 'arm', desc: '누르고 있으면 부채꼴로 불길을 뿜는다. 불붙은 적은 계속 탄다. 특수기: 화염 폭풍.',
     levels: [
       { dmg: 5, cd: 0.1, cone: 0.75, burn: 6 },
       { dmg: 6, cd: 0.1, cone: 0.8, burn: 8, up: '피해, 화상 증가' },
@@ -81,7 +81,7 @@ export const WEAPONS = {
     range: 6,
   },
   rod: {
-    name: '히트 로드', tag: 'ROD', starter: true, prefer: 'arm', desc: '중거리를 휩쓰는 채찍. 맞은 적을 끌어당긴다. 특수기: 회전 채찍.',
+    color: [1, 0.65, 0.2], name: '히트 로드', tag: 'ROD', starter: true, prefer: 'arm', desc: '중거리를 휩쓰는 채찍. 맞은 적을 끌어당긴다. 특수기: 회전 채찍.',
     levels: [
       { dmg: 17, cd: 0.7, reach: 6, arc: 1.3 },
       { dmg: 21, cd: 0.65, reach: 6.4, arc: 1.4, up: '피해 증가, 길이 +' },
@@ -95,7 +95,7 @@ export const WEAPONS = {
   // ===== 런 무기: 레벨업 카드로만 얻는다. 전부 자동 사격 =====
   //  passive: 쿨다운 없이 계속 도는 무기 (auto() 에서 건너뜀)
   saw: {
-    name: '회전 톱날', tag: 'SAW', prefer: 'hip', passive: true, desc: '톱날이 기체 주위를 돌며 닿는 적을 갈아버린다.',
+    color: [0.85, 0.9, 1], name: '회전 톱날', tag: 'SAW', prefer: 'hip', passive: true, desc: '톱날이 기체 주위를 돌며 닿는 적을 갈아버린다.',
     levels: [
       { dmg: 10, blades: 2, radius: 2.4, spin: 3.2 },
       { dmg: 13, blades: 2, radius: 2.6, spin: 3.4, up: '피해 증가, 회전 반경 +' },
@@ -106,7 +106,7 @@ export const WEAPONS = {
     range: 4,
   },
   tesla: {
-    name: '테슬라 코일', tag: 'TESLA', prefer: 'shoulder', desc: '번개가 적에서 적으로 튀며 연쇄 감전시킨다.',
+    color: [0.55, 0.85, 1], name: '테슬라 코일', tag: 'TESLA', prefer: 'shoulder', desc: '번개가 적에서 적으로 튀며 연쇄 감전시킨다.',
     levels: [
       { dmg: 18, cd: 1.4, chains: 3, jump: 4 },
       { dmg: 22, cd: 1.3, chains: 4, jump: 4.2, up: '피해 증가, 연쇄 +1' },
@@ -117,7 +117,7 @@ export const WEAPONS = {
     range: 10,
   },
   mine: {
-    name: '지뢰 살포기', tag: 'MINE', prefer: 'hip', desc: '주위에 지뢰를 뿌린다. 적이 밟으면 폭발.',
+    color: [1, 0.3, 0.3], name: '지뢰 살포기', tag: 'MINE', prefer: 'hip', desc: '주위에 지뢰를 뿌린다. 적이 밟으면 폭발.',
     levels: [
       { dmg: 30, cd: 2.2, count: 1, aoe: 2.2 },
       { dmg: 36, cd: 2.0, count: 2, aoe: 2.3, up: '지뢰 +1' },
@@ -128,7 +128,7 @@ export const WEAPONS = {
     range: 12,
   },
   disc: {
-    name: '부메랑 디스크', tag: 'DISC', prefer: 'shoulder', desc: '날아갔다 돌아오는 원반. 오가는 길의 적을 모두 벤다.',
+    color: [0.4, 1, 0.9], name: '부메랑 디스크', tag: 'DISC', prefer: 'shoulder', desc: '날아갔다 돌아오는 원반. 오가는 길의 적을 모두 벤다.',
     levels: [
       { dmg: 14, cd: 1.6, count: 1, size: 1 },
       { dmg: 18, cd: 1.5, count: 1, size: 1.15, up: '피해 증가, 크기 +' },
@@ -139,7 +139,7 @@ export const WEAPONS = {
     range: 11,
   },
   stomp: {
-    name: '충격파 발생기', tag: 'QUAKE', prefer: 'hip', desc: '땅을 내려찍어 주위의 적을 날려 보낸다.',
+    color: [1, 0.8, 0.45], name: '충격파 발생기', tag: 'QUAKE', prefer: 'hip', desc: '땅을 내려찍어 주위의 적을 날려 보낸다.',
     levels: [
       { dmg: 22, cd: 2.6, radius: 3.6, waves: 1 },
       { dmg: 28, cd: 2.4, radius: 3.9, waves: 1, up: '피해 증가, 범위 +' },
@@ -150,7 +150,7 @@ export const WEAPONS = {
     range: 5,
   },
   gravity: {
-    name: '중력 우물', tag: 'GRAV', prefer: 'back', desc: '적이 몰린 곳에 중력장을 열어 빨아들이며 짓누른다.',
+    color: [0.75, 0.45, 1], name: '중력 우물', tag: 'GRAV', prefer: 'back', desc: '적이 몰린 곳에 중력장을 열어 빨아들이며 짓누른다.',
     levels: [
       { dmg: 14, cd: 5.5, radius: 3.2, dur: 2.5 },
       { dmg: 18, cd: 5.2, radius: 3.4, dur: 2.7, up: '피해 증가' },
@@ -161,7 +161,7 @@ export const WEAPONS = {
     range: 13,
   },
   gauss: {
-    name: '가우스 캐논', tag: 'GAUSS', prefer: 'shoulder', desc: '가장 튼튼한 적을 노려 방 끝까지 꿰뚫는 탄을 쏜다.',
+    color: [1, 0.88, 0.35], name: '가우스 캐논', tag: 'GAUSS', prefer: 'shoulder', desc: '가장 튼튼한 적을 노려 방 끝까지 꿰뚫는 탄을 쏜다.',
     levels: [
       { dmg: 42, cd: 3.2, width: 0.45 },
       { dmg: 52, cd: 3.0, width: 0.5, up: '피해 증가' },
@@ -172,7 +172,7 @@ export const WEAPONS = {
     range: 22,
   },
   turret: {
-    name: '회전 레이저 포탑', tag: 'TURRET', prefer: 'back', passive: true, desc: '등의 포탑이 빔을 켠 채 빙글빙글 돈다.',
+    color: [1, 0.35, 0.6], name: '회전 레이저 포탑', tag: 'TURRET', prefer: 'back', passive: true, desc: '등의 포탑이 빔을 켠 채 빙글빙글 돈다.',
     levels: [
       { dmg: 12, beams: 1, len: 5, spin: 3 },
       { dmg: 15, beams: 1, len: 5.5, spin: 3.2, up: '피해 증가, 길이 +' },
@@ -183,7 +183,7 @@ export const WEAPONS = {
     range: 7,
   },
   cluster: {
-    name: '집속탄 박격포', tag: 'CLUSTER', prefer: 'shoulder', desc: '포탄을 높이 쏘아 올린다. 떨어지면 자탄이 흩어져 연달아 터진다.',
+    color: [1, 0.5, 0.3], name: '집속탄 박격포', tag: 'CLUSTER', prefer: 'shoulder', desc: '포탄을 높이 쏘아 올린다. 떨어지면 자탄이 흩어져 연달아 터진다.',
     levels: [
       { dmg: 24, cd: 2.6, bomblets: 4, aoe: 1.6, shells: 1 },
       { dmg: 30, cd: 2.4, bomblets: 5, aoe: 1.7, shells: 1, up: '피해 증가, 자탄 +1' },
@@ -194,7 +194,7 @@ export const WEAPONS = {
     range: 15,
   },
   ricochet: {
-    name: '도탄 리볼버', tag: 'BOUNCE', prefer: 'hip', desc: '맞으면 다음 적에게 튕겨 가는 탄. 튕길 때마다 강해진다.',
+    color: [0.75, 1, 0.45], name: '도탄 리볼버', tag: 'BOUNCE', prefer: 'hip', desc: '맞으면 다음 적에게 튕겨 가는 탄. 튕길 때마다 강해진다.',
     levels: [
       { dmg: 12, cd: 0.9, count: 1, bounce: 3 },
       { dmg: 15, cd: 0.85, count: 1, bounce: 4, up: '피해 증가, 도탄 +1' },
@@ -206,7 +206,7 @@ export const WEAPONS = {
   },
   // 노획 무기: 카드로는 안 나오고 적에게서 뜯어내야 얻는다
   cannon: {
-    name: '전차 포신', tag: 'CANNON', prefer: 'shoulder', salvage: true, desc: '경전차에서 뜯어낸 포. 어깨에서 자동으로 폭발탄을 쏜다.',
+    color: [1, 0.62, 0.25], name: '전차 포신', tag: 'CANNON', prefer: 'shoulder', salvage: true, desc: '경전차에서 뜯어낸 포. 어깨에서 자동으로 폭발탄을 쏜다.',
     levels: [
       { dmg: 38, cd: 1.7, aoe: 1.8 },
       { dmg: 46, cd: 1.55, aoe: 2.0, up: '피해, 폭발 범위 증가' },
@@ -217,7 +217,7 @@ export const WEAPONS = {
     range: 15,
   },
   funnel: {
-    name: '판넬 비트', tag: 'BIT', prefer: 'back', desc: '등에서 나온 비트가 주위를 돌며 자동 사격.',
+    color: [0.45, 1, 0.95], name: '판넬 비트', tag: 'BIT', prefer: 'back', desc: '등에서 나온 비트가 주위를 돌며 자동 사격.',
     levels: [
       { dmg: 8, cd: 0.95, bits: 2 },
       { dmg: 9, cd: 0.9, bits: 3, up: '비트 +1' },
@@ -410,8 +410,16 @@ export class Shots {
       } else if (s.aoe) this.explodeAt(s);
       if (dead) { this.list.splice(i, 1); continue; }
       const yaw = Math.atan2(s.vx, s.vz);
-      if (s.homing) this.missileMesh.setAt(nm++, m4.fromTRS([s.x, s.y, s.z], [0, yaw, 0], [1.4, 1.4, 1.4]), [1, 1, 1], 0);
-      else this.bulletMesh.setAt(nb++, m4.fromTRS([s.x, s.y, s.z], [0, yaw, 0], s.scale), s.color, 1);
+      if (s.homing) {
+        this.missileMesh.setAt(nm++, m4.fromTRS([s.x, s.y, s.z], [0, yaw, 0], [1.7, 1.7, 1.7]), [1, 1, 1], 0);
+        if (dt > 0) { const bx = s.x - Math.sin(yaw) * 0.4, bz = s.z - Math.cos(yaw) * 0.4; g.fx.pxr.emit({ position: [bx, s.y, bz], velocity: [0, 0, 0], life: 0.08, size: 3, sizeEnd: 2, ramp: [[1, 1, 0.7], [1, 0.6, 0.2]], emissive: 0.8, hard: true }); if (Math.random() < 0.5) g.fx.px.emit({ position: [bx, s.y, bz], velocity: [0, 0.8, 0], life: 0.45, size: 3, sizeEnd: 1, ramp: [[0.55, 0.52, 0.55], [0.38, 0.36, 0.4], [0.25, 0.24, 0.28]], emissive: 0, gravity: -0.05, hard: true }); }
+      }
+      else {
+        const sc = s.scale || [0.16, 0.16, 0.8];
+        this.bulletMesh.setAt(nb++, m4.fromTRS([s.x, s.y, s.z], [0, yaw, 0], [sc[0] * 1.35, sc[1] * 1.35, sc[2] * 1.2]), s.color, 1);
+        // 꼬리: 지나간 자리에 탄 색 점이 잠깐 남는다 (내 탄이 어디로 가는지 또렷하게)
+        if (dt > 0 && (s.trailK = (s.trailK || 0) + 1) % (this.list.length > 160 ? 3 : 1) === 0) g.fx.pxr.emit({ position: [s.x, s.y, s.z], velocity: [0, 0, 0], life: 0.09, size: sc[0] > 0.22 ? 3 : 2, sizeEnd: 1, ramp: [s.color || [1, 0.85, 0.3], (s.color || [1, 0.85, 0.3]).map((v) => v * 0.55)], emissive: 0.5, hard: true });
+      }
     }
     this.bulletMesh.count = nb; this.missileMesh.count = nm;
     this.bulletMesh.dirty = this.missileMesh.dirty = true;
@@ -1146,7 +1154,7 @@ export class WeaponSystem {
     w.swing += dt;
     const k1 = Math.min(1, w.swing / T);
     const si = p.mech.slotInfo[w.slot];
-    if (k0 >= 1) { if (si) { const b = w.evo ? 1.45 : 1; si.inner.rotation[1] = 0; si.inner.scale = [b, b, b]; } w.swing = undefined; if (w.fist) this.fistSwing = null; return; }
+    if (k0 >= 1) { if (si) { const b = si.base || (w.evo ? 1.45 : 1); si.inner.rotation[1] = 0; si.inner.scale = [b, b, b]; } w.swing = undefined; if (w.fist) this.fistSwing = null; return; }
     // 처음엔 빠르게, 끝에서 감속 (휘두르는 손맛)
     const ease = (k) => 1 - Math.pow(1 - k, 3);
     const a0 = w.swingYaw - (w.swingArc / 2) * w.dir;
@@ -1163,7 +1171,7 @@ export class WeaponSystem {
     p.aimYaw = aNow; p.aimGoal = aNow; p.aimHold = 0.12;
     if (si && !w.fist) {
       si.inner.rotation[1] = aNow - p.mech.upper.rotation[1] - p.yaw;
-      const b = w.evo ? 1.45 : 1; si.inner.scale = [b, b, w.id === 'saber' ? b * 1.6 : b];
+      const b = si.base || (w.evo ? 1.45 : 1); si.inner.scale = [b, b, w.id === 'saber' ? b * 1.6 : b];
     }
   }
 
