@@ -20,6 +20,7 @@ import { activeSets, canTranscend, SETS, TRANSCEND } from './sets.js';
 import { EVOLUTIONS, MAX_LEVEL } from './weapons.js';
 import { runMods } from './progress.js';
 import { installRunHooks, NO_MODS } from './runhooks.js';
+import { installTutorial } from './tutorial.js';
 
 const store = {
   get(k, d) { try { const v = localStorage.getItem('mechaforge.' + k); return v ? JSON.parse(v) : d; } catch { return d; } },
@@ -64,6 +65,7 @@ export class Game {
     this.meta = new Meta();
     this.mods = NO_MODS; // 위협 등급 + 파일럿 규칙 (startRun 에서 정함, runhooks.js 참고)
     installRunHooks(this);
+    installTutorial(this, store); // 첫 실행 튜토리얼 + 처음 겪는 일 팁 (tutorial.js)
     this.selection = { legs: 'walker', frame: 'standard', head: 'vfin', weapon: 'saber', paint: 'rx', ...store.get('loadout2', {}) };
     // 잠긴 부품이 선택돼 있으면 기본값으로
     for (const k of Object.keys(PRICES)) if (!this.meta.isUnlocked(k, this.selection[k])) this.selection[k] = Object.keys(PRICES[k])[0];
