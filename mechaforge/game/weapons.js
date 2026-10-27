@@ -1025,7 +1025,10 @@ export class WeaponSystem {
     const yaw = p.attackYaw(14);
     p.lookAt(yaw, 0.6);
     fx.light([p.x, 1.6, p.z], [1, 0.9, 0.6], 4, 1, 0.2);
+    const C = [p.x, 1.2, p.z], F = [Math.sin(yaw), Math.cos(yaw)];
+    fx.flare(C, 'star8', [1, 1, 0.9], 1.6, 0.14, { spin: 4 });
     if (kind === 'mg') {
+      fx.flare(C, 'hex', [1, 0.85, 0.3], 2.2, 0.3, { grow: true, rot: 0 });
       this.barrage = 1.1; this.barrageYaw = yaw; this.barrageT = 0;
     } else if (kind === 'shotgun') {
       const L = lvOf(w), D = L.dmg * 4 * st.dmgMul;
@@ -1037,12 +1040,19 @@ export class WeaponSystem {
         en.hit(e, D, (e.x - p.x) / d, (e.z - p.z) / d, 22, { launch: 8, stun: 0.6 });
       });
       fx.explosion(mz[0] + Math.sin(yaw) * 2, 0.8, mz[2] + Math.cos(yaw) * 2, 1.2, { scorch: false, color: [1, 0.6, 0.25] });
+      fx.streaks(mz, 26, [1, 0.8, 0.35], { dir: F, spread: 1.8, speed: [16, 30], len: 0.9, life: 0.28, up: 0.15 });
+      for (let k = 1; k <= 3; k++) { const q = [mz[0] + F[0] * k * 1.5, 0.9, mz[2] + F[1] * k * 1.5]; fx.flare(q, 'burst', k === 1 ? [1, 0.95, 0.7] : [1, 0.55, 0.2], 1.4 + k * 0.7, 0.18 + k * 0.05, { spin: rr(-4, 4) }); }
+      fx.flare([mz[0] + F[0] * 3, 0.9, mz[2] + F[1] * 3], 'hex', [1, 0.7, 0.3], 4.5, 0.35, { grow: true, rot: 0 });
       p.kick(-Math.sin(yaw) * 12, -Math.cos(yaw) * 12);
       g.hitStop(0.08);
       g.sfx.play('bigboom', { vol: 0.7 });
     } else if (kind === 'laser') {
       const L = lvOf(w);
-      this.beam(p.mech.muzzle('armR'), yaw, 26, 2.4 * st.areaMul, L.dmg * 3 * st.dmgMul, [1, 0.5, 1], 5);
+      const bm = p.mech.muzzle('armR');
+      this.beam(bm, yaw, 26, 2.4 * st.areaMul, L.dmg * 3 * st.dmgMul, [1, 0.5, 1], 5);
+      fx.flare(bm, 'star8', [1, 0.85, 1], 3.4, 0.3, { spin: 8 });
+      fx.flare(bm, 'star4', [1, 1, 1], 4.2, 0.22, { rot: 0 });
+      for (let k = 1; k <= 7; k++) { const q = [bm[0] + F[0] * k * 3.4, bm[1], bm[2] + F[1] * k * 3.4]; setTimeout(() => { fx.flare(q, k % 2 ? 'star4' : 'hex', [1, 0.5, 1], 2.2, 0.22, { grow: k % 2 === 0, rot: 0 }); fx.streaks(q, 3, [1, 0.7, 1], { speed: [6, 12], len: 0.5 }); }, k * 25); }
       p.kick(-Math.sin(yaw) * 10, -Math.cos(yaw) * 10);
       fx.addTrauma(0.5); g.hitStop(0.1);
     } else if (kind === 'flamer') {
@@ -1059,6 +1069,10 @@ export class WeaponSystem {
       }
       fx.ring(p.x, 0.15, p.z, r, [1, 0.55, 0.2], 0.35);
       fx.light([p.x, 1.5, p.z], [1, 0.55, 0.2], r + 3, 2, 0.3);
+      const fc = w.evo ? [0.5, 0.75, 1] : [1, 0.5, 0.15];
+      fx.flare(C, 'burst', [1, 0.95, 0.6], 3.5, 0.25, { spin: 3 });
+      fx.flare(C, 'burst', fc, r * 1.6, 0.4, { spin: -2, grow: true });
+      for (let k = 0; k < 10; k++) { const a = (k / 10) * 6.28, q = [p.x + Math.sin(a) * r * 0.75, 0.8, p.z + Math.cos(a) * r * 0.75]; setTimeout(() => fx.flare(q, 'burst', fc, 1.6, 0.25, { spin: rr(-5, 5) }), 40 + k * 15); }
       g.sfx.play('bigboom', { vol: 0.6 }); fx.addTrauma(0.3); g.hitStop(0.06);
     } else if (kind === 'rod') {
       // 회전 채찍: 360° 로 휘둘러 주위 적을 끌어당기며 굳힌다
@@ -1069,6 +1083,8 @@ export class WeaponSystem {
       });
       Object.assign(w, { swing: 0, swingYaw: yaw + Math.PI, swingArc: 6.28, swingR: r, dir: 1, fist: false, fin: true, T: 0.3, col: w.evo ? [0.5, 0.75, 1] : [1, 0.5, 0.12], thick: 0.16 });
       fx.ring(p.x, 0.15, p.z, r, [1, 0.6, 0.2], 0.35);
+      fx.flare(C, 'hex', w.evo ? [0.5, 0.75, 1] : [1, 0.6, 0.2], r * 1.8, 0.35, { grow: true, rot: 0, spin: -3 });
+      for (let k = 0; k < 12; k++) { const a = (k / 12) * 6.28; fx.streaks([p.x + Math.sin(a) * r * 0.8, 0.9, p.z + Math.cos(a) * r * 0.8], 1, [1, 0.75, 0.35], { dir: [-Math.sin(a), -Math.cos(a)], spread: 0.2, speed: [10, 16], len: 0.8, life: 0.2, up: 0.1 }); }
       g.sfx.play('swing', { pitch: 0.8 }); g.sfx.play('hit', { pitch: 0.8 });
       fx.addTrauma(0.3); g.hitStop(0.07);
     } else {
@@ -1082,6 +1098,13 @@ export class WeaponSystem {
       const sw = { swing: 0, swingYaw: yaw + Math.PI, swingArc: 6.28, swingR: radius, dir: 1, slot: 'armR', fist: !w, fin: true, T: 0.3 };
       if (w) Object.assign(w, sw); else this.fistSwing = sw;
       fx.ring(p.x, 0.15, p.z, radius, w ? [1, 0.5, 0.85] : [1, 0.75, 0.4], 0.35);
+      const sc = w ? [1, 0.45, 0.85] : [1, 0.75, 0.35];
+      // 원 둘레로 십자 섬광이 차례로 터지고, 접선 방향으로 칼바람 줄기
+      for (let k = 0; k < 12; k++) {
+        const a = (k / 12) * 6.28, q = [p.x + Math.sin(a) * radius * 0.85, 1, p.z + Math.cos(a) * radius * 0.85];
+        setTimeout(() => { fx.flare(q, 'star4', k % 3 ? sc : [1, 1, 1], 1.5, 0.18); fx.streaks(q, 2, sc, { dir: [Math.cos(a), -Math.sin(a)], spread: 0.3, speed: [12, 20], len: 0.8, life: 0.18, up: 0.1 }); }, k * 18);
+      }
+      fx.flare(C, w ? 'star8' : 'burst', sc, radius * 1.3, 0.3, { spin: 6 });
       g.sfx.play('swing', { pitch: 0.7 }); g.sfx.play('hit', { pitch: 0.7 });
       fx.addTrauma(0.35); g.hitStop(0.09);
     }
@@ -1100,6 +1123,7 @@ export class WeaponSystem {
         g.shots.add({ x: mz[0], y: mz[1], z: mz[2], vx: Math.sin(a) * 30, vz: Math.cos(a) * 30, dmg: L.dmg * 1.2 * p.stats.dmgMul, life: 0.6, pierce: 1, color: [1, 0.9, 0.4], scale: [0.16, 0.16, 0.9], knock: 3, quiet: true });
       }
       g.fx.muzzle(mz, [Math.sin(this.barrageYaw), 0, Math.cos(this.barrageYaw)], [1, 0.8, 0.3], 2);
+      g.fx.flare(mz, Math.random() < 0.5 ? 'star8' : 'burst', [1, 0.85, 0.35], 1.6, 0.08, { spin: 10 });
       p.lookAt(this.barrageYaw, 0.2);
     }
   }

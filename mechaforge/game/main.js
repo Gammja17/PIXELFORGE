@@ -43,6 +43,7 @@ export class Game {
     this.scene.fog.near = cam.distance + 10; this.scene.fog.far = cam.distance + 45;
 
     this.fx = new Fx(this.scene);
+    this.fx.camera = this.engine.camera;
     this.shots = new Shots(this);
     this.weapons = new WeaponSystem(this);
     this.rooms = new Rooms(this);
@@ -227,7 +228,18 @@ export class Game {
       this.enemies.blast(p.x, p.z, 8, 200 * p.stats.dmgMul, false, 0.1);
       this.fx.ring(p.x, 0.15, p.z, 10, [1, 0.9, 0.5], 0.8);
       this.fx.light([p.x, 3, p.z], [1, 0.9, 0.6], 12, 2.5, 0.8);
+      this.bigFlare([1, 0.9, 0.5]);
     }
+    if (gained.length) this.bigFlare(SETS[gained[0]].color);
+  }
+  // 각성, 초월, 오버드라이브용 큰 섬광: 8갈래 섬광 + 육각 고리 3겹 + 사방 줄기
+  bigFlare(col) {
+    const p = this.player, fx = this.fx, C = [p.x, 1.4, p.z];
+    fx.flare(C, 'star8', [1, 1, 1], 2.6, 0.25, { spin: 2 });
+    fx.flare(C, 'star8', col, 6, 0.5, { spin: -1.5 });
+    fx.flare(C, 'star4', [1, 1, 1], 5, 0.2, { rot: 0.3 });
+    for (let k = 0; k < 3; k++) setTimeout(() => fx.flare(C, 'hex', col, 4 + k * 3, 0.5, { grow: true, rot: k * 0.5 }), k * 90);
+    fx.streaks(C, 24, col, { speed: [14, 26], len: 1, life: 0.4, up: 0.6 });
   }
 
   // ---- 정비 드론 기지 (덱 관리): 부품 강화, 진화, 분해, 수리 ----
@@ -406,7 +418,7 @@ export class Game {
     b.attackPressed = b.special = b.dash = b.overdrive = b.mode = false;
     if (this.state === 'play' && ctl.mode) p.switchMode();
     this.frame = (this.frame || 0) + 1;
-    if (this.state === 'play' && ctl.overdrive && p.overdrive()) { this.sfx.play('overdrive'); this.sfx.play('bigboom'); this.ui.cutin('OVERDRIVE', '오버드라이브', null, 'od'); }
+    if (this.state === 'play' && ctl.overdrive && p.overdrive()) { this.sfx.play('overdrive'); this.sfx.play('bigboom'); this.ui.cutin('OVERDRIVE', '오버드라이브', null, 'od'); this.bigFlare([1, 0.4, 0.75]); }
 
     if (input.pressed('Escape') || input.pressed('p')) this.pause(this.state === 'play');
     if (this.state === 'levelup') { for (const k of ['1', '2', '3']) if (input.pressed(k)) this.pick(Number(k) - 1); }

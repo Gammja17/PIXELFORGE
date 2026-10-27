@@ -345,6 +345,9 @@ export class Player {
       // 출발: 뒤쪽으로 추진 화염이 확 터진다
       const sz0 = this.size || 1;
       for (let i = 0; i < 16; i++) { const sp = 6 + Math.random() * 8, sx = (Math.random() - 0.5) * 3; fx.trail.emit({ position: [this.x - this.dashDir[0] * 0.5 * sz0, 0.9 * sz0, this.z - this.dashDir[1] * 0.5 * sz0], velocity: [-this.dashDir[0] * sp + this.dashDir[1] * sx, Math.random() * 2, -this.dashDir[1] * sp - this.dashDir[0] * sx], life: 0.18 + Math.random() * 0.15, size: 3 + Math.random() * 3, sizeEnd: 1, color: [1, 0.95, 0.7], colorEnd: [1, 0.4, 0.1], emissive: 1, gravity: 0 }); }
+      // 속도선: 진행 반대 방향으로 가는 줄기 + 출발점 십자 섬광
+      fx.flare([this.x, 0.9 * sz0, this.z], 'star4', [0.6, 0.95, 1], 1.6 * sz0, 0.14);
+      fx.streaks([this.x, 0.9 * sz0, this.z], 8, [0.55, 0.9, 1], { dir: [-this.dashDir[0], -this.dashDir[1]], spread: 0.7, speed: [14, 24], len: 0.9, life: 0.2, up: 0.15, width: 0.8 });
       this.dashLean = 1;
       this.ghostT = 0;
       g.weapons.cancelCombo?.();

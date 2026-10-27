@@ -565,6 +565,20 @@ export class Enemies {
     }
     e.hp -= dmg;
     e.flash = 0.09;
+    // 맞은 자리 모양 이펙트: 치명타는 8갈래 금빛 섬광 + 육각, 일반은 십자 + 맞은 방향으로 튀는 줄기, 잔탄은 가끔만
+    if (crit || !quiet || Math.random() < 0.3) {
+      const hp = [e.x - dirX * e.r * 0.5, (e.y || 0) + (e.boss ? 2.2 : 0.8), e.z - dirZ * e.r * 0.5], dir = (dirX || dirZ) ? [dirX, dirZ] : null;
+      if (crit) {
+        g.fx.flare(hp, 'star4', [1, 1, 0.8], 0.8, 0.12);
+        g.fx.flare(hp, 'star8', [1, 0.75, 0.15], 2.1, 0.22, { spin: 5 });
+        g.fx.flare(hp, 'hex', [1, 0.85, 0.3], 1.4, 0.24, { grow: true, rot: 0 });
+        g.fx.streaks(hp, 5, [1, 0.85, 0.3], { dir, spread: 1.6, speed: [9, 16], len: 0.55, life: 0.2 });
+      } else {
+        const big = !quiet;
+        g.fx.flare(hp, Math.random() < 0.5 ? 'star4' : 'streak', Math.random() < 0.5 ? [1, 1, 1] : [1, 0.85, 0.4], big ? 0.6 : 0.4, 0.1, { sx: 1, sy: Math.random() < 0.5 ? 1 : 1.6 });
+        g.fx.streaks(hp, big ? 3 : 1, col[2] < 0.5 ? col : [1, 0.8, 0.45], { dir, spread: 1.4, speed: [6, 12], len: 0.4, life: 0.14 });
+      }
+    }
     const k = knock / (e.mass || e.T.mass);
     e.kx += dirX * k; e.kz += dirZ * k;
     if (!e.boss) {
@@ -610,6 +624,11 @@ export class Enemies {
     const T = e.T;
     if (T.swarm && !e.elite) { fx.pop(e.x, 0.3, e.z, [1, 0.6, 0.25]); g.sfx.play('pop'); }
     else {
+      // 처치 모양: 날틀은 푸른 8갈래 섬광, 덩치는 육각 충격파 + 큰 폭발, 정예는 금빛
+      const P = [e.x, (e.y || 0) + 0.8, e.z];
+      if (e.elite) { fx.flare(P, 'star8', [1, 0.85, 0.3], 4, 0.35, { spin: 3 }); fx.flare(P, 'hex', [1, 0.8, 0.3], 3.5, 0.4, { grow: true, rot: 0 }); }
+      else if (T.fly || e.type === 'drone') { fx.flare(P, 'star8', [0.55, 0.9, 1], 2.2, 0.2, { spin: 6 }); fx.streaks(P, 6, [0.6, 0.95, 1], { speed: [8, 15], len: 0.5 }); }
+      else if (e.type === 'brute' || e.type === 'tank') fx.flare(P, 'hex', [1, 0.6, 0.25], 2.8, 0.3, { grow: true, rot: 0 });
       g.sfx.play(e.elite || e.type === 'brute' ? 'bigboom' : 'boom', { vol: e.elite ? 0.8 : 1 });
       fx.explosion(e.x, e.y + 0.4, e.z, T.boom * (e.elite ? 1.4 : 1), { debris: e.type === 'drone' ? [0.3, 0.27, 0.36] : [0.3, 0.32, 0.28], scorch: e.type !== 'drone' && !T.bomb });
     }
