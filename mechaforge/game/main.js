@@ -235,12 +235,19 @@ export class Game {
   }
   // 각성, 초월, 오버드라이브용 큰 섬광: 8갈래 섬광 + 육각 고리 3겹 + 사방 줄기
   bigFlare(col) {
+    // 모으기(0.12초) → 한 번 번쩍 + 기둥으로 솟구침 → 고리 두 겹. 크기는 기체 주변으로 한정
     const p = this.player, fx = this.fx, C = [p.x, 1.4, p.z];
-    fx.flare(C, 'star8', [1, 1, 1], 2.6, 0.25, { spin: 2 });
-    fx.flare(C, 'star8', col, 6, 0.5, { spin: -1.5 });
-    fx.flare(C, 'star4', [1, 1, 1], 5, 0.2, { rot: 0.3 });
-    for (let k = 0; k < 3; k++) setTimeout(() => fx.flare(C, 'hex', col, 4 + k * 3, 0.5, { grow: true, rot: k * 0.5 }), k * 90);
-    fx.streaks(C, 24, col, { speed: [14, 26], len: 1, life: 0.4, up: 0.6 });
+    fx.gather(C, 2.2, col, 26, 0.12);
+    fx.after(0.12, () => {
+      const C2 = [p.x, 1.4, p.z];
+      fx.starPx(C2, 8, col, 1.6, 0.2, 0.39);
+      fx.impact(C2, col, 1.2);
+      fx.rise(p.x, p.z, 1.3, col, 34, [7, 12]);
+      fx.ring(p.x, 0.12, p.z, 3.2, col, 0.24);
+      fx.after(0.08, () => fx.ring(p.x, 0.12, p.z, 4.6, col, 0.3));
+      fx.light(C2, col, 4, 1, 0.16);
+      fx.addTrauma(0.3);
+    });
   }
 
   // ---- 정비 드론 기지 (덱 관리): 부품 강화, 진화, 분해, 수리 ----

@@ -231,9 +231,8 @@ export class Player {
     this.ups._od = 1; this.refreshStats();
     this.invuln = Math.max(this.invuln, 0.8);
     g.enemies.blast(this.x, this.z, 6.5 * this.stats.areaMul, 60 * this.stats.dmgMul, false, 0.12);
-    fx.ring(this.x, 0.15, this.z, 9, [1, 0.6, 0.2], 0.6);
-    fx.light([this.x, 2, this.z], [1, 0.6, 0.25], 10, 2, 0.6);
-    fx.addTrauma(0.7); g.hitStop(0.12);
+    fx.light([this.x, 2, this.z], [1, 0.6, 0.25], 5, 1, 0.22);
+    fx.addTrauma(0.5); g.hitStop(0.12);
     return true;
   }
   updateOverdrive(dt) {

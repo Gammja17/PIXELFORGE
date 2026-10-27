@@ -103,7 +103,7 @@ export class Fx {
     for (let i = 0; i < n; i++) {
       const a = R() * 6.28, e = rr(-0.3, 1.2), r = Math.sqrt(R()) * 0.5 * size, ox = Math.cos(a) * Math.cos(e), oz = Math.sin(a) * Math.cos(e), oy = Math.sin(e);
       const sp = rr(1, 3.2) * Math.sqrt(size);
-      this.px.emit({ position: [p[0] + ox * r, p[1] + oy * r * 0.7, p[2] + oz * r], velocity: [ox * sp, oy * sp + 1.2, oz * sp], life: rr(0.22, 0.5) * (0.8 + size * 0.15), size: Math.round(rr(4, 7) * big), sizeEnd: 2, ramp, emissive: 0.7, gravity: -0.12, hard: true });
+      this.px.emit({ position: [p[0] + ox * r, p[1] + oy * r * 0.7, p[2] + oz * r], velocity: [ox * sp, oy * sp + 1.2, oz * sp], life: rr(0.16, 0.38) * (0.8 + size * 0.15), size: Math.round(rr(3, 6) * big), sizeEnd: 1, ramp, emissive: 0.7, gravity: -0.12, hard: true });
     }
   }
   // 화면을 향한 갈래 섬광: 점들이 arms 갈래 직선으로 뻗어 나간다
@@ -121,6 +121,46 @@ export class Fx {
     this.pxr.emit({ position: [...p], velocity: [0, 0, 0], life: life * 0.5, size: Math.round(2 + size), sizeEnd: 1, ramp, emissive: 0.9, hard: true });
   }
 
+  // 게임 시간 기준 지연 실행 (히트스톱, 일시정지를 따른다)
+  after(t, fn) { (this.timers ||= []).push({ t, fn }); }
+  // 맞는 순간: 한 프레임 흰 사각 + 짧은 4갈래 + 작은 파편. 크기를 키워도 화면을 덮지 않게 상한
+  impact(p, color, s = 1) {
+    s = Math.min(2, s);
+    const ramp = [[1, 1, 1], ...rampOf(color).slice(1, 4)];
+    this.pxr.emit({ position: [...p], velocity: [0, 0, 0], life: 0.045, size: Math.round(3 + s * 2), sizeEnd: Math.round(2 + s), ramp: [[1, 1, 1]], emissive: 0.9, hard: true });
+    this.starPx(p, 4, color, 0.5 + s * 0.45, 0.11, R() * 6.28);
+    this.shrapnel(p, Math.round(4 + s * 5), ramp, { speed: [5, 10 + s * 4], life: [0.12, 0.3], up: [1, 4], size: [1, 2] });
+  }
+  // 칼바람 호: 바닥과 나란한 원호를 따라 점이 늘어서고 접선 방향으로 흩어진다
+  slashArc(x, y, z, r, a0, arc, color, life = 0.16, dir = 1, thick = 2) {
+    const ramp = [[1, 1, 1], ...rampOf(color).slice(1, 4)], n = Math.max(8, Math.round(r * Math.abs(arc) * 4.5));
+    for (let i = 0; i < n; i++) {
+      const k = i / (n - 1), a = a0 + arc * k, s = Math.sin(a), c = Math.cos(a), t = dir * 3.5;
+      const lead = k > 0.7 ? 1 : 0;
+      for (let j = 0; j < thick; j++) {
+        const rj = r - j * 0.18;
+        this.pxr.emit({ position: [x + s * rj, y, z + c * rj], velocity: [c * t, 0, -s * t], life: life * (0.55 + k * 0.45), size: j === 0 ? 2 + lead : 1, sizeEnd: 1, ramp: j === 0 ? ramp : ramp.slice(1), emissive: 0.7, hard: true });
+      }
+    }
+  }
+  // 솟는 기둥: 발밑 원 둘레에서 점들이 위로 솟는다 (기 모으기, 각성)
+  rise(x, z, r, color, n = 24, speed = [5, 9]) {
+    const ramp = [[1, 1, 1], ...rampOf(color).slice(1, 4)];
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * 6.28 + rr(-0.1, 0.1), q = r * rr(0.7, 1);
+      this.pxr.emit({ position: [x + Math.sin(a) * q, rr(0, 0.4), z + Math.cos(a) * q], velocity: [0, rr(speed[0], speed[1]), 0], life: rr(0.18, 0.34), size: i % 3 ? 1 : 2, sizeEnd: 1, ramp, emissive: 0.7, hard: true });
+    }
+  }
+  // 빨려드는 점: 둘레에서 중심으로 모인다 (예비 동작)
+  gather(p, r, color, n = 16, life = 0.14) {
+    const ramp = [rampOf(color)[2], rampOf(color)[1], [1, 1, 1]];
+    for (let i = 0; i < n; i++) {
+      const a = R() * 6.28, b = rr(-0.5, 0.5);
+      const o = [Math.cos(a) * r, b * r * 0.6, Math.sin(a) * r];
+      this.pxr.emit({ position: [p[0] + o[0], p[1] + o[1], p[2] + o[2]], velocity: o.map((v) => -v / life), life, size: i % 2 ? 1 : 2, sizeEnd: 1, ramp, emissive: 0.8, hard: true });
+    }
+  }
+
   // 폭발: size 0.5(작은 드론) ~ 3(보스). 흰 핵 → 불덩이 점 뭉치 → 파편 점 → 바닥 고리 → 연기 점
   explosion(x, y, z, size = 1, { color = [1, 0.6, 0.2], debris = [0.3, 0.3, 0.34], ring = true, scorch = true } = {}) {
     const P = [x, y + 0.2, z], ramp = isFire(color) ? FIRE : [...rampOf(color), [0.3, 0.24, 0.3]];
@@ -131,7 +171,7 @@ export class Fx {
       this.px.emit({ position: [x + rr(-0.4, 0.4) * size, y + 0.3 + rr(0, 0.4) * size, z + rr(-0.4, 0.4) * size], velocity: [rr(-1, 1), rr(1, 2.5), rr(-1, 1)], life: rr(0.6, 1.1), size: Math.round(rr(3, 5) * Math.min(1.6, 0.6 + size * 0.4)), sizeEnd: 1, ramp: SMOKE, emissive: 0, gravity: -0.12, hard: true });
     }
     for (let i = 0; i < Math.round(size * 3); i++) this.chunk(x, y, z, debris, 5 + size * 2);
-    this.light([x, y + 1, z], color, 3 + size * 2.2, 1.1 + size * 0.25, 0.22 + size * 0.1);
+    this.light([x, y + 1, z], color, 2.2 + size * 1.5, 0.75 + size * 0.15, 0.12 + size * 0.06);
     if (ring) this.ring(x, 0.12, z, 1.4 + size * 1.6, isFire(color) ? [1, 0.7, 0.3] : color, 0.24 + size * 0.06);
     if (scorch && size >= 0.8) this.scorchMark(x, z, 1 + size * 0.7);
     if (size >= 1) this.addTrauma((size - 0.7) * 0.12);
@@ -190,6 +230,7 @@ export class Fx {
 
   update(dt, realDt) {
     const sdt = dt;
+    if (this.timers?.length) { const due = []; this.timers = this.timers.filter((q) => ((q.t -= sdt) > 0 ? true : (due.push(q.fn), false))); for (const f of due) f(); }
     // 점광원 감쇠
     for (let i = this.lights.length - 1; i >= 0; i--) {
       const l = this.lights[i];
