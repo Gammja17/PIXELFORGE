@@ -304,4 +304,97 @@ export const TROOP_TYPES = {
       } else { c.sp = 0; if (e.st > 0.9) { e.state = 'walk'; e.cd = 2.8 + R() * 1.5; } }
     },
   },
+  // 견인 기체: 조준선을 긋고 갈고리를 쏜다. 맞으면 끌려간다 (대시로 피하면 헛친다)
+  grappler: {
+    name: '견인 기체', hp: 58, speed: 2.6, r: 0.62, dmg: 8, xp: 4, mass: 2.2, fly: 0, cap: 6, boom: 0.9, calm: true,
+    model() {
+      const g = new Geometry(), glow = new Geometry();
+      for (const s of [-1, 1]) { cbox(g, 0.18, 0.5, 0.26, GUN, [s * 0.3, 0.25, 0]); cbox(g, 0.24, 0.14, 0.36, DARK, [s * 0.3, 0.07, 0.04]); }
+      cbox(g, 0.72, 0.42, 0.62, MOSS, [0, 0.82, -0.02]);
+      cbox(g, 0.4, 0.2, 0.3, SLATE, [0, 1.0, -0.12]);
+      add(g, Geometry.cylinder(0.2, 0.2, 0.3, 6, STEEL), [0, 0.7, 0.42], [Math.PI / 2, 0, 0]);   // 윈치
+      add(g, Geometry.cone(0.18, 0.34, 3, BONE), [0, 0.7, 0.68], [Math.PI / 2, 0, 0]);          // 갈고리
+      add(glow, Geometry.box(0.08, 0.08, 0.05, [1, 0.8, 0.2]), [0.18, 1.0, 0.04]);
+      add(glow, Geometry.box(0.08, 0.08, 0.05, [1, 0.8, 0.2]), [-0.18, 1.0, 0.04]);
+      return { g, glow };
+    },
+    ai(en, e, c) {
+      const H = en.hazards, g = c.g, p = c.p, fx = g.fx, L = 11, toP = Math.atan2(c.dx, c.dz);
+      if (e.state === 'walk') {
+        orbit(c, e, 6, 9, 0.6);
+        e.yaw = turnTo(e.yaw, toP, 5 * c.dt);
+        e.cd -= c.dt;
+        if (e.cd <= 0 && c.d < L - 1 && e.spawnT > 1) { e.state = 'aim'; e.st = 0; }
+      } else if (e.state === 'aim') {
+        c.sp = 0; e.charging = true;
+        const lock = e.st > 0.55;
+        if (!lock) e.yaw = turnTo(e.yaw, toP, 3 * c.dt);
+        H.line(e.x, e.z, e.yaw, L, lock ? 0.16 : 0.08, lock ? [1, 0.85, 0.2] : [1, 0.7, 0.2], lock ? 0.5 + 0.4 * Math.sin(e.st * 50) : 0.3, 0.7, 0.04);
+        if (e.st > 0.85) {
+          e.state = 'rest'; e.st = 0; e.charging = false;
+          const hit = p.dashT <= 0 && p.invuln <= 0 && laserHits(p.x, p.z, e.x, e.z, e.yaw, L, 0.45 + p.r);
+          const reach = hit ? c.d : L, sx = Math.sin(e.yaw), sz = Math.cos(e.yaw);
+          for (let t = 0.6; t < reach; t += 0.35) fx.pxr.emit({ position: [e.x + sx * t, 0.7, e.z + sz * t], velocity: [0, 0, 0], life: 0.14 + t * 0.012, size: 2, sizeEnd: 1, ramp: [[1, 1, 0.8], [0.8, 0.75, 0.6], [0.45, 0.42, 0.4]], emissive: 0.4, hard: true });
+          g.sfx.play('clank', { pitch: 1.4, vol: 0.6 });
+          if (hit) {
+            // 끌려가기: 적 쪽으로 강하게 당긴다 + 약한 피해
+            p.ex -= (c.dx / c.d) * 26; p.ez -= (c.dz / c.d) * 26;
+            p.hurt(c.g.enemies.k.dmg * 6, -c.dx, -c.dz);
+            fx.impact([p.x, 1.2, p.z], [1, 0.85, 0.3], 0.8);
+            g.ui.toast('끌려간다! 대시로 피할 수 있다');
+          }
+        }
+      } else { c.sp = 0; if (e.st > 0.7) { e.state = 'walk'; e.cd = 3 + R() * 1.5; } }
+    },
+  },
+  // 흡착 드론: 빠르게 날아와 달라붙어 기동을 떨어뜨린다. 대시하면 떨어져 나간다
+  leech: {
+    name: '흡착 드론', hp: 12, speed: 6.2, r: 0.38, dmg: 0, xp: 1, mass: 0.6, fly: 0.9, cap: 12, boom: 0.5, noTouch: true,
+    model() {
+      const g = new Geometry(), glow = new Geometry();
+      add(g, Geometry.icosphere(0.24, 0, WINE, { squashY: 0.7 }), [0, 0, 0]);
+      for (let i = 0; i < 4; i++) { const a = (i / 4) * TAU; add(g, Geometry.box(0.06, 0.06, 0.32, DARK), [Math.sin(a) * 0.26, -0.08, Math.cos(a) * 0.26], [0.6, a, 0]); }
+      add(glow, Geometry.box(0.14, 0.06, 0.06, [1, 0.3, 0.7]), [0, 0.1, 0.18]);
+      return { g, glow };
+    },
+    ai(en, e, c) {
+      const g = c.g, p = c.p, fx = g.fx;
+      if (e.state === 'walk') {
+        if (c.d < 0.9 + p.r && e.spawnT > 0.5 && p.dashT <= 0) { e.state = 'latch'; e.st = 0; e.oa = Math.atan2(-c.dx, -c.dz); g.sfx.play('tink', { pitch: 0.6 }); }
+      } else if (e.state === 'latch') {
+        c.sp = 0; e.kx = e.kz = 0;
+        const a = e.oa + g.time * 0.5;
+        e.x = p.x + Math.sin(a) * 0.55; e.z = p.z + Math.cos(a) * 0.55;
+        p.slowK = Math.max(0.4, (p.slowK || 1) * 0.72);
+        e.charging = Math.sin(e.st * 12) > 0;
+        if ((g.frame & 7) === 0) fx.pxr.emit({ position: [e.x, 1.1, e.z], velocity: [0, 1, 0], life: 0.18, size: 1, sizeEnd: 1, ramp: [[1, 0.4, 0.8]], emissive: 0.6, hard: true });
+        if (p.dashT > 0) {
+          // 대시: 떨어져 나가 기절
+          e.state = 'walk'; e.stun = 1.2; e.kx = -Math.sin(a) * -12; e.kz = -Math.cos(a) * -12;
+          fx.hitSpark([e.x, 1, e.z], [1, 0.4, 0.8], 4);
+        }
+      }
+    },
+  },
+  // 증폭 탑: 거의 안 움직이고 주변 아군을 빠르고 단단하게 만든다 (먼저 부술 것)
+  amp: {
+    name: '증폭 탑', hp: 90, speed: 1.1, r: 0.7, dmg: 6, xp: 5, mass: 4, fly: 0, cap: 4, boom: 1.0, calm: true,
+    model() {
+      const g = new Geometry(), glow = new Geometry();
+      add(g, Geometry.cylinder(0.55, 0.65, 0.3, 6, GUN), [0, 0.15, 0]);
+      add(g, Geometry.cylinder(0.2, 0.28, 1.2, 6, SLATE), [0, 0.9, 0]);
+      for (let i = 0; i < 3; i++) add(g, Geometry.cylinder(0.42 - i * 0.08, 0.42 - i * 0.08, 0.06, 6, DARK), [0, 0.7 + i * 0.32, 0]);
+      add(glow, Geometry.icosphere(0.2, 0, [1, 0.25, 0.3]), [0, 1.62, 0]);
+      return { g, glow };
+    },
+    ai(en, e, c) {
+      const g = c.g, fx = g.fx, R6 = 6;
+      if (c.d < 5) { c.mx = -c.dx / c.d; c.mz = -c.dz / c.d; } else c.sp = 0;
+      e.yaw += c.dt * 0.8;
+      e.charging = Math.sin(g.time * 6) > 0.3;
+      en.grid.query(e.x, e.z, R6, (o) => { if (o !== e && !o.dead && !o.T.part && !o.T.mine && o.type !== 'amp' && Math.hypot(o.x - e.x, o.z - e.z) < R6) o.ampT = g.time + 0.3; });
+      if ((e.pulse = (e.pulse || 0) - c.dt) <= 0) { e.pulse = 1.2; en.hazards.ring(e.x, e.z, R6, [1, 0.25, 0.3], 0.35); }
+      if ((g.frame & 3) === 0) en.grid.query(e.x, e.z, R6, (o) => { if (o.ampT > g.time && o !== e && Math.random() < 0.15) fx.pxr.emit({ position: [o.x, (o.y || 0) + 1.4, o.z], velocity: [0, 1.5, 0], life: 0.2, size: 1, sizeEnd: 1, ramp: [[1, 0.3, 0.35]], emissive: 0.6, hard: true }); });
+    },
+  },
 };

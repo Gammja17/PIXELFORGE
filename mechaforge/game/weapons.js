@@ -1363,7 +1363,7 @@ export class WeaponSystem {
         w.fireT = g.time;
         const c = R() < p.stats.crit, D = L.dmg * p.stats.dmgMul;
         const dx = t.x - b.x, dz = t.z - b.z, d = Math.hypot(dx, dz) || 1;
-        g.shots.add({ x: b.x, y: b.y - 0.5, z: b.z, vx: (dx / d) * 34, vz: (dz / d) * 34, dmg: c ? D * 2 : D, crit: c, life: 0.5, color: [0.45, 1, 0.95], scale: [0.15, 0.15, 0.9], knock: 1.5, quiet: !c });
+        g.shots.add({ x: b.x, y: b.y - 0.5, z: b.z, vx: (dx / d) * 34, vz: (dz / d) * 34, dmg: c ? D * 2 : D, crit: c, life: 0.5, color: [0.45, 1, 0.95], scale: [0.15, 0.15, 0.9], knock: 1.5, quiet: !c, src: 'funnel' });
         fx.muzzle([b.x, b.y, b.z], [dx / d, 0, dz / d], [0.5, 1, 0.9], 1);
         g.sfx.play('mg', { vol: 0.35, pitch: 1.5 });
       }

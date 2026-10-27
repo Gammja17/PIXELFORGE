@@ -6,7 +6,7 @@
 import { Engine, Geometry, Mesh, Material, clamp, damp, v3 } from '../engine/index.js';
 import { Fx } from './fx.js';
 import { Shots, WeaponSystem, WEAPONS, weaponName, ARCS, ARC_FREE, slotArc } from './weapons.js';
-import { Enemies, AFFIXES } from './enemies.js';
+import { Enemies, AFFIXES, FINAL_BOSSES } from './enemies.js';
 import { Pickups } from './pickups.js';
 import { Player } from './player.js';
 import { rollChoices, applyChoice, freeSlot, cardImage, MAX_WEAPONS } from './upgrades.js';
@@ -21,6 +21,7 @@ import { EVOLUTIONS, MAX_LEVEL } from './weapons.js';
 import { runMods } from './progress.js';
 import { installRunHooks, NO_MODS } from './runhooks.js';
 import { installTutorial } from './tutorial.js';
+import { installArchetypes, ARCHETYPES, archUnlocked } from './archetypes.js';
 
 const store = {
   get(k, d) { try { const v = localStorage.getItem('mechaforge.' + k); return v ? JSON.parse(v) : d; } catch { return d; } },
@@ -66,6 +67,7 @@ export class Game {
     this.meta = new Meta();
     this.mods = NO_MODS; // 위협 등급 + 파일럿 규칙 (startRun 에서 정함, runhooks.js 참고)
     installRunHooks(this);
+    installArchetypes(this); // 기체 계열 규칙 (archetypes.js)
     installTutorial(this, store); // 첫 실행 튜토리얼 + 처음 겪는 일 팁 (tutorial.js)
     this.selection = { legs: 'walker', frame: 'standard', head: 'vfin', weapon: 'saber', paint: 'rx', ...store.get('loadout2', {}) };
     // 잠긴 부품이 선택돼 있으면 기본값으로
@@ -73,6 +75,7 @@ export class Game {
     for (const [k, T] of [['legs', LEGS], ['frame', FRAMES], ['head', HEADS], ['weapon', WEAPONS]]) if (!T[this.selection[k]]) this.selection[k] = Object.keys(T)[0];
     if (!WEAPONS[this.selection.weapon].starter) this.selection.weapon = 'saber';
     this.best = store.get('best2', { depth: 0, win: false });
+    if (!ARCHETYPES[this.selection.arch] || !archUnlocked(this, this.selection.arch)) this.selection.arch = 'striker';
     if (this.best.win) this.meta.migrateWin();
     this.setSelection(this.selection);
     this.hangarLighting();
@@ -113,6 +116,12 @@ export class Game {
     store.set('loadout2', this.selection);
     const W = WEAPONS[sel.weapon];
     this.loadout = { legs: sel.legs, frame: sel.frame, head: sel.head, paint: sel.paint, weapons: [{ id: sel.weapon, slot: freeSlot([], W.prefer) }], modules: {} };
+    // 계열 시작 장비
+    this.arch = sel.arch || 'striker';
+    for (const [kind, id] of ARCHETYPES[this.arch]?.kit || []) {
+      if (kind === 'weapon' && !this.loadout.weapons.some((w) => w.id === id)) { const slot = freeSlot(this.loadout.weapons, WEAPONS[id].prefer); if (slot) this.loadout.weapons.push({ id, slot }); }
+      if (kind === 'module') this.loadout.modules[id] = 1;
+    }
     this.weapons.list = this.loadout.weapons.map((w) => ({ ...w, level: 1, cd: 0.4 }));
     this.player.reset(this.loadout);
     this.weapons.syncBits();
@@ -137,6 +146,7 @@ export class Game {
     this.zoneMusic();
     this.player.invuln = 1.2;
     this.state = 'play';
+    this.archStart();
     this.fx.ring(this.player.x, 0.15, this.player.z, 4, [0.5, 0.9, 1], 0.5);
     this.ui.onStart();
   }
@@ -146,6 +156,7 @@ export class Game {
     this.enemies.clear(); this.shots.clear(); this.pickups.clear();
     this.rooms.clear();
     this.mods = NO_MODS;
+    this.escorts = []; this.archUpdate?.(0);
     this.fx.extraLights = this.hangarLights;
     this.hangar.visible = this.hangarGlow.visible = true;
     this.hangarLighting();
@@ -156,7 +167,7 @@ export class Game {
   }
 
   // ---- 방 이동 ----
-  nextRoom(reward, entry, op = null) {
+  nextRoom(reward, entry, op = null, zone = null) {
     if (this.state !== 'play') return;
     this.state = 'transition';
     // 남은 경험치 결정은 자동 회수
@@ -164,13 +175,13 @@ export class Game {
     this.ui.fade(true);
     setTimeout(() => {
       this.enemies.clear(); this.shots.clear(); this.pickups.clear();
-      this.rooms.enter(reward, entry, op);
+      this.rooms.enter(reward, entry, op, zone);
       this.zoneMusic();
       this.player.invuln = 0.8;
       this.state = 'play';
       this.ui.fade(false);
       const Z = ZONES[this.rooms.zone];
-      this.ui.banner(this.rooms.reward === 'boss' ? '경고: 타이탄의 방' : `${Z.name} ${this.rooms.depth}/${this.rooms.last}`, this.rooms.reward === 'boss');
+      this.ui.banner(this.rooms.reward === 'boss' ? `경고: ${FINAL_BOSSES[this.rooms.bossKind]?.short || '타이탄'}의 방` : `${Z.name} ${this.rooms.depth}/${this.rooms.last}`, this.rooms.reward === 'boss');
     }, 260);
   }
 
@@ -392,7 +403,7 @@ export class Game {
     const lo = this.player.loadout, S = this.stats, m = this.mods, R = this.rooms;
     const run = this.meta.finishRun({
       win, kills: S.kills, depth: R.depth, rooms: win ? R.last + 1 : R.depth, level: this.level, combo: S.bestCombo || 0, mids: S.mids,
-      evolved: this.weapons.list.some((w) => w.evo), transcend: !!lo.transcend, sel: this.selection,
+      evolved: this.weapons.list.some((w) => w.evo), transcend: !!lo.transcend, sel: this.selection, boss: R.bossKind,
       threat: m.threat, noKits: m.noKits, pilot: m.pilot, scrapMul: m.scrapMul,
     });
     // 무기별 피해 (실제로 깎은 체력) → 초당 피해
@@ -402,7 +413,7 @@ export class Game {
       scrap: run.gain, bonus: run.bonus, newBest: run.newBest, achieved: run.achieved, total: this.meta.scrap,
       threat: m.threat, bestThreat: this.meta.bestThreat, scrapMul: m.scrapMul, pilot: m.pilot, mids: S.mids,
       win, combo: S.bestCombo || 0, time: this.time, depth: R.depth, last: R.last, kills: S.kills, level: this.level, dealt: S.dealt, taken: S.taken,
-      zone: ZONES[R.zone]?.name || '',
+      zone: ZONES[R.zone]?.name || '', bossName: FINAL_BOSSES[R.bossKind]?.short,
       dps: Object.entries(S.byWeapon).sort((a, b) => b[1] - a[1]).map(([id, dmg]) => ({ id, name: srcName(id), dmg, dps: dmg / t, share: dmg / total })),
       weapons: this.weapons.list.map((w) => w.evo ? weaponName(w) : `${weaponName(w)} Lv${w.level}`),
       modules: Object.entries(lo.modules).map(([k, v]) => `${MODULES[k].name} Lv${v}`),
@@ -445,7 +456,7 @@ export class Game {
     this.fx.timeScale = this.state === 'hangar' || this.state === 'install' ? 1 : dt > 0 ? simDt / dt : 0;
 
     if (simDt > 0) {
-      if (this.state === 'play') { this.updateCombo(simDt); this.time += simDt; p.update(simDt, input, ctl); this.weapons.update(simDt, ctl); this.rooms.update(simDt); }
+      if (this.state === 'play') { this.updateCombo(simDt); this.time += simDt; p.update(simDt, input, ctl); this.archUpdate(simDt); this.weapons.update(simDt, ctl); this.rooms.update(simDt); }
       this.enemies.update(simDt);
       this.shots.update(simDt);
       this.pickups.update(simDt);
@@ -514,7 +525,7 @@ export class Game {
     this.fx.drawNumbers(ctx, (q) => { const s = this.project(q); return s && s[0] > -50 && s[1] > -50 && s[0] < c.width + 50 && s[1] < c.height + 50 ? s : null; }, px);
   }
 
-  srcName(id) { const w = this.weapons.get(id); return id === 'fist' ? '주먹' : id === 'other' ? '기타 (연쇄/대시/세트)' : w ? weaponName(w) : WEAPONS[id]?.name || id; }
+  srcName(id) { const w = this.weapons.get(id); return id === 'fist' ? '주먹' : id === 'other' ? '기타 (연쇄/세트)' : id === 'dash' ? '관통 대시' : id === 'escort' ? '호위 드론' : id === 'counter' ? '반격 충격파' : w ? weaponName(w) : WEAPONS[id]?.name || id; }
 
   // 적 머리 위: 맞은 적은 체력 막대 (떼거리 제외), 정예는 항상 금색 막대 + 특성 이름
   drawEnemyBars(ctx, px) {

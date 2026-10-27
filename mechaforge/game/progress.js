@@ -67,6 +67,12 @@ export const ACHIEVEMENTS = [
   { id: 'threat5', name: '위협 5', desc: '위협 등급 5 이상으로 승리', test: (r) => r.win && r.threat >= 5, reward: { kind: 'paint', id: 'inferno' } },
   { id: 'threat10', name: '위협 10', desc: '위협 등급 10 이상으로 승리', test: (r) => r.win && r.threat >= 10, reward: { kind: 'paint', id: 'boss' } },
   { id: 'threat15', name: '위협 15', desc: '위협 등급 15 이상으로 승리', test: (r) => r.win && r.threat >= 15, reward: { kind: 'paint', id: 'void' } },
+  { id: 'win_striker', name: '강습의 길', desc: '강습 계열로 승리', test: (r) => r.win && (r.sel.arch || 'striker') === 'striker', reward: { kind: 'scrap', n: 200 } },
+  { id: 'win_siege', name: '포격의 길', desc: '포격 계열로 승리', test: (r) => r.win && r.sel.arch === 'siege', reward: { kind: 'scrap', n: 250 } },
+  { id: 'win_carrier', name: '모함의 길', desc: '모함 계열로 승리', test: (r) => r.win && r.sel.arch === 'carrier', reward: { kind: 'scrap', n: 300 } },
+  { id: 'win_bulwark', name: '중장의 길', desc: '중장 계열로 승리', test: (r) => r.win && r.sel.arch === 'bulwark', reward: { kind: 'scrap', n: 300 } },
+  { id: 'boss_bastion', name: '요새 함락', desc: '요새 바스티온 격파', test: (r) => r.win && r.boss === 'bastion', reward: { kind: 'scrap', n: 300 } },
+  { id: 'boss_ren', name: '그림자 사냥', desc: '그림자 렌 격파', test: (r) => r.win && r.boss === 'ren', reward: { kind: 'scrap', n: 300 } },
   { id: 'squad', name: '편대장', desc: '서로 다른 파일럿 3명으로 승리', test: (r, L) => Object.keys(L.pilotWins).length >= 3, reward: { kind: 'scrap', n: 400 } },
 ];
 

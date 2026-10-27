@@ -358,7 +358,8 @@ export class Player {
     else this.chargeT = 0;
 
     this.attackSlow = Math.max(0, this.attackSlow - dt);
-    const speed = st.speed * (this.attackSlow > 0 ? 0.45 : 1);
+    const speed = st.speed * (this.attackSlow > 0 ? 0.45 : 1) * (this.slowK || 1); // slowK: 흡착 드론 (troops.js leech)
+    this.slowK = 1;
     if (this.dashT > 0) {
       this.dashT -= dt;
       const sp = st.dashSpeed;

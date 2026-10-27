@@ -4,7 +4,7 @@ import { boot } from './main.js';
 import { LEGS, FRAMES, HEADS, PAINTS, HANGAR_PAINTS, MODULES, partPreview } from './parts.js';
 import { WEAPONS, weaponName, MAX_LEVEL, EVOLUTIONS, ARCS, ARC_FREE, slotArc } from './weapons.js';
 import { computeStats, MODES, STAT_UPS } from './player.js';
-import { ZONES, REWARDS } from './rooms.js';
+import { ZONES, REWARDS, FACTIONS, ZONE_GIMMICK } from './rooms.js';
 import { OPS } from './ops.js';
 import { pixURL } from './icons.js';
 import { RESEARCH, researchCost } from './meta.js';
@@ -14,6 +14,8 @@ import { applySkin } from './skin.js';
 import { applyStatMods } from './runhooks.js';
 import { cardImage } from './upgrades.js';
 import { BESTIARY } from './bestiary.js';
+import { FINAL_BOSSES } from './enemies.js';
+import { ARCHETYPES, ARCH_IDS, archUnlocked, archStatMods } from './archetypes.js';
 import { GALMURI } from './font-data.js';
 
 // 도트 글꼴 (UI 를 게임 화면의 픽셀 느낌과 맞춘다)
@@ -144,10 +146,15 @@ function start() {
       if (v) $('pausebuild').dataset.chips = game.chips || 0;
       if (!v) $('view').focus();
       if (v) renderSets($('pausesets'));
-      if (v) $('pausebuild').textContent = `정비 포인트 ${game.chips || 0}\n장착: ${game.weapons.list.map((w) => w.evo ? weaponName(w) : `${weaponName(w)} Lv${w.level}`).join(', ')}`;
+      if (v) {
+        const R = game.rooms, cur = Math.floor(Math.max(0, R.depth) / 3);
+        const route = R.zones.map((z, i) => (i <= cur ? ZONES[z]?.name : '?')).join(' ▸ ');
+        const A = ARCHETYPES[game.arch];
+        $('pausebuild').textContent = `${A ? `${A.name} 계열 (${A.rule})\n` : ''}경로: ${route} ▸ ${FINAL_BOSSES[R.bossKind]?.short || '타이탄'}\n정비 포인트 ${game.chips || 0}\n장착: ${game.weapons.list.map((w) => w.evo ? weaponName(w) : `${weaponName(w)} Lv${w.level}`).join(', ')}`;
+      }
     },
     result(s) {
-      $('restitle').textContent = s.win ? '작전 성공! 타이탄 격파' : `기체 대파 (${s.zone})`;
+      $('restitle').textContent = s.win ? `작전 성공! ${s.bossName || '타이탄'} 격파` : `기체 대파 (${s.zone})`;
       $('restitle').classList.toggle('win', s.win); $('result').firstElementChild.classList.toggle('win', s.win);
       const rows = [['고철 획득', `+${s.scrap + s.bonus}`], ['위협 등급', s.newBest && s.threat ? `${s.threat} 신기록` : s.threat], ['돌파한 방', `${s.win ? s.last + 1 : s.depth}/${s.last + 1}`], ['중간 보스 격파', s.mids], ['처치', s.kills], ['최대 연속 처치', s.combo], ['시간', fmt(s.time)], ['레벨', s.level], ['준 피해', Math.round(s.dealt)], ['받은 피해', Math.round(s.taken)]];
       $('resstats').innerHTML = rows.map(([k, v]) => `<div class="stat"><span>${k}</span><b>${v}</b></div>`).join('');
@@ -359,7 +366,8 @@ function start() {
         el = document.createElement('div');
         el.className = 'door pix dark' + (d.reward === 'boss' ? ' boss' : '');
         const O = OPS[d.op];
-        el.innerHTML = `<img class="px-img" alt="" src="${pixURL(rw.icon, 3)}"><b>${rw.name}</b><small>${rw.desc}</small>` + (O ? `<em class="opt" style="--c:${O.color}">${O.name}<span>${O.short}</span></em>` : '');
+        const ZN = d.zone && ZONES[d.zone], FN = d.zone && FACTIONS[d.zone];
+        el.innerHTML = `<img class="px-img" alt="" src="${pixURL(rw.icon, 3)}"><b>${d.reward === 'boss' ? FINAL_BOSSES[R.bossKind]?.short || rw.name : rw.name}</b><small>${rw.desc}</small>` + (O ? `<em class="opt" style="--c:${O.color}">${O.name}<span>${O.short}</span></em>` : '') + (ZN ? `<i class="zonetag"><u>경로</u><b>${ZN.name}</b><span>${FN ? FN.name : ''}${ZONE_GIMMICK[d.zone] ? `, ${ZONE_GIMMICK[d.zone].name}` : ''}</span></i>` : '');
         $('doors').appendChild(el);
         doorEls.set(key, el);
       }
@@ -411,6 +419,7 @@ function start() {
   };
   // 부위 탭 (부품이 많아져서 머리/프레임도 5열)
   const TABS = [
+    { key: 'arch', label: '계열', table: ARCHETYPES, ids: ARCH_IDS, arch: true },
     { key: 'head', label: '머리', table: HEADS, ids: Object.keys(HEADS) },
     { key: 'frame', label: '프레임', table: FRAMES, ids: Object.keys(FRAMES) },
     { key: 'legs', label: '다리', table: LEGS, ids: Object.keys(LEGS) },
@@ -420,7 +429,7 @@ function start() {
     { key: 'threat', label: '위협', table: THREATS, ids: Object.keys(THREATS), threat: true },
     { key: 'research', label: '연구', table: RESEARCH, ids: Object.keys(RESEARCH), research: true },
   ];
-  let tab = 'legs', confirmKey = null;
+  let tab = 'arch', confirmKey = null;
   // 업적 보상으로만 열리는 것: 어느 업적인지
   const achFor = (kind, id) => ACHIEVEMENTS.find((a) => a.reward.kind === kind && a.reward.id === id);
   const pips = (max, lv) => Array.from({ length: max }, (_, i) => `<i class="${i < lv ? 'on' : ''}"></i>`).join('');
@@ -440,7 +449,7 @@ function start() {
     STAT_DEFS.forEach(([, get], i) => { const v = get(st); range[i][0] = Math.min(range[i][0], v); range[i][1] = Math.max(range[i][1], v); });
   }
   // 파일럿과 위협(취약 프레임)까지 반영한 출격 능력치
-  const statsOf = (sel, pilot = game.meta.pilot) => applyStatMods(computeStats({ legs: sel.legs, frame: sel.frame, head: sel.head, modules: {} }, {}), runMods(game.meta.threatSel, pilot).stats);
+  const statsOf = (sel, pilot = game.meta.pilot) => applyStatMods(applyStatMods(computeStats({ legs: sel.legs, frame: sel.frame, head: sel.head, modules: {} }, {}), runMods(game.meta.threatSel, pilot).stats), archStatMods(sel.arch));
   function renderStats(preview, previewPilot = null) {
     const cur = statsOf(game.selection), pv = preview || previewPilot ? statsOf(preview || game.selection, previewPilot || game.meta.pilot) : null;
     $('statline').innerHTML = STAT_DEFS.map(([name, get, fmtv], i) => {
@@ -507,7 +516,8 @@ function start() {
       const id = sel[T.key], M = game.meta;
       const face = (img, text) => { b.innerHTML = `${img}<span>${T.label}</span>`; b.setAttribute('aria-label', `${T.label}: ${text}`); b.title = `${T.label}: ${text}`; };
       const im = (src) => `<img class="px-img" alt="" src="${src}">`;
-      if (T.research) face(im(pixURL('power', 4)), `고철 ${M.scrap}`);
+      if (T.arch) face(im(pixURL(ARCHETYPES[sel.arch || 'striker'].icon, 4)), ARCHETYPES[sel.arch || 'striker'].name);
+      else if (T.research) face(im(pixURL('power', 4)), `고철 ${M.scrap}`);
       else if (T.pilot) face(im(pixURL(PILOTS[M.pilot].icon, 4)), PILOTS[M.pilot].name);
       else if (T.threat) face(im(pixURL(M.threatOpen ? 'elite' : 'lock', 4)), M.threatOpen ? `${M.threat}점` : '잠김');
       else if (T.key === 'paint') face(`<i class="sw" style="background:${swatch(id)}"></i>`, PAINTS[id].name);
@@ -535,6 +545,22 @@ function start() {
       }
       desc(T.table[id].name, M.isUnlocked(T.key, id) ? descOf(T, id) : `${lockText(T.key, id)} ${descOf(T, id)}`);
     };
+    if (T.arch) {
+      const cur = sel.arch || 'striker';
+      const showA = (id) => { const A = ARCHETYPES[id], lock = !archUnlocked(game, id); desc(`${A.name} 계열  ${A.rule}`, `${lock ? `잠김: ${A.unlock.text}. ` : ''}${A.ruleDesc}. 시작 장비: ${A.kitText}. 단점: ${A.flaw}`); };
+      for (const id of T.ids) {
+        const A = ARCHETYPES[id], locked = !archUnlocked(game, id);
+        const el = opt(A.name, cur === id, () => {
+          if (locked) { showA(id); ui.toast(`${A.unlock.text}하면 열려요`); return; }
+          set('arch', id);
+        }, pixURL(A.icon, 5), null, (on) => showA(on ? id : cur), locked ? `<span class="chip">${LOCK_SVG}${A.unlock.chip}</span>` : `<span class="chip">${A.rule}</span>`);
+        if (locked) el.classList.add('locked', 'reward');
+        box.appendChild(el);
+      }
+      showA(cur);
+      renderStats(null);
+      return;
+    }
     if (T.pilot) {
       for (const id of T.ids) {
         const P = PILOTS[id], locked = !M.isUnlocked('pilot', id);

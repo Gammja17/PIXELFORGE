@@ -15,6 +15,9 @@ export const BESTIARY = {
   medic:    { name: '수리 드론', role: '수리', what: '다친 적을 수리 빔으로 고친다', how: '이놈부터 잡아라', drop: ['module', 'reactor'], tint: [0.8, 1.5, 0.9] },
   miner:    { name: '지뢰 부설기', role: '지뢰', what: '맴돌며 지뢰를 깐다', how: '지뢰는 쏘면 터진다. 적 근처에서 터뜨려라', drop: ['weapon', 'mine'], tint: [1.5, 1.4, 0.55] },
   charger:  { name: '돌격 기체', role: '돌격', what: '바닥에 경로를 그리고 직진 돌격', how: '옆으로 피하면 벽에 박혀 기절', drop: ['module', 'booster'], tint: [1.55, 0.75, 0.65] },
+  grappler: { name: '견인 기체', role: '견인', what: '노란 조준선 뒤 갈고리. 맞으면 끌려간다', how: '선이 깜빡이면 대시로 피하라', drop: ['weapon', 'rod'], tint: [1.1, 1.3, 0.9] },
+  leech:    { name: '흡착 드론', role: '흡착', what: '달라붙어 기동을 크게 떨어뜨린다', how: '대시하면 떨어져 나가 기절한다', drop: ['module', 'booster'], tint: [1.4, 0.8, 1.2] },
+  amp:      { name: '증폭 탑', role: '증폭', what: '붉은 고리 안의 적이 빨라지고 단단해진다', how: '탑부터 부숴라', drop: ['module', 'reactor'], tint: [1.4, 0.85, 0.85] },
   drone:    { name: '정찰 드론', role: '기본', what: '무리 지어 날아와 몸으로 부딪친다', how: '모아서 한 번에', drop: ['weapon', 'funnel'] },
   // ---- 중간 보스 ----
   warden: { name: '나선 포대', role: '중간 보스', what: '회전 나선과 고리 연사', how: '나선의 빈 줄을 타고 접근', drop: ['weapon', 'ricochet'] },
@@ -25,6 +28,8 @@ export const BESTIARY = {
   reaper: { name: '추적 돌격기', role: '중간 보스', what: '돌진하며 탄을 깔고 지나간다', how: '돌진 경로 옆으로 피하고 뒤를 쳐라', drop: ['weapon', 'disc'] },
   // ---- 최종 보스 ----
   titan: { name: '타이탄', role: '최종 보스', what: '내려찍기, 탄막, 돌진을 번갈아 쓴다. 쓰러뜨리면 MK-II 로 다시 일어난다', how: '붉은 원과 예고선을 보고 움직이고, 오버드라이브는 MK-II 에 아껴라' },
+  bastion: { name: '요새 바스티온', role: '최종 보스', what: '느리지만 포격 비와 조여 오는 고리로 길을 막는다. 무너지면 떠다니는 포탑 코어가 된다', how: '표식 사이를 계속 움직이고, 고리가 닫히기 전에 틈으로 빠져라' },
+  ren:     { name: '그림자 렌', role: '최종 보스', what: '빠른 돌진 베기를 연달아 쓰고, 지나간 자리에 탄을 깐다. 각성하면 더 빨라진다', how: '붉은 선이 그어지면 선 옆으로. 돌진이 끝난 직후가 반격 기회' },
   // ---- 구역 수호자 ----
   worm:   { name: '샌드웜', role: '수호자', what: '땅속으로 파고들었다가 발밑에서 솟구친다', how: '마디를 부술수록 머리가 약해진다', drop: ['module', 'armor'] },
   crane:  { name: '크레인 워커', role: '수호자', what: '미사일 팔과 집게 팔이 붙어 있으면 몸통이 단단하다', how: '팔부터 뜯어라. 뜯은 팔은 내 것', drop: ['weapon', 'missile'] },

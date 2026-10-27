@@ -126,6 +126,8 @@ export const PROPS = {
 };
 
 // 적이 위험 요소에 받는 피해: 최대 체력 비율 (정예/보스급은 훨씬 적게)
+// 구역 기믹 방 (rooms.js ZONE_GIMMICK 가 고른다)
+export const ZONE_SPECIAL = new Set(['sandstorm', 'press', 'resonance', 'eruption', 'blizzard', 'lowgrav']);
 function enemyDmg(e, frac) {
   const big = e.boss || e.T?.part;
   return e.maxHp * frac * (big ? 0.04 : e.elite ? 0.3 : 1);
@@ -162,6 +164,8 @@ export class RoomHazards {
   }
 
   clear() {
+    if (this.base && this.special === 'blizzard') { const sc = this.game.scene; sc.sun.intensity = this.base.sun; sc.ambientSky = this.base.sky; sc.ambientGround = this.base.gnd; sc.skyColor = sc.fog.color = this.base.fog; }
+    this.game.lowGrav = 1; this.strikes = []; this.gust = null;
     this.list = []; this.props = []; this.areas = []; this.special = null; this.t = 0;
     for (const k in this.inst) { this.inst[k].body.count = 0; if (this.inst[k].glow) this.inst[k].glow.count = 0; }
     this.chev.count = 0; this.band.count = 0;
@@ -343,6 +347,18 @@ export class RoomHazards {
       this.dark = 1;
     } else if (kind === 'storm') {
       this.rMax = Math.hypot(R.hx, R.hz) + 1; this.rMin = 5.5; this.ringR = this.rMax; this.ringT = 0;
+    } else if (kind === 'sandstorm') {
+      this.gustT = 3; this.gust = null; this.windA = Math.random() * 6.28;
+    } else if (kind === 'press' || kind === 'eruption') {
+      this.strikes = []; this.strikeT = 2;
+    } else if (kind === 'resonance') {
+      this.reso = 0; this.resoKills = g.stats.kills;
+    } else if (kind === 'blizzard') {
+      this.base = { sun: sc.sun.intensity, sky: [...sc.ambientSky], gnd: [...sc.ambientGround], fog: [...sc.skyColor] };
+      sc.sun.intensity *= 0.55; sc.ambientSky = sc.ambientSky.map((v) => v * 0.7); sc.skyColor = sc.fog.color = [0.5, 0.56, 0.66];
+      this.freezeT = 5;
+    } else if (kind === 'lowgrav') {
+      g.lowGrav = 2.2;
     }
   }
   // 고리 밖인가 (적 소환 위치 거르기)
@@ -492,6 +508,7 @@ export class RoomHazards {
 
   updateSpecial(dt, fight) {
     const g = this.game, sc = g.scene, p = g.player, en = g.enemies;
+    if (this.special && ZONE_SPECIAL.has(this.special)) return this.updateZoneSpecial(dt, fight);
     if (this.special === 'dark') {
       // 제압하면 불이 다시 들어온다
       if (!fight) this.dark = Math.max(0, this.dark - dt * 0.8);
@@ -510,6 +527,88 @@ export class RoomHazards {
         if (Math.hypot(p.x, p.z) > this.ringR - p.r * 0.5) p.hurt(8 * en.k.dmg, -p.x, -p.z);
         for (const e of en.list) if (e.spawnT > 0.5 && Math.hypot(e.x, e.z) > this.ringR) en.hit(e, enemyDmg(e, 0.15), -e.x, -e.z, 2, { noNum: true });
       }
+    }
+  }
+
+  // ---- 구역 기믹 방 ----
+  updateZoneSpecial(dt, fight) {
+    const g = this.game, p = g.player, en = g.enemies, fx = g.fx, R = this.rooms, K = en.k;
+    const kind = this.special;
+    if (kind === 'sandstorm') {
+      // 모래 폭풍: 몇 초마다 한쪽으로 돌풍. 나도 적도 밀린다. 바람 방향은 화살 점으로 미리 보인다
+      if (!fight) return;
+      this.gustT -= dt;
+      if (!this.gust && this.gustT <= 1.2 && !this.gustWarn) { this.gustWarn = true; this.windA += (Math.random() - 0.5) * 2.4; g.ui.toast('돌풍이 온다!'); g.sfx.play('alarm', { vol: 0.25 }); }
+      const wx = Math.sin(this.windA), wz = Math.cos(this.windA);
+      if (this.gustWarn && !this.gust && (g.frame & 1)) for (let i = 0; i < 3; i++) { const sx = p.x + (Math.random() - 0.5) * 30, sz = p.z + (Math.random() - 0.5) * 30; fx.pxr.emit({ position: [sx, 0.3 + Math.random() * 2, sz], velocity: [wx * 8, 0, wz * 8], life: 0.4, size: 1, sizeEnd: 1, ramp: [[0.95, 0.82, 0.6]], emissive: 0.3, hard: true }); }
+      if (this.gustT <= 0 && !this.gust) { this.gust = 2.2; this.gustWarn = false; }
+      if (this.gust) {
+        this.gust -= dt;
+        const f = 15 * dt;
+        if (p.dashT <= 0) { p.ex += wx * f; p.ez += wz * f; }
+        for (const e of en.list) if (!e.boss && !e.T.anchor && !e.guard && e.spawnT > 0.3) { e.kx += wx * f * 1.6; e.kz += wz * f * 1.6; }
+        for (let i = 0; i < 6; i++) { const sx = p.x + (Math.random() - 0.5) * 34 - wx * 12, sz = p.z + (Math.random() - 0.5) * 34 - wz * 12; fx.pxr.emit({ position: [sx, 0.2 + Math.random() * 2.5, sz], velocity: [wx * 24, 0, wz * 24], life: 0.5, size: Math.random() < 0.3 ? 2 : 1, sizeEnd: 1, ramp: [[0.98, 0.88, 0.66], [0.8, 0.64, 0.45]], emissive: 0.3, hard: true }); }
+        if (this.gust <= 0) { this.gust = null; this.gustT = 5 + Math.random() * 2; }
+      }
+    } else if (kind === 'press' || kind === 'eruption') {
+      // 압착기 / 분화: 바닥 표식 1초 뒤 내리꽂힘. 적도 같이 맞는다 (끌어들이면 이득)
+      if (fight) {
+        this.strikeT -= dt;
+        if (this.strikeT <= 0) {
+          this.strikeT = kind === 'press' ? 1.6 : 1.1;
+          const n = kind === 'press' ? 2 : 3;
+          for (let i = 0; i < n; i++) {
+            const near = i === 0, a = Math.random() * 6.28, d = near ? Math.random() * 3 : 3 + Math.random() * 8;
+            const x = Math.max(-R.hx + 1.5, Math.min(R.hx - 1.5, p.x + Math.sin(a) * d)), z = Math.max(-R.hz + 1.5, Math.min(R.hz - 1.5, p.z + Math.cos(a) * d));
+            this.strikes.push({ x, z, t: 0, warn: kind === 'press' ? 1.1 : 0.95, r: kind === 'press' ? 2.2 : 1.8 });
+          }
+        }
+      }
+      for (let i = this.strikes.length - 1; i >= 0; i--) {
+        const s = this.strikes[i];
+        s.t += dt;
+        const col = kind === 'press' ? [1, 0.75, 0.2] : [1, 0.42, 0.12];
+        if (s.t < s.warn) {
+          if ((g.frame & 1) === 0) { const n = 14, k = s.t / s.warn; for (let j = 0; j < n; j++) { const a = (j / n) * 6.28 + s.t; fx.pxr.emit({ position: [s.x + Math.sin(a) * s.r, 0.08, s.z + Math.cos(a) * s.r], velocity: [0, 0, 0], life: 0.07, size: k > 0.7 ? 2 : 1, sizeEnd: 1, ramp: [col], emissive: 0.7, hard: true }); } }
+          if (kind === 'eruption' && (g.frame & 1)) fx.pxr.emit({ position: [s.x, 8 - 8 * (s.t / s.warn), s.z], velocity: [0, -9, 0], life: 0.06, size: 3, sizeEnd: 2, ramp: [[1, 0.95, 0.6], [1, 0.5, 0.15]], emissive: 0.8, hard: true });
+          continue;
+        }
+        this.strikes.splice(i, 1);
+        fx.explosion(s.x, 0.2, s.z, kind === 'press' ? 1.1 : 1, { color: col, scorch: kind === 'eruption' });
+        if (kind === 'press') { fx.ring(s.x, 0.12, s.z, s.r, [1, 0.8, 0.3], 0.18); g.sfx.play('clank', { pitch: 0.6 }); }
+        g.sfx.play('boom', { vol: 0.7 });
+        fx.addTrauma(0.15);
+        en.each(s.x, s.z, s.r, (e) => { if (!e.guard) en.hit(e, enemyDmg(e, 0.6), e.x - s.x, e.z - s.z, 8, { stun: 0.6, launch: 6 }); });
+        if (Math.hypot(p.x - s.x, p.z - s.z) < s.r * 0.9 && !p.stats.flying) p.hurt(14 * K.dmg, p.x - s.x, p.z - s.z);
+      }
+    } else if (kind === 'resonance') {
+      // 공명 수정: 적을 처치할수록 공명이 차고, 가득 차면 번개가 근처 적 여럿을 꿰뚫는다
+      const kills = g.stats.kills - this.resoKills; this.resoKills = g.stats.kills;
+      if (fight) this.reso += kills / 22;
+      if (this.reso >= 1) {
+        this.reso = 0;
+        const list = []; en.each(p.x, p.z, 11, (e) => { if (!e.dead && e.spawnT > 0.3) list.push(e); });
+        list.sort((a, b) => b.maxHp - a.maxHp);
+        let prev = [p.x, 1.4, p.z];
+        for (const e of list.slice(0, 8)) { const q = [e.x, 0.9, e.z]; g.weapons.bolt(prev, q, [0.55, 0.95, 1]); en.hit(e, Math.max(40 * p.stats.dmgMul, enemyDmg(e, 0.5)), e.x - p.x, e.z - p.z, 4, { stun: 0.5 }); prev = q; }
+        fx.impact([p.x, 1.4, p.z], [0.55, 0.95, 1], 1.2); g.sfx.play('beam', { pitch: 1.6, vol: 0.6 });
+        g.ui.toast('공명 방출!');
+      }
+      if (fight && (g.frame & 3) === 0 && this.reso > 0.05) { const a = Math.random() * 6.28, r = 1.2; fx.pxr.emit({ position: [p.x + Math.sin(a) * r, 0.1, p.z + Math.cos(a) * r], velocity: [0, 2 + this.reso * 4, 0], life: 0.2, size: this.reso > 0.75 ? 2 : 1, sizeEnd: 1, ramp: [[0.8, 1, 1], [0.55, 0.95, 1]], emissive: 0.7, hard: true }); }
+    } else if (kind === 'blizzard') {
+      // 눈보라: 시야가 흐리고, 몇 초마다 한파가 몰아쳐 모든 적이 잠깐 얼어붙는다
+      if (!fight) { const B = this.base, sc = g.scene; sc.skyColor = sc.fog.color = sc.fog.color.map((v, i) => v + (B.fog[i] - v) * Math.min(1, dt * 2)); return; }
+      this.freezeT -= dt;
+      if (this.freezeT <= 1 && !this.freezeWarn) { this.freezeWarn = true; g.ui.toast('한파가 몰아친다!'); }
+      if (this.freezeT <= 0) {
+        this.freezeT = 6.5; this.freezeWarn = false;
+        for (const e of en.list) if (!e.guard && !e.boss) { e.stun = Math.max(e.stun || 0, 1.6); e.flash = 0.1; }
+        fx.ring(p.x, 0.12, p.z, 9, [0.75, 0.92, 1], 0.4); g.sfx.play('shield', { pitch: 0.7 });
+      }
+      for (let i = 0; i < 4; i++) { const sx = p.x + (Math.random() - 0.5) * 30, sz = p.z + (Math.random() - 0.5) * 30; fx.pxr.emit({ position: [sx, 4 + Math.random() * 2, sz], velocity: [2.5, -5, 1], life: 0.9, size: 1, sizeEnd: 1, ramp: [[0.95, 0.97, 1]], emissive: 0.4, hard: true }); }
+    } else if (kind === 'lowgrav') {
+      // 저중력: 넉백과 띄우기가 2배 넘게. 떠오른 점이 천천히 올라간다
+      if ((g.frame & 3) === 0) { const sx = p.x + (Math.random() - 0.5) * 24, sz = p.z + (Math.random() - 0.5) * 24; fx.pxr.emit({ position: [sx, 0.1, sz], velocity: [0, 1.2, 0], life: 1.2, size: 1, sizeEnd: 1, ramp: [[0.6, 0.9, 1], [0.4, 0.6, 0.9]], emissive: 0.4, hard: true }); }
     }
   }
 

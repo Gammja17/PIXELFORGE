@@ -14,6 +14,7 @@ import { RoomHazards } from './hazards.js';
 import { pickGuardian } from './guardians.js';
 import { OPS, pickOp } from './ops.js';
 import { BESTIARY } from './bestiary.js';
+import { FINAL_BOSSES } from './enemies.js';
 
 //  floor: 바닥 무늬, edge: 테두리 벽 (rock | box), music: [곡, 재생 속도], guardian: 수호자 종류
 //  cover: 부서지는 엄폐물, haz: 위험 요소별 기본 개수 (깊이에 따라 늘어난다)
@@ -67,6 +68,17 @@ export const REWARDS = {
 export const SPECIALS = {
   dark:  { name: '정전 구역', desc: '정전! 기체 조명 밖은 어둠 속이다' },
   storm: { name: '수축 방어막', desc: '방어막 수축! 붉은 고리 밖은 피해를 입는다' },
+  sandstorm: { name: '모래 폭풍', desc: '모래 폭풍! 돌풍이 나도 적도 한쪽으로 날린다. 벽 쪽으로 몰아넣어라' },
+  press:     { name: '압착 라인', desc: '압착기 가동! 노란 표식에 내리꽂힌다. 적을 표식 위로 끌어들여라' },
+  resonance: { name: '공명 수정', desc: '공명 수정! 적을 잡을수록 공명이 차고, 가득 차면 번개가 쏟아진다' },
+  eruption:  { name: '분화 구역', desc: '분화! 붉은 표식에 용암 덩어리가 떨어진다' },
+  blizzard:  { name: '눈보라', desc: '눈보라! 시야가 흐리다. 한파가 몰아치면 적이 잠깐 얼어붙는다' },
+  lowgrav:   { name: '저중력 구역', desc: '저중력! 맞은 적이 훨씬 멀리 날아간다' },
+};
+// 구역마다 고유 기믹 방 (그 구역에서만 나온다)
+export const ZONE_GIMMICK = {
+  desert: { id: 'sandstorm', name: '모래 폭풍' }, factory: { id: 'press', name: '압착 라인' }, crystal: { id: 'resonance', name: '공명 수정' },
+  foundry: { id: 'eruption', name: '분화 구역' }, tundra: { id: 'blizzard', name: '눈보라' }, orbital: { id: 'lowgrav', name: '저중력' },
 };
 
 // ---- 난이도 곡선 ----
@@ -101,21 +113,22 @@ export const curveAt = (depth) => CURVE[Math.max(0, Math.min(CURVE.length - 1, d
 
 // 처음 나오는 깊이 (스폰 조건). 위 표의 '새로 나오는 적' 칸과 같다
 // 역할 있는 적은 초반부터 하나씩 섞어서 컨셉을 보여준다 (처음 만나면 소개 카드)
-export const FIRST = { tank: 1, charger: 1, splitter: 2, shield: 2, sniper: 3, brute: 3, spinner: 3, gunDrone: 4, assassin: 4, miner: 3, medic: 4 };
+export const FIRST = { tank: 1, charger: 1, splitter: 2, shield: 2, leech: 2, sniper: 3, brute: 3, spinner: 3, grappler: 3, gunDrone: 4, assassin: 4, miner: 3, medic: 4, amp: 4 };
 
 // 역할 기체 스폰 표: [종류, 물량 비용, 마리 수, 이 깊이부터 +1]. 등장 깊이는 FIRST
 const TROOPS = [
   ['charger', 3, 1, 6], ['splitter', 2.5, 2, 6], ['shield', 3, 1, 6], ['sniper', 3.5, 1, 7],
   ['miner', 3, 1, 9], ['assassin', 3.5, 1, 7], ['medic', 4, 1, 9],
+  ['grappler', 3.5, 1, 7], ['leech', 1.2, 3, 6], ['amp', 4.5, 1, 99],
 ];
 // 구역 세력: 구역마다 자주 나오는 역할 적 (같은 적 구성이 반복되지 않고 구역마다 성격이 다르게)
 export const FACTIONS = {
-  desert:  { name: '고철 약탈단', troops: ['splitter', 'miner', 'charger'] },
-  factory: { name: '공장 경비대', troops: ['shield', 'charger', 'medic'] },
-  crystal: { name: '수정 공명체', troops: ['sniper', 'assassin', 'splitter'] },
-  foundry: { name: '주조소 중장대', troops: ['charger', 'shield', 'miner'] },
-  tundra:  { name: '설원 저격대', troops: ['sniper', 'shield', 'medic'] },
-  orbital: { name: '궤도 방위군', troops: ['assassin', 'sniper', 'medic'] },
+  desert:  { name: '고철 약탈단', troops: ['splitter', 'miner', 'grappler'] },
+  factory: { name: '공장 경비대', troops: ['shield', 'amp', 'charger'] },
+  crystal: { name: '수정 공명체', troops: ['sniper', 'assassin', 'leech'] },
+  foundry: { name: '주조소 중장대', troops: ['charger', 'shield', 'grappler'] },
+  tundra:  { name: '설원 저격대', troops: ['sniper', 'medic', 'leech'] },
+  orbital: { name: '궤도 방위군', troops: ['assassin', 'amp', 'leech'] },
 };
 const DOOR_HALF = 2.2;
 const SIDE = { W: [-1, 0], S: [0, -1], E: [1, 0], N: [0, 1] }; // 방향 → (x, z) 부호
@@ -185,7 +198,14 @@ export class Rooms {
   midHp(pw) { const [b, e] = curveAt(this.depth).mid; return b * Math.pow(pw, e); }
   guardHp() { return curveAt(this.depth).guard; }
 
-  newRun() { this.depth = -1; this.path = []; this.seed = (Math.random() * 1e9) | 0; this.zones = pickZones(this.seed); this.lastLayout = null; this.lastSpecial = null; }
+  newRun() {
+    this.depth = -1; this.path = []; this.seed = (Math.random() * 1e9) | 0; this.zones = pickZones(this.seed); this.lastLayout = null; this.lastSpecial = null;
+    // 최종 보스: 첫 출격은 타이탄, 그다음부터 지난번과 다른 보스 (enemies.js FINAL_BOSSES)
+    let last = null; try { last = localStorage.getItem('mechaforge.boss'); } catch { /* 무시 */ }
+    const runs = this.game.meta?.data?.life?.runs || 0, ids = Object.keys(FINAL_BOSSES).filter((k) => k !== last);
+    this.bossKind = runs < 1 ? 'titan' : ids[(Math.random() * ids.length) | 0];
+    try { localStorage.setItem('mechaforge.boss', this.bossKind); } catch { /* 무시 */ }
+  }
 
   // 다음 방 후보 (문 2개까지)
   rollExits(depth) {
@@ -195,7 +215,7 @@ export class Rooms {
     const pool = ['part', 'part', 'system', 'supply', 'xp', 'elite'];
     if (depth >= 1) pool.push('workshop', 'cargo');
     if (depth <= 1) pool.splice(pool.indexOf('elite'), 1);
-    const n = depth === 0 ? 2 : R() < 0.75 ? 2 : 1;
+    const n = depth === 0 || (depth + 1) % 3 === 0 ? 2 : R() < 0.75 ? 2 : 1; // 구역 경계에서는 갈림길 2개
     const out = [];
     if (depth === 3 || depth === 6) out.push('workshop');
     while (out.length < n) { const r = R.pick(pool); if (!out.includes(r)) out.push(r); }
@@ -211,11 +231,12 @@ export class Rooms {
   addMesh(geo, mat) { const m = this.game.scene.add(new Mesh(geo, mat)); this.meshes.push(m); return m; }
 
   // ---- 방 만들기 ----
-  enter(reward, entrySide = 'E', op = null) {
+  enter(reward, entrySide = 'E', op = null, zone = null) {
     const g = this.game, sc = g.scene;
     this.clear();
     this.depth++;
     const depth = this.depth;
+    if (zone && ZONES[zone]) this.zones[Math.floor(depth / 3)] = zone; // 갈림길에서 고른 다음 구역
     const zoneId = this.force.zone || this.zoneAt(depth);
     const Z = ZONES[zoneId];
     this.zone = zoneId; this.reward = reward;
@@ -232,6 +253,8 @@ export class Rooms {
     // 특수 방 (연속으로는 안 나온다). 수축 방어막은 막힌 구조물이 없는 방에서만
     let special = this.force.special ?? null; // force.special: undefined = 무작위, null = 없음
     if (this.force.special === undefined && this.op === 'survive' && depth >= 4 && !this.lastSpecial && R() < 0.45) special = R() < 0.5 ? 'dark' : 'storm';
+    // 구역 기믹: 전투 방이면 구역마다 한 번은 꼭 (구역 둘째 방), 그 밖에도 가끔
+    else if (this.force.special === undefined && combat && depth >= 1 && !this.lastSpecial && ZONE_GIMMICK[zoneId] && this.op !== 'duel' && (depth >= 3 && depth % 3 === 1 || R() < 0.25)) special = ZONE_GIMMICK[zoneId].id;
     this.special = special; this.lastSpecial = special;
     let layout = this.force.layout || pickLayout(R, reward, this.lastLayout);
     if (special === 'storm' && !['open', 'pillars'].includes(layout)) layout = R() < 0.5 ? 'open' : 'pillars';
@@ -248,6 +271,15 @@ export class Rooms {
     const farSides = exits.length === 1 ? [R() < 0.5 ? 'W' : 'S'] : ['W', 'S'];
     const taken = [this.op];
     this.doors = exits.map((rw, i) => { const o = pickOp(rw, depth + 1, R, taken); taken.push(o); return { side: farSides[i], reward: rw, op: o, open: false, fade: 0 }; });
+    // 구역 경계: 문마다 다른 구역으로 이어진다 (경로 분기). 정해 둔 다음 구역 + 아직 안 간 구역 하나
+    if ((depth + 1) % 3 === 0 && depth + 1 < this.last && this.doors.length >= 2) {
+      const idx = (depth + 1) / 3, used = this.zones.slice(0, idx);
+      const plan = this.zones[idx] && !used.includes(this.zones[idx]) ? this.zones[idx] : null;
+      const pool = Object.keys(ZONES).filter((z) => !used.includes(z) && z !== plan);
+      const a = plan || R.pick(pool), rest = pool.filter((z) => z !== a), cand = [a, rest.length ? R.pick(rest) : a];
+      if (R() < 0.5) cand.reverse();
+      this.doors.forEach((d, i) => { d.zone = cand[i % 2]; });
+    }
     this.entry = { side: entrySide, reward: null, open: false, entry: true, fade: 0 };
 
     // 바닥
@@ -597,7 +629,7 @@ export class Rooms {
     // 문 통과
     if (this.phase === 'exits') for (const d of this.doors) {
       const [sx, sz] = SIDE[d.side];
-      if ((sx && p.x * sx > this.hx + 0.6) || (sz && p.z * sz > this.hz + 0.6)) { g.nextRoom(d.reward, d.side === 'W' ? 'E' : 'N', d.op); break; }
+      if ((sx && p.x * sx > this.hx + 0.6) || (sz && p.z * sz > this.hz + 0.6)) { g.nextRoom(d.reward, d.side === 'W' ? 'E' : 'N', d.op, d.zone); break; }
     }
   }
 

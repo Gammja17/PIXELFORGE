@@ -137,6 +137,30 @@ class Grid {
   }
 }
 
+// ---- 최종 보스 계열: 런마다 하나 (rooms.bossKind). 같은 패턴 재료를 보스마다 다르게 섞는다 ----
+const MK1_STATES = new Set(['ring', 'volley', 'spiral', 'summon', 'sweep', 'stomp', 'stompAir', 'stompFall', 'drop']);
+const MK2_STATES = new Set(['halo', 'rain', 'charge', 'galaxy', 'cage']);
+export const FINAL_BOSSES = {
+  titan: {
+    id: 'titan', name: '타이탄 MK-I', short: '타이탄', mk2: '타이탄 MK-II', breakText: '타이탄 다리 붕괴… 코어가 살아 있다!', scale: 2.2, hp: 1, speed: 1,
+    build: { legs: 'walker', paint: 'boss', weapons: [{ id: 'laser', slot: 'armR' }, { id: 'shotgun', slot: 'armL' }, { id: 'missile', slot: 'shR' }, { id: 'missile', slot: 'shL' }], modules: { armor: 3, booster: 2, antenna: 1 } },
+    build2: { legs: 'jet', frame: 'fortress', paint: 'boss', weapons: [{ id: 'laser', slot: 'armR' }, { id: 'laser', slot: 'armL' }, { id: 'missile', slot: 'shR' }, { id: 'missile', slot: 'shL' }, { id: 'missile', slot: 'back' }], modules: { armor: 3, booster: 3, reactor: 2 } },
+    p1: ['ring', 'volley', 'spiral', 'summon', 'sweep', 'stomp'], p2: ['halo', 'rain', 'charge', 'galaxy', 'cage'],
+  },
+  bastion: {
+    id: 'bastion', name: '요새 바스티온', short: '바스티온', mk2: '바스티온 포탑 코어', breakText: '궤도 장갑 파괴… 포탑 코어가 분리된다!', scale: 2.4, hp: 1.15, speed: 0.62,
+    build: { legs: 'tankbase', frame: 'fortress', head: 'periscope', paint: 'olive', weapons: [{ id: 'cannon', slot: 'shR' }, { id: 'cannon', slot: 'shL' }, { id: 'missile', slot: 'back' }, { id: 'shotgun', slot: 'armR' }, { id: 'shotgun', slot: 'armL' }], modules: { armor: 3 } },
+    build2: { legs: 'hover', frame: 'fortress', head: 'periscope', paint: 'olive', weapons: [{ id: 'cannon', slot: 'shR' }, { id: 'cannon', slot: 'shL' }, { id: 'missile', slot: 'back' }, { id: 'laser', slot: 'armR' }, { id: 'laser', slot: 'armL' }], modules: { armor: 3 } },
+    p1: ['rain', 'ring', 'summon', 'volley', 'stomp', 'cage'], p2: ['rain', 'halo', 'cage', 'rain', 'spiral'],
+  },
+  ren: {
+    id: 'ren', name: '그림자 렌', short: '렌', mk2: '렌 각성', breakText: '렌의 가면이 깨진다… 진짜 속도가 나온다!', scale: 2.0, hp: 0.85, speed: 1.55,
+    build: { legs: 'reverse', frame: 'ninja', head: 'samurai', paint: 'stealth', weapons: [{ id: 'saber', slot: 'armR' }, { id: 'saber', slot: 'armL' }, { id: 'funnel', slot: 'back' }], modules: { booster: 3 } },
+    build2: { legs: 'jet', frame: 'ninja', head: 'samurai', paint: 'stealth', weapons: [{ id: 'saber', slot: 'armR' }, { id: 'saber', slot: 'armL' }, { id: 'funnel', slot: 'back' }, { id: 'missile', slot: 'shR' }], modules: { booster: 3 } },
+    p1: ['charge', 'volley', 'sweep', 'charge', 'galaxy', 'summon'], p2: ['charge', 'halo', 'charge', 'galaxy', 'cage', 'sweep'],
+  },
+};
+
 export class Enemies {
   constructor(game) {
     this.game = game;
@@ -324,19 +348,20 @@ export class Enemies {
   spawnBoss(x = 0, z = 0) {
     const g = this.game;
     this.bossCount++;
-    const mech = buildMech({ legs: 'walker', paint: 'boss', weapons: [{ id: 'laser', slot: 'armR' }, { id: 'shotgun', slot: 'armL' }, { id: 'missile', slot: 'shR' }, { id: 'missile', slot: 'shL' }], modules: { armor: 3, booster: 2, antenna: 1 } });
-    const S = 2.2;
+    const V = FINAL_BOSSES[g.rooms.bossKind] || FINAL_BOSSES.titan;
+    const mech = buildMech(V.build);
+    const S = V.scale;
     mech.root.scale = [S, S, S];
     g.scene.add(mech.root);
-    const hp = 16000 * (1 + g.level * 0.06) * Math.pow(this.k.pw, 0.6);
-    this.boss = { mech, x, z, y: 22, vy: 0, r: 2.0, hp, maxHp: hp, flash: 0, yaw: 0, aim: 0, state: 'drop', st: 0, pattern: 0, anim: { phase: 0 }, boss: true, mass: 40, kx: 0, kz: 0, T: { dmg: 22, xp: 0 } };
+    const hp = 16000 * V.hp * (1 + g.level * 0.06) * Math.pow(this.k.pw, 0.6);
+    this.boss = { mech, V, legs: V.build.legs, x, z, y: 22, vy: 0, r: 2.0, hp, maxHp: hp, flash: 0, yaw: 0, aim: 0, state: 'drop', st: 0, pattern: 0, anim: { phase: 0 }, boss: true, mass: 40, kx: 0, kz: 0, T: { dmg: 22, xp: 0 } };
     this.warn.visible = true;
     this.warn.position = [x, 0.05, z];
     this.warn.scale = [3.2, 1, 3.2];
     g.ui.banner('경고: 대형 기체 강하!', true);
     g.sfx.play('alarm');
-    g.ui.bossBar(1, '타이탄 MK-I');
-    g.ui.enemyIntro?.('titan', true);
+    g.ui.bossBar(1, V.name);
+    g.ui.enemyIntro?.(V.id, true);
   }
 
   // 타이탄이 처음 쓰러지면: 다리가 터져 나가고 비행 코어 MK-II 로 재기동 (체력 55% 로 다시)
@@ -345,7 +370,7 @@ export class Enemies {
     B.reborn = true; B.inv = true; B.hp = 1; B.state = 'reborn'; B.st = 0; B.kx = B.kz = 0; B.vy = 0; B.y = 0;
     this.warn.visible = false;
     g.shots.enemyList.length = 0; this.tracks = []; this.strikes = [];
-    g.ui.banner('타이탄 다리 붕괴… 코어가 살아 있다!', true); g.sfx.play('alarm');
+    g.ui.banner(B.V.breakText, true); g.sfx.play('alarm');
     g.hitStop(0.15); g.slowMo(1.0); fx.addTrauma(0.9);
     fx.explosion(B.x, 1.5, B.z, 2.6, { color: [1, 0.55, 0.3] }); g.sfx.play('bigboom');
   }
@@ -357,8 +382,8 @@ export class Enemies {
       // 다리 대신 추진기를 단 상체로 갈아 끼운다
       B.swapped = true;
       g.scene.remove(B.mech.root);
-      B.mech = buildMech({ legs: 'jet', frame: 'fortress', paint: 'boss', weapons: [{ id: 'laser', slot: 'armR' }, { id: 'laser', slot: 'armL' }, { id: 'missile', slot: 'shR' }, { id: 'missile', slot: 'shL' }, { id: 'missile', slot: 'back' }], modules: { armor: 3, booster: 3, reactor: 2 } });
-      B.mech.root.scale = [2.4, 2.4, 2.4]; B.legs = 'jet';
+      B.mech = buildMech(B.V.build2);
+      const s2 = B.V.scale * 1.09; B.mech.root.scale = [s2, s2, s2]; B.legs = B.V.build2.legs;
       g.scene.add(B.mech.root);
       fx.explosion(B.x, 2, B.z, 3, { color: [1, 0.5, 0.3] }); fx.ring(B.x, 0.2, B.z, 9, [1, 0.4, 0.3], 0.6); fx.addTrauma(0.8); g.sfx.play('bigboom');
       this.ring(B.x, B.z, 24, 4, 12, 'orb', 0, 1.4);
@@ -366,7 +391,7 @@ export class Enemies {
     if (B.swapped) B.y += (1.4 - B.y) * Math.min(1, dt * 3);
     if (B.st > 2.6) {
       B.inv = false; B.maxHp *= 0.55; B.hp = B.maxHp; B.state = 'walk'; B.st = 0; B.pattern = 0; B.flash = 0;
-      g.ui.bossBar(1, '타이탄 MK-II'); g.ui.banner('타이탄 MK-II 기동!', true); g.sfx.play('overdrive');
+      g.ui.bossBar(1, B.V.mk2); g.ui.banner(`${B.V.mk2} 기동!`, true); g.sfx.play('overdrive');
     }
   }
 
@@ -377,10 +402,10 @@ export class Enemies {
     let move = 0;
     if (B.state === 'walk') {
       move = 1;
-      const sp = d > 5 ? 3.2 : 0;
+      const sp = d > 5 ? 3.2 * B.V.speed : 0;
       B.x += Math.sin(toP) * sp * dt; B.z += Math.cos(toP) * sp * dt;
       B.yaw = toP;
-      if (B.st > (P2 ? 0.8 : 1.2)) { const L = ['halo', 'rain', 'charge', 'galaxy', 'cage']; B.state = L[B.pattern++ % L.length]; B.st = 0; B.shots = 0; B.acc = 0; }
+      if (B.st > (P2 ? 0.8 : 1.2) / Math.sqrt(B.V.speed)) { const L = B.V.p2; B.state = L[B.pattern++ % L.length]; B.st = 0; B.shots = 0; B.acc = 0; }
     } else if (B.state === 'halo') {
       // 회전 레이저 우리: 짧은 빔 5(2페이즈 6)개가 몸을 중심으로 돈다. 경고 1초 → 3초
       const n = P2 ? 6 : 5, L = 10, W = 0.8, live = B.st > 1;
@@ -450,12 +475,14 @@ export class Enemies {
     const dx = p.x - B.x, dz = p.z - B.z, d = Math.hypot(dx, dz) || 1;
     const toP = Math.atan2(dx, dz);
     let move = 0;
+    // 패턴 공유: MK-I 이 MK-II 패턴을 쓰거나 그 반대도 된다 (보스마다 패턴 목록이 다르다)
+    const mk2Turn = B.reborn ? !MK1_STATES.has(B.state) : MK2_STATES.has(B.state);
     if (B.state === 'reborn') this.updateReborn(B, dt);
-    else if (B.reborn) move = this.updateMk2(B, dt, { dx, dz, d, toP });
+    else if (mk2Turn) { const y = B.y; move = this.updateMk2(B, dt, { dx, dz, d, toP }); if (!B.reborn) B.y = y; }
     const P2 = B.hp < B.maxHp * 0.5; // 2페이즈: 패턴 간격이 짧아지고 탄이 늘어난다
-    if (P2 && !B.p2 && !B.reborn) { B.p2 = true; g.ui.banner('타이탄 출력 상승!', true); g.sfx.play('alarm'); fx.ring(B.x, 0.2, B.z, 8, [1, 0.3, 0.4], 0.6); this.ring(B.x, B.z, 32, 5, 12, 'orb', 0, 1.4); }
+    if (P2 && !B.p2 && !B.reborn) { B.p2 = true; g.ui.banner(`${B.V.short} 출력 상승!`, true); g.sfx.play('alarm'); fx.ring(B.x, 0.2, B.z, 8, [1, 0.3, 0.4], 0.6); this.ring(B.x, B.z, 32, 5, 12, 'orb', 0, 1.4); }
     const fireRing = (n, speed, off = 0) => this.ring(B.x, B.z, n, speed, 12, 'orb', off, 1.4);
-    if (B.reborn) { /* MK-II: updateReborn / updateMk2 */ } else if (B.state === 'drop' || B.state === 'stompFall') {
+    if (B.state === 'reborn' || mk2Turn) { /* updateReborn / updateMk2 */ } else if (B.state === 'drop' || B.state === 'stompFall') {
       B.vy -= 60 * dt; B.y += B.vy * dt;
       this.warn.material.opacity = 0.35 + 0.35 * Math.sin(B.st * 30);
       if (B.y <= 0) {
@@ -472,10 +499,10 @@ export class Enemies {
       }
     } else if (B.state === 'walk') {
       move = 1;
-      const sp = 2.2 + this.bossCount * 0.3;
+      const sp = (2.2 + this.bossCount * 0.3) * B.V.speed;
       B.x += (dx / d) * sp * dt; B.z += (dz / d) * sp * dt;
       B.yaw = toP;
-      if (B.st > (P2 ? 1.3 : 2.0)) { const L = ['ring', 'volley', 'spiral', 'summon', 'sweep', 'stomp']; B.state = L[B.pattern++ % L.length]; B.st = 0; B.shots = 0; B.acc = 0; }
+      if (B.st > (P2 ? 1.3 : 2.0) / Math.sqrt(B.V.speed)) { const L = B.V.p1; B.state = L[B.pattern++ % L.length]; B.st = 0; B.shots = 0; B.acc = 0; }
     } else if (B.state === 'ring') {
       // 원형 탄막 (엇갈린 고리, 2페이즈 5파)
       B.yaw = toP;
@@ -575,6 +602,7 @@ export class Enemies {
       if (e.shield <= 0) { g.fx.ring(e.x, (e.y || 0) + 0.8, e.z, e.r * 2.4, [0.4, 0.85, 1], 0.35); g.fx.hitSpark([e.x, (e.y || 0) + 0.8, e.z], [0.5, 0.9, 1], 10); g.sfx.play('tink'); }
       if (dmg <= 0) { e.flash = 0.04; return; }
     }
+    if (e.ampT > g.time) dmg *= 0.7;
     e.hp -= dmg;
     // 하얀 번쩍임은 0.18초에 한 번만 (지속 피해가 계속 들어와도 하얗게 덮이지 않게). 치명타와 큰 공격은 항상
     if (crit || !quiet || g.time - (e.lastFlash || -9) > 0.18) { e.flash = 0.09; e.lastFlash = g.time; }
@@ -588,10 +616,10 @@ export class Enemies {
         g.fx.shrapnel(hp, 6, [[1, 1, 0.8], [1, 0.85, 0.3], [1, 0.55, 0.15]], { dir, spread: 1.4, speed: [6, 12], size: [1, 3], up: [1, 4] });
       } else g.fx.hitSpark(hp, col[2] < 0.5 ? col : [1, 0.8, 0.45], quiet ? 2 : 5, dir);
     }
-    const k = knock / (e.mass || e.T.mass);
+    const lg = g.lowGrav || 1, k = (knock * lg) / (e.mass || e.T.mass);
     e.kx += dirX * k; e.kz += dirZ * k;
     if (!e.boss && !e.T.anchor) {
-      if (launch) e.vy = Math.max(e.vy || 0, launch / Math.sqrt(e.T.mass));   // 띄우기
+      if (launch) e.vy = Math.max(e.vy || 0, (launch * Math.sqrt(lg)) / Math.sqrt(e.T.mass));   // 띄우기
       if (stun) e.stun = Math.max(e.stun || 0, stun);
     }
     g.stats.dealt += dmg;
@@ -861,6 +889,7 @@ export class Enemies {
         else if (T.calm && e.state !== 'walk') { e.state = 'walk'; e.st = 0; e.cd = Math.max(e.cd, 1); } // 조준/수리 빔 끊김
       }
       if (e.spawnT < 0.35) sp *= 0.2;
+      if (e.ampT > g.time) sp *= 1.35; // 증폭 탑 (troops.js amp)
       e.x += (mx * sp + e.kx) * dt;
       e.z += (mz * sp + e.kz) * dt;
       const kd = Math.exp(-7 * dt);
@@ -878,7 +907,7 @@ export class Enemies {
       if (!T.fly) g.rooms.clamp(e, e.r); else g.rooms.clamp(e, 0.3);
 
       // 접촉 피해
-      if (e.spawnT > 0.3 && !e.under && !T.mine && d < e.r + p.r && e.y < T.fly + 0.6 && !(p.stats.flying && !T.fly)) { // 비행 모드: 지상 적과 부딪혀도 안전
+      if (e.spawnT > 0.3 && !e.under && !T.mine && !T.noTouch && d < e.r + p.r && e.y < T.fly + 0.6 && !(p.stats.flying && !T.fly)) { // 비행 모드: 지상 적과 부딪혀도 안전
         const dmg = e.state === 'charge' ? T.dmg * 1.5 : T.dmg;
         if (p.hurt(dmg * (e.elite ? 1.5 : 1) * this.k.dmg, dx / d, dz / d)) { e.kx -= mx * 6; e.kz -= mz * 6; }
         // 탱크 다리로 대시 들이받기

@@ -136,7 +136,7 @@ OPS.horde.update = (R, dt) => {
   if (k >= 0.55 && !R.marks.has('e')) { R.marks.add('e'); R.spawnElite(); }
   return k >= 1;
 };
-OPS.horde.info = (R) => [Math.min(1, kills(R) / R.target), `섬멸 ${Math.min(R.target, kills(R))} / ${R.target}`];
+OPS.horde.info = (R) => [Math.min(1, kills(R) / R.target), `처치 ${Math.min(R.target, kills(R))} / ${R.target}`];
 
 // 거점 장악: 거점 3곳 (방 바닥에 빛나는 원). 점령하면 주변 적이 날아간다
 const CP_R = 3.2;
