@@ -19,7 +19,7 @@ const STEPS = [
   { id: 'xp', title: '경험치', text: '초록 결정에 다가가서 줍기', keys: [], touch: '', need: 5 },
   { id: 'card', title: '레벨 업', text: '카드 1장을 골라 기체 강화', keys: ['1', '2', '3'], mouse: '카드 클릭', touch: '카드 터치' },
   { id: 'special', title: '특수기', text: '한 방 큰 기술! 써 보세요', keys: ['K'], mouse: '오른쪽 클릭', touch: '특수 버튼', btn: 'spbtn' },
-  { id: 'mode', title: '변형', text: '보행 · 비행 · 저격 · 섬멸 모드 전환', keys: ['E', 'Tab'], touch: '초록 변형 버튼', btn: 'modebtn' },
+  { id: 'mode', title: '변형', text: '보행, 비행, 저격, 섬멸 모드 전환', keys: ['E', 'Tab'], touch: '초록 변형 버튼', btn: 'modebtn' },
   { id: 'od', title: '오버드라이브', text: '게이지 가득! 8초간 거대화 + 피해 감소', keys: ['Q', 'L'], touch: 'OD 버튼', btn: 'odbtn' },
 ];
 const TIPS = {

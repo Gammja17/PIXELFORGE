@@ -180,8 +180,14 @@ export class Enemies {
     const lane = new Geometry();
     lane.quad([-0.5, 0, 0], [0.5, 0, 0], [0.5, 0, 1], [-0.5, 0, 1], [1, 1, 1], null, [0, 1, 0]);
     this.tele = game.scene.add(new InstancedMesh(lane, new Material({ emissive: 1, outline: false, castShadow: false }), 96));
+    // 돌진 경로: 꽉 찬 붉은 판 대신 양옆 난간 + 앞을 가리키는 화살 3개 (피 웅덩이처럼 보이지 않게)
+    const laneR = new Geometry(), rq = (ax, az, bx, bz, w) => { const dx = bx - ax, dz = bz - az, l = Math.hypot(dx, dz), nx = (-dz / l) * w, nz = (dx / l) * w; laneR.quad([ax - nx, 0, az - nz], [ax + nx, 0, az + nz], [bx + nx, 0, bz + nz], [bx - nx, 0, bz - nz], [1, 1, 1], null, [0, 1, 0]); };
+    for (const s of [-1, 1]) rq(s * 0.46, 0, s * 0.46, 1, 0.04);
+    for (let i = 0; i < 3; i++) { const z = 0.3 + i * 0.25; rq(-0.32, z - 0.1, 0, z, 0.03); rq(0.32, z - 0.1, 0, z, 0.03); }
+    this.teleLane = game.scene.add(new InstancedMesh(laneR, new Material({ emissive: 1, outline: false, castShadow: false }), 64));
+    // 폭발 범위: 두 겹 고리
     const disc = new Geometry();
-    for (let i = 0; i < 20; i++) { const a0 = (i / 20) * TAU, a1 = ((i + 1) / 20) * TAU; disc.quad([0, 0, 0], [0, 0, 0], [Math.cos(a1), 0, Math.sin(a1)], [Math.cos(a0), 0, Math.sin(a0)], [1, 1, 1], null, [0, 1, 0]); }
+    for (let i = 0; i < 24; i++) { const a0 = (i / 24) * TAU, a1 = ((i + 1) / 24) * TAU, p = (a, r) => [Math.cos(a) * r, 0, Math.sin(a) * r]; disc.quad(p(a0, 0.88), p(a1, 0.88), p(a1, 1), p(a0, 1), [1, 1, 1], null, [0, 1, 0]); if (i % 2) disc.quad(p(a0, 0.5), p(a1, 0.5), p(a1, 0.56), p(a0, 0.56), [1, 1, 1], null, [0, 1, 0]); }
     this.teleDisc = game.scene.add(new InstancedMesh(disc, new Material({ emissive: 1, outline: false, castShadow: false }), 64));
     this.tracks = [];  // 움직임을 나중에 바꾸는 적 탄 (휘는 탄, 멈췄다 터지는 탄)
     this.strikes = []; // 바닥 표식 포격
@@ -210,7 +216,7 @@ export class Enemies {
       if (e.affix.swift) e.speed *= 1.6;
       if (e.affix.armored) { e.hp = e.maxHp *= 1.7; e.mass = T.mass * 4; }
       if (e.affix.shielded) e.shield = e.shieldMax = e.maxHp * 0.5;
-      this.game.ui.toast(`정예 기체 출현 [${keys.map((k) => AFFIXES[k].name).join('·')}]! 처치하면 부품 획득`);
+      this.game.ui.toast(`정예 기체 출현 [${keys.map((k) => AFFIXES[k].name).join(', ')}]! 처치하면 부품 획득`);
     } else if (elite) this.game.ui.toast('정예 기체 출현! 처치하면 부품 획득');
     this.list.push(e);
     return e;
@@ -895,7 +901,7 @@ export class Enemies {
   render(time) {
     const counts = {};
     for (const id in this.meshes) counts[id] = 0;
-    let na = 0, nb = 0, nm = 0, nt = 0, nd = 0;
+    let na = 0, nb = 0, nm = 0, nt = 0, nd = 0, nl = 0;
     const p = this.game.player, RED = [1, 0.18, 0.25], blink = 0.6 + 0.4 * Math.sin(time * 22);
     for (const e of this.list) {
       // 발밑 고리: 적이 어디 있는지, 얼마나 큰지 한눈에
@@ -908,7 +914,7 @@ export class Enemies {
         if (e.state === 'wind') {
           // 돌진: 진행 방향으로 붉은 길
           const yaw = e.cx !== undefined ? Math.atan2(e.cx, e.cz) : e.yaw, len = e.type === 'brute' ? 8 : 5;
-          this.tele.setAt(nt++, m4.fromTRS([e.x, 0.06, e.z], [0, yaw, 0], [e.r * 2.1, 1, len]), RED.map((v) => v * blink * 0.5), 1);
+          if (nl < this.teleLane.capacity) this.teleLane.setAt(nl++, m4.fromTRS([e.x, 0.06, e.z], [0, yaw, 0], [e.r * 2.1, 1, len]), RED.map((v) => v * blink), 1);
         } else if (e.charging && (e.T.shoots || e.type === 'tank')) {
           // 포격 조준선
           const yaw = Math.atan2(p.x - e.x, p.z - e.z);
@@ -916,7 +922,7 @@ export class Enemies {
         }
       }
       // 자폭: 폭발 범위 원
-      if (e.state === 'fuse' && nd < this.teleDisc.capacity) this.teleDisc.setAt(nd++, m4.fromTRS([e.x, 0.05, e.z], [0, 0, 0], [2.2, 1, 2.2]), RED.map((v) => v * blink * 0.4), 1);
+      if (e.state === 'fuse' && nd < this.teleDisc.capacity) this.teleDisc.setAt(nd++, m4.fromTRS([e.x, 0.05, e.z], [0, 0, 0], [2.2, 1, 2.2]), RED.map((v) => v * blink), 1);
       const M = this.meshes[e.type], i = counts[e.type]++;
       const pop = Math.min(1, e.spawnT / 0.25);
       const s = (e.elite ? 1.35 : 1) * (pop < 1 ? pop * (1.3 - 0.3 * pop) : 1) * (e.vis ?? 1);
@@ -947,8 +953,8 @@ export class Enemies {
     }
     for (const id in this.meshes) { this.meshes[id].body.count = counts[id]; this.meshes[id].glow.count = counts[id]; }
     this.aura.count = na; this.bubble.count = nb;
-    this.marker.count = nm; this.tele.count = nt; this.teleDisc.count = nd;
-    this.marker.dirty = this.tele.dirty = this.teleDisc.dirty = true;
+    this.marker.count = nm; this.tele.count = nt; this.teleDisc.count = nd; this.teleLane.count = nl;
+    this.marker.dirty = this.tele.dirty = this.teleDisc.dirty = this.teleLane.dirty = true;
   }
 
   clear() {

@@ -3,6 +3,7 @@
 import { Geometry, InstancedMesh, Material, Mesh, m4 } from '../engine/index.js';
 import { partPreview, MODULES } from './parts.js';
 import { WEAPONS } from './weapons.js';
+import { pixIcon } from './icons.js';
 
 const GEM_TIERS = [ // 값이 클수록 큰 결정
   { min: 25, color: [1, 0.35, 0.9], s: 1.6 },
@@ -11,6 +12,7 @@ const GEM_TIERS = [ // 값이 클수록 큰 결정
 ];
 const ITEM_COLORS = { kit: [0.4, 1, 0.45], magnet: [1, 0.85, 0.25], core: [1, 0.4, 0.9], crate: [1, 0.7, 0.2] };
 const ITEM_NAMES = { kit: '수리 키트', magnet: '자석', core: '보스 코어', crate: '부품 상자' };
+const ITEM_ICONS = { kit: 'heal', magnet: 'magnet', core: 'boss', crate: 'part' };
 const PART_COLORS = { weapon: [1, 0.55, 0.2], module: [0.4, 0.9, 1] };
 const css = (c, a = 1) => `rgba(${c.map((v) => Math.round(Math.min(1, v) * 255)).join(',')},${a})`;
 
@@ -66,7 +68,7 @@ export class Pickups {
     this.parts.push({ kind, id, x, z, y: 1.2, vx: Math.cos(a) * 3, vz: Math.sin(a) * 3, vy: 7, t: 0, node, beam, spin: (Math.random() - 0.5) * 14 });
     const name = kind === 'weapon' ? WEAPONS[id].name : MODULES[id].name;
     const owned = kind === 'weapon' ? !!g.weapons.get(id) : !!g.player.loadout.modules?.[id];
-    this.parts.at(-1).label = `${kind === 'weapon' ? '무기' : '모듈'} · ${name}`;
+    this.parts.at(-1).label = `${kind === 'weapon' ? '무기' : '모듈'}: ${name}`;
     this.parts.at(-1).badge = owned ? '강화' : 'NEW';
     g.ui.toast(`${name} 떨어짐! 가까이 가서 줍기`);
     g.sfx.play('clank', { vol: 0.6 });
@@ -171,8 +173,10 @@ export class Pickups {
   drawLabels(ctx, project, px) {
     const g = this.game;
     if (g.state !== 'play' && g.state !== 'install') return;
-    const fs = Math.round(px * 8);
-    ctx.font = `bold ${fs}px system-ui, sans-serif`;
+    // 도트 글꼴 (12px 배수로만 또렷하다)
+    const fs = 12 * Math.max(1, Math.round(px / 2));
+    ctx.font = `${fs}px Galmuri, sans-serif`;
+    ctx.imageSmoothingEnabled = false;
     ctx.textBaseline = 'middle';
     const t = g.time || 0;
     // 테두리: 검은 외곽 → 색 → 안쪽 옅은 색 채움. big = 상자/코어/노획 부품
@@ -191,9 +195,9 @@ export class Pickups {
       }
       return y0 - px * 2;
     };
-    const tag = (s, top, text, color, badge) => {
-      const bw = badge ? ctx.measureText(badge).width + px * 3 : 0;
-      const tw = ctx.measureText(text).width, w = Math.round(tw + bw + px * 6), h = Math.round(fs + px * 4);
+    const tag = (s, top, text, color, badge, icon) => {
+      const bw = badge ? ctx.measureText(badge).width + px * 3 : 0, iw = icon ? fs + px * 2 : 0;
+      const tw = ctx.measureText(text).width, w = Math.round(tw + bw + iw + px * 6), h = Math.round(fs + px * 4);
       const x = Math.round(s[0] - w / 2), y = Math.round(top - h - px * 2);
       // 어두운 판 + 색 테두리 2겹 (도트 느낌으로 모서리만 깎음)
       ctx.fillStyle = '#120f18';
@@ -201,20 +205,21 @@ export class Pickups {
       ctx.fillStyle = css(color);
       ctx.fillRect(x, y, w, px); ctx.fillRect(x, y + h - px, w, px); ctx.fillRect(x, y, px, h); ctx.fillRect(x + w - px, y, px, h);
       ctx.fillStyle = css(color, 0.18); ctx.fillRect(x + px, y + px, w - px * 2, h - px * 2);
-      ctx.fillStyle = '#fff'; ctx.fillText(text, x + px * 3, y + h / 2 + px * 0.3);
+      if (icon) ctx.drawImage(pixIcon(icon, Math.max(1, Math.round(fs / 10))), x + px * 3, Math.round(y + (h - fs) / 2), fs, fs);
+      ctx.fillStyle = '#fff'; ctx.fillText(text, x + px * 3 + iw, y + h / 2 + px * 0.3);
       if (badge) {
-        const bx = x + px * 3 + tw + px * 1.5;
+        const bx = x + px * 3 + iw + tw + px * 1.5;
         ctx.fillStyle = css(color); ctx.fillRect(bx, y + px * 2, bw - px * 1.5, h - px * 4);
         ctx.fillStyle = '#120f18'; ctx.fillText(badge, bx + px * 0.75, y + h / 2 + px * 0.3);
       }
       // 아래로 꼬리 (가리키는 대상)
       ctx.fillStyle = css(color); ctx.fillRect(Math.round(s[0] - px), y + h, px * 2, px * 2);
     };
-    for (const q of this.parts) { const s = project([q.x, q.y + 0.3, q.z]); if (s) tag(s, box(s, PART_COLORS[q.kind], true), q.label, PART_COLORS[q.kind], q.badge); }
+    for (const q of this.parts) { const s = project([q.x, q.y + 0.3, q.z]); if (s) tag(s, box(s, PART_COLORS[q.kind], true), q.label, PART_COLORS[q.kind], q.badge, 'part'); }
     for (const it of this.items) {
       if (it.t > 25 && Math.sin(it.t * 20) < 0) continue;
       const s = project([it.x, it.y + 0.1, it.z]), big = it.kind === 'crate' || it.kind === 'core';
-      if (s) tag(s, box(s, ITEM_COLORS[it.kind], big), ITEM_NAMES[it.kind], ITEM_COLORS[it.kind]);
+      if (s) tag(s, box(s, ITEM_COLORS[it.kind], big), ITEM_NAMES[it.kind], ITEM_COLORS[it.kind], null, ITEM_ICONS[it.kind]);
     }
   }
 

@@ -61,6 +61,8 @@ function start() {
       $('bossfill').style.width = `${Math.max(0, k) * 100}%`;
     },
     roomInfo(rooms) {
+      // 조작 안내 막대는 처음 두 방까지만 (그 뒤엔 화면만 가림)
+      if (!coarse && game.state !== 'hangar') $('hint').hidden = rooms.depth > 1;
       const Z = ZONES[rooms.zone];
       const O = OPS[rooms.op];
       $('roomname').innerHTML = `${Z.name} <span style="color:var(--accent)">${rooms.reward === 'start' ? '출격 지점' : REWARDS[rooms.reward]?.name || ''}</span>`;
@@ -108,7 +110,7 @@ function start() {
           : max ? `<div class="lvrow">${c.isNew || c.level === 1 ? '<em>Lv 1</em>' :`Lv ${c.level - 1} → <em>${c.level}</em>`}${pipsHtml}</div>` : '';
         b.setAttribute('aria-label', `${i + 1}번: ${c.name}. ${c.desc}`);
         b.innerHTML = `<div class="art"><img class="px-img" alt="" src="${c.img}">${coarse ? '' : `<kbd class="ckey">${i + 1}</kbd>`}<span class="tag">${c.tag}</span>${badge}</div>`
-          + `<div class="cbody"><b class="cname">${c.name}</b><span class="kind">${c.kind === 'weapon' ? `무기 · ${c.where}` : c.where}</span><p>${c.desc}</p>${lvRow}${setLine(c)}</div>`;
+          + `<div class="cbody"><b class="cname">${c.name}</b><span class="kind">${c.kind === 'weapon' ? `무기, ${c.where}` : c.where}</span><p>${c.desc}</p>${lvRow}${setLine(c)}</div>`;
         b.addEventListener('click', () => game.pick(i));
         box.appendChild(b);
       });
@@ -118,6 +120,7 @@ function start() {
     closeLevelUp() { $('levelup').hidden = true; $('pad').hidden = !coarse; $('view').focus(); },
     pause(v) {
       $('paused').hidden = !v;
+      document.body.classList.toggle('paused', !!v);
       if (v) $('pausebuild').dataset.chips = game.chips || 0;
       if (!v) $('view').focus();
       if (v) renderSets($('pausesets'));
@@ -133,7 +136,7 @@ function start() {
       $('resdps').innerHTML = top.length ? `<span class="lbl">무기별 초당 피해</span>${top.map((q) => `<div class="dpsrow"><span>${q.name}</span><i><em style="width:${(q.dps / max) * 100}%"></em></i><b>${Math.round(q.dps)}</b><small>${Math.round(q.share * 100)}%</small></div>`).join('')}` : '';
       $('resach').innerHTML = s.achieved.map((a) => `<div class="achnew"><img class="px-img" alt="" src="${pixURL('trophy', 3)}"><div><b>업적: ${a.name}</b><small>보상: ${a.reward}</small></div></div>`).join('');
       const P = PILOTS[s.pilot];
-      $('resparts').textContent = `파일럿 ${P.role} ${P.name} · 고철 ×${s.scrapMul.toFixed(1)}${s.bonus ? ` · 위협 신기록 보너스 +${s.bonus}` : ''}\n보유 고철 ${s.total}. 격납고에서 새 부품과 연구를 해금할 수 있어요.\n무장: ${s.weapons.join(', ')}${s.modules.length ? `\n부품: ${s.modules.join(', ')}` : ''}`;
+      $('resparts').textContent = `파일럿 ${P.role} ${P.name}, 고철 ×${s.scrapMul.toFixed(1)}${s.bonus ? `, 위협 신기록 보너스 +${s.bonus}` : ''}\n보유 고철 ${s.total}. 격납고에서 새 부품과 연구를 해금할 수 있어요.\n무장: ${s.weapons.join(', ')}${s.modules.length ? `\n부품: ${s.modules.join(', ')}` : ''}`;
       $('result').hidden = false;
       $('pad').hidden = true; $('banner').hidden = true;
       setTimeout(() => $('retry').focus(), 50);
@@ -327,6 +330,7 @@ function start() {
     return;
   }
   window.game = game;
+  game.partPreview = partPreview; // 디버그: 부품 썸네일
   const { engine } = game;
 
   // ---- 격납고: 부품마다 3D 썸네일 ----

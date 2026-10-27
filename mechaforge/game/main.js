@@ -6,7 +6,7 @@
 import { Engine, Geometry, Mesh, Material, clamp, damp, v3 } from '../engine/index.js';
 import { Fx } from './fx.js';
 import { Shots, WeaponSystem, WEAPONS, weaponName } from './weapons.js';
-import { Enemies } from './enemies.js';
+import { Enemies, AFFIXES } from './enemies.js';
 import { Pickups } from './pickups.js';
 import { Player } from './player.js';
 import { rollChoices, applyChoice, freeSlot, cardImage, MAX_WEAPONS } from './upgrades.js';
@@ -501,8 +501,34 @@ export class Game {
     ctx.clearRect(0, 0, o.width, o.height);
     const px = Math.max(2, Math.round(2 * this.engine.dpr));
     this.pickups.drawLabels(ctx, (q) => this.project(q), px);
+    if (this.state === 'play') this.drawEnemyBars(ctx, px);
     if (this.state === 'play' || this.state === 'dying') this.drawPlayerGauge(ctx, px);
     this.fx.drawNumbers(ctx, (q) => { const s = this.project(q); return s && s[0] > -50 && s[1] > -50 && s[0] < c.width + 50 && s[1] < c.height + 50 ? s : null; }, px);
+  }
+
+  // 적 머리 위: 맞은 적은 체력 막대 (떼거리 제외), 정예는 항상 금색 막대 + 특성 이름
+  drawEnemyBars(ctx, px) {
+    const dpr = this.engine.dpr, u = Math.max(1, Math.round(dpr)), fs = 12 * Math.max(1, Math.round(px / 2)), now = this.time;
+    ctx.font = `${fs}px Galmuri, sans-serif`; ctx.textBaseline = 'bottom'; ctx.textAlign = 'center';
+    for (const e of this.enemies.list) {
+      if (e.dead || e.under || e.guard || e.T.mine || e.T.inert) continue;
+      const hurt = e.hp < e.maxHp && now - (e.hitT || -9) < 4;
+      if (!e.elite && (e.T.swarm || !hurt)) continue;
+      const s = this.project([e.x, (e.y || 0) + e.r * 2.3 + 0.5, e.z]);
+      if (!s) continue;
+      const W = Math.round((28 + Math.min(48, e.r * 30)) * dpr), H = Math.round((e.elite ? 7 : 5) * dpr), x0 = Math.round(s[0] - W / 2), y0 = Math.round(s[1]);
+      const k = Math.max(0, e.hp / e.maxHp);
+      ctx.fillStyle = '#05060a'; ctx.fillRect(x0 - u, y0 - u, W + 2 * u, H + 2 * u);
+      ctx.fillStyle = '#3a1218'; ctx.fillRect(x0, y0, W, H);
+      ctx.fillStyle = e.elite ? '#ffcf4a' : '#ff4a5e'; ctx.fillRect(x0, y0, Math.round(W * k), H);
+      if (e.shield > 0) { ctx.fillStyle = '#7fd8ff'; ctx.fillRect(x0, y0 - 2 * u, Math.round(W * e.shield / e.shieldMax), u * 2); }
+      if (e.elite && e.affixes?.length) {
+        const txt = e.affixes.map((a) => AFFIXES[a]?.name).join(' ');
+        ctx.fillStyle = '#05060a'; for (const [dx, dy] of [[-u, 0], [u, 0], [0, -u], [0, u * 2]]) ctx.fillText(txt, s[0] + dx, y0 - 3 * u + dy);
+        ctx.fillStyle = '#ffd86a'; ctx.fillText(txt, s[0], y0 - 3 * u);
+      }
+    }
+    ctx.textAlign = 'left';
   }
 
   // 기체 발밑 게이지: 체력 바 + 대시 칸 + 특수기, 그리고 탄이 가까우면 판정 코어

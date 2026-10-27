@@ -483,39 +483,64 @@ function fistGeo(P, kind) {
   return g;
 }
 
+// 무기 대표 색: 카드, 탄, 기체에 달린 무기의 발광 부분이 같은 색 (weapons.js 의 color 와 같게 유지)
+const SIG = {
+  mg: [1, 0.85, 0.3], shotgun: [1, 0.55, 0.2], missile: [1, 0.42, 0.25], laser: [0.45, 1, 1], saber: [1, 0.4, 0.85], flamer: [1, 0.5, 0.12], rod: [1, 0.65, 0.2],
+  saw: [0.85, 0.9, 1], tesla: [0.55, 0.85, 1], mine: [1, 0.3, 0.3], disc: [0.4, 1, 0.9], stomp: [1, 0.8, 0.45], gravity: [0.75, 0.45, 1], gauss: [1, 0.88, 0.35],
+  turret: [1, 0.35, 0.6], cluster: [1, 0.5, 0.3], ricochet: [0.75, 1, 0.45], cannon: [1, 0.62, 0.25], funnel: [0.45, 1, 0.95],
+};
+
 // ===== 무기 외형 (원점 = 손/어깨 장착점, 앞 = +Z) =====
 export const WEAPON_MODELS = {
   // 경전차 포탑을 통째로 뜯어 붙인 모양
   cannon: (P) => {
     const g = new Geometry();
-    cbox(g, 0.5, 0.3, 0.6, [0.38, 0.42, 0.36], [0, 0.2, -0.05]);
-    cbox(g, 0.36, 0.2, 0.4, [0.3, 0.34, 0.28], [0, 0.4, -0.08]);
+    cbox(g, 0.5, 0.3, 0.6, STEEL, [0, 0.2, -0.05]);
+    cbox(g, 0.36, 0.2, 0.4, DARK, [0, 0.4, -0.08]);
     zcyl(g, 0.08, 0.9, DARK, [0, 0.26, 0.55], 6);
     zcyl(g, 0.11, 0.14, [0.55, 0.32, 0.26], [0, 0.26, 0.98], 6);
     cbox(g, 0.52, 0.06, 0.16, P.acc, [0, 0.36, 0.2]);
-    return { geo: g, muzzle: [0, 0.26, 1.1] };
+    const glow = new Geometry();
+    zcyl(glow, 0.12, 0.05, SIG.cannon, [0, 0.26, 1.08], 6);
+    cbox(glow, 0.3, 0.05, 0.05, SIG.cannon, [0, 0.42, 0.18]);
+    return { geo: g, glow, muzzle: [0, 0.26, 1.1] };
   },
+  // 개틀링: 총열 6개 묶음 + 옆 탄창 드럼
   mg: (P) => {
-    const g = new Geometry();
-    cbox(g, 0.24, 0.26, 0.62, DARK, [0, 0, 0.12]);
-    cbox(g, 0.1, 0.1, 0.5, STEEL, [0, 0.03, 0.66]);
-    xcyl(g, 0.14, 0.14, P.sub, [-0.16, -0.06, 0.1]);
-    cbox(g, 0.26, 0.06, 0.3, P.acc, [0, 0.16, 0.05]);
-    return { geo: g, muzzle: [0, 0, 1.0] };
+    const g = new Geometry(), glow = new Geometry();
+    cbox(g, 0.28, 0.3, 0.42, DARK, [0, 0, 0.02]);
+    for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; zcyl(g, 0.035, 0.68, STEEL, [Math.cos(a) * 0.09, Math.sin(a) * 0.09, 0.22], 5); }
+    zcyl(g, 0.15, 0.05, GREY, [0, 0, 0.3], 8); zcyl(g, 0.15, 0.05, GREY, [0, 0, 0.62], 8);
+    xcyl(g, 0.17, 0.16, P.sub, [-0.18, -0.05, 0.02], 10);
+    cbox(g, 0.3, 0.06, 0.3, P.acc, [0, 0.18, -0.02]);
+    zcyl(glow, 0.13, 0.03, SIG.mg, [0, 0, 0.9], 8);
+    cbox(glow, 0.04, 0.12, 0.2, SIG.mg, [-0.27, -0.05, 0.02]);
+    return { geo: g, glow, muzzle: [0, 0, 0.95] };
   },
+  // 산탄총: 굵은 쌍열 + 아래 펌프 손잡이 + 옆 탄띠
   shotgun: (P) => {
-    const g = new Geometry();
-    cbox(g, 0.32, 0.26, 0.6, STEEL, [0, 0, 0.1]);
-    for (const s of [-1, 1]) zcyl(g, 0.07, 0.5, DARK, [s * 0.08, 0.02, 0.38]);
-    cbox(g, 0.34, 0.08, 0.2, P.trim, [0, 0.16, 0.0]);
-    return { geo: g, muzzle: [0, 0, 0.9] };
+    const g = new Geometry(), glow = new Geometry();
+    cbox(g, 0.36, 0.28, 0.46, STEEL, [0, 0.02, 0.0]);
+    for (const s of [-1, 1]) zcyl(g, 0.09, 0.62, DARK, [s * 0.1, 0.04, 0.2], 8);
+    cbox(g, 0.3, 0.13, 0.22, P.trim, [0, -0.13, 0.48]);
+    cbox(g, 0.38, 0.08, 0.22, P.sub, [0, 0.18, -0.06]);
+    for (let i = 0; i < 4; i++) cbox(glow, 0.05, 0.09, 0.05, SIG.shotgun, [0.2, 0.02, -0.12 + i * 0.09]);
+    for (const s of [-1, 1]) zcyl(glow, 0.07, 0.02, SIG.shotgun, [s * 0.1, 0.04, 0.82], 8);
+    return { geo: g, glow, muzzle: [0, 0.04, 0.86] };
   },
+  // 미사일 포드: 낮은 발사대 위에 미사일 3발이 나란히 (흰 몸통 + 빨간 탄두 + 꼬리 날개)
   missile: (P) => {
-    const g = new Geometry();
-    cbox(g, 0.44, 0.38, 0.5, P.sub, [0, 0.22, -0.04]);
-    for (let i = 0; i < 3; i++) for (let j = 0; j < 2; j++) cbox(g, 0.1, 0.1, 0.04, P.trim, [-0.13 + i * 0.13, 0.12 + j * 0.15, 0.22]);
-    cbox(g, 0.46, 0.06, 0.52, P.acc, [0, 0.44, -0.04]);
-    return { geo: g, muzzle: [0, 0.22, 0.3] };
+    const g = new Geometry(), glow = new Geometry();
+    cbox(g, 0.52, 0.2, 0.56, P.sub, [0, 0.12, -0.04]);
+    cbox(g, 0.56, 0.05, 0.6, P.acc, [0, 0.15, -0.04]);
+    for (let i = 0; i < 3; i++) {
+      const x = -0.2 + i * 0.2, y = 0.25 + (i === 1 ? 0.08 : 0);
+      zcyl(g, 0.055, 0.48, [0.82, 0.83, 0.85], [x, y, -0.3], 6);
+      add(glow, Geometry.cone(0.055, 0.16, 6, SIG.missile), [x, y, 0.18], [Math.PI / 2, 0, 0]);
+      cbox(g, 0.15, 0.03, 0.08, DARK, [x, y + 0.02, -0.26]);
+      cbox(g, 0.03, 0.15, 0.08, DARK, [x, y + 0.02, -0.26]);
+    }
+    return { geo: g, glow, muzzle: [0, 0.24, 0.32] };
   },
   laser: (P) => {
     const g = new Geometry();
@@ -538,18 +563,22 @@ export const WEAPON_MODELS = {
     const g = new Geometry();
     for (const s of [-1, 1]) add(g, Geometry.cone(0.14, 0.7, 4, P.sub), [s * 0.22, 0.1, 0], [0.25, 0, s * 0.2]);
     cbox(g, 0.5, 0.36, 0.2, STEEL, [0, 0.2, 0]);
-    return { geo: g, muzzle: [0, 0.5, 0] };
+    const glow = new Geometry();
+    for (const s of [-1, 1]) cbox(glow, 0.06, 0.06, 0.06, SIG.funnel, [s * 0.22, 0.08, 0.1]);
+    cbox(glow, 0.36, 0.04, 0.04, SIG.funnel, [0, 0.12, 0.11]);
+    return { geo: g, glow, muzzle: [0, 0.5, 0] };
   },
   // ---- 시작 무기 (추가) ----
   flamer: (P) => {
-    const g = new Geometry();
-    cbox(g, 0.26, 0.26, 0.5, STEEL, [0, 0, 0.1]);
-    zcyl(g, 0.12, 0.42, [0.75, 0.3, 0.2], [-0.02, 0.2, -0.08], 6);           // 연료 탱크
-    zcyl(g, 0.07, 0.5, DARK, [0, 0, 0.55], 6);
-    zcyl(g, 0.11, 0.1, P.acc, [0, 0, 0.82], 6);
-    const glow = new Geometry();
-    zcyl(glow, 0.05, 0.06, [1, 0.6, 0.2], [0, 0, 0.9], 5);
-    return { geo: g, glow, muzzle: [0, 0, 0.92] };
+    const g = new Geometry(), glow = new Geometry();
+    cbox(g, 0.3, 0.28, 0.46, STEEL, [0, 0, 0.06]);
+    for (const s of [-1, 1]) zcyl(g, 0.11, 0.5, [0.85, 0.4, 0.15], [s * 0.1, 0.24, -0.22], 8);      // 연료 탱크 2개
+    for (const s of [-1, 1]) zcyl(g, 0.115, 0.05, DARK, [s * 0.1, 0.24, 0.0], 8);
+    zcyl(g, 0.08, 0.42, DARK, [0, 0.0, 0.3], 8);
+    add(g, Geometry.cylinder(0.08, 0.15, 0.16, 8, GREY), [0, 0, 0.72], [Math.PI / 2, 0, 0]);       // 벌어진 노즐
+    add(glow, Geometry.cone(0.07, 0.16, 6, SIG.flamer), [0, 0, 0.9], [Math.PI / 2, 0, 0]);         // 점화 불꽃
+    cbox(glow, 0.32, 0.04, 0.04, SIG.flamer, [0, 0.15, 0.18]);
+    return { geo: g, glow, muzzle: [0, 0, 0.95] };
   },
   rod: (P) => {
     const g = new Geometry();
@@ -565,8 +594,9 @@ export const WEAPON_MODELS = {
     cbox(g, 0.24, 0.24, 0.3, STEEL, [0, 0, 0]);
     add(g, Geometry.cylinder(0.3, 0.3, 0.05, 10, GREY), [0, 0.13, 0.1]);
     for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; add(g, box(0.1, 0.05, 0.12, [0.85, 0.87, 0.9]), [Math.sin(a) * 0.3, 0.13, 0.1 + Math.cos(a) * 0.3], [0, a + 0.5, 0]); }
-    cbox(g, 0.12, 0.08, 0.12, P.acc, [0, 0.2, 0.1]);
-    return { geo: g, muzzle: [0, 0.15, 0.1] };
+    const glow = new Geometry();
+    add(glow, Geometry.cylinder(0.1, 0.1, 0.06, 6, SIG.saw), [0, 0.16, 0.1]);
+    return { geo: g, glow, muzzle: [0, 0.15, 0.1] };
   },
   tesla: (P) => {
     const g = new Geometry();
@@ -578,20 +608,24 @@ export const WEAPON_MODELS = {
     return { geo: g, glow, muzzle: [0, 0.7, 0] };
   },
   mine: (P) => {
-    const g = new Geometry();
-    cbox(g, 0.3, 0.34, 0.4, P.sub, [0, 0, -0.02]);
-    for (let i = 0; i < 3; i++) add(g, Geometry.cylinder(0.11, 0.11, 0.05, 6, [0.36, 0.38, 0.32]), [0.16, -0.12 + i * 0.1, -0.02], [0, 0, -Math.PI / 2]);
-    cbox(g, 0.2, 0.1, 0.12, DARK, [0, -0.18, 0.18]);
-    cbox(g, 0.32, 0.05, 0.42, P.acc, [0, 0.18, -0.02]);
-    return { geo: g, muzzle: [0, -0.2, 0.2] };
+    const g = new Geometry(), glow = new Geometry();
+    cbox(g, 0.3, 0.14, 0.34, P.sub, [0, -0.06, -0.02]);
+    for (let i = 0; i < 3; i++) {
+      add(g, Geometry.cylinder(0.15, 0.15, 0.06, 8, [0.32, 0.34, 0.3]), [0, 0.1 + i * 0.08, -0.02]);
+      add(glow, Geometry.cylinder(0.04, 0.04, 0.065, 5, SIG.mine), [0, 0.1 + i * 0.08, -0.02]);
+    }
+    cbox(g, 0.22, 0.1, 0.14, DARK, [0, -0.18, 0.22]);
+    cbox(glow, 0.38, 0.04, 0.04, SIG.mine, [0, 0.06, 0.19]);
+    return { geo: g, glow, muzzle: [0, -0.2, 0.25] };
   },
   disc: (P) => {
     const g = new Geometry();
     cbox(g, 0.18, 0.4, 0.3, STEEL, [0, 0.1, -0.05]);
-    add(g, Geometry.cylinder(0.32, 0.32, 0.05, 10, [0.55, 0.95, 1]), [0.1, 0.1, 0], [0, 0, Math.PI / 2]);
+    const glow = new Geometry();
+    add(glow, Geometry.cylinder(0.32, 0.32, 0.05, 10, SIG.disc), [0.1, 0.1, 0], [0, 0, Math.PI / 2]);
     add(g, Geometry.cylinder(0.12, 0.12, 0.07, 6, DARK), [0.12, 0.1, 0], [0, 0, Math.PI / 2]);
     cbox(g, 0.2, 0.06, 0.32, P.trim, [0, 0.33, -0.05]);
-    return { geo: g, muzzle: [0.1, 0.1, 0.3] };
+    return { geo: g, glow, muzzle: [0.1, 0.1, 0.3] };
   },
   stomp: (P) => {
     const g = new Geometry();
@@ -599,7 +633,10 @@ export const WEAPON_MODELS = {
     add(g, Geometry.cylinder(0.08, 0.08, 0.5, 6, GREY), [0, -0.5, 0.04]);                 // 피스톤
     add(g, Geometry.cylinder(0.2, 0.22, 0.12, 6, DARK), [0, -0.6, 0.04]);
     cbox(g, 0.32, 0.06, 0.36, P.acc, [0, 0.2, 0]);
-    return { geo: g, muzzle: [0, -0.6, 0.04] };
+    const glow = new Geometry();
+    add(glow, Geometry.cylinder(0.23, 0.23, 0.03, 6, SIG.stomp), [0, -0.66, 0.04]);
+    cbox(glow, 0.04, 0.2, 0.2, SIG.stomp, [0.17, 0.05, 0]);
+    return { geo: g, glow, muzzle: [0, -0.6, 0.04] };
   },
   gravity: (P) => {
     const g = new Geometry();
@@ -624,7 +661,8 @@ export const WEAPON_MODELS = {
     cbox(g, 0.3, 0.2, 0.34, P.main, [0, 0.48, 0]);
     zcyl(g, 0.06, 0.4, DARK, [0, 0.48, 0.32], 6);
     const glow = new Geometry();
-    zcyl(glow, 0.05, 0.06, [1, 0.4, 0.55], [0, 0.48, 0.53], 5);
+    zcyl(glow, 0.07, 0.08, SIG.turret, [0, 0.48, 0.53], 6);
+    add(glow, Geometry.cylinder(0.3, 0.3, 0.04, 8, SIG.turret), [0, 0.3, 0]);
     return { geo: g, glow, muzzle: [0, 0.48, 0.55] };
   },
   cluster: (P) => {
@@ -632,7 +670,10 @@ export const WEAPON_MODELS = {
     cbox(g, 0.36, 0.22, 0.36, P.sub, [0, 0.1, -0.05]);
     for (const s of [-1, 1]) add(g, Geometry.cylinder(0.11, 0.11, 0.6, 6, DARK), [s * 0.09, 0.15, -0.05], [0.35, 0, 0]);  // 위로 선 포신 2개
     cbox(g, 0.38, 0.05, 0.38, P.acc, [0, 0.22, -0.05]);
-    return { geo: g, muzzle: [0, 0.7, 0.16] };
+    const glow = new Geometry();
+    for (const s of [-1, 1]) add(glow, Geometry.cylinder(0.08, 0.08, 0.04, 6, SIG.cluster), [s * 0.09, 0.15, -0.05], [0.35, 0, 0]);
+    cbox(glow, 0.4, 0.04, 0.04, SIG.cluster, [0, 0.0, 0.14]);
+    return { geo: g, glow, muzzle: [0, 0.7, 0.16] };
   },
   ricochet: (P) => {
     const g = new Geometry();
@@ -640,7 +681,10 @@ export const WEAPON_MODELS = {
     xcyl(g, 0.12, 0.2, P.sub, [0.1, 0.02, 0.18]);                                          // 실린더
     zcyl(g, 0.05, 0.4, DARK, [0, 0.04, 0.45], 6);
     cbox(g, 0.12, 0.2, 0.1, [0.5, 0.35, 0.25], [0, -0.16, -0.06]);
-    return { geo: g, muzzle: [0, 0.04, 0.66] };
+    const glow = new Geometry();
+    xcyl(glow, 0.125, 0.04, SIG.ricochet, [0.1, 0.02, 0.18]);
+    zcyl(glow, 0.06, 0.03, SIG.ricochet, [0, 0.04, 0.84], 6);
+    return { geo: g, glow, muzzle: [0, 0.04, 0.88] };
   },
 };
 export const funnelBitGeo = (P) => cached('bit' + P.name, () => {

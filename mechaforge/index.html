@@ -531,6 +531,29 @@
     body #tut kbd, body #tuttip kbd { font-size: 12px !important; padding: 0 4px 1px !important; }
   }
   @media (prefers-reduced-motion: reduce) { .card, #banner, #banner.warn, #roompath i.now, #odcall, #odbtn, .badge, #lowhp.on { animation: none; } #lowhp.on { opacity: .7; } }
+
+  /* ---- HUD 가독성 (v6): 두꺼운 철판 대신 얇은 테두리 상자 + 밝은 글자. 상시 떠 있던 조작 안내, 도트 크기 판은 치움 ---- */
+  #hud .pix, #dots.pix, #hint.pix { border: 2px solid #000 !important; border-image: none !important; background: rgba(11, 12, 18, .84) !important; box-shadow: inset 0 0 0 2px #3a3e52, 0 3px 0 rgba(0, 0, 0, .45); text-shadow: 0 2px 0 #000; }
+  #hud .pix.dark { box-shadow: inset 0 0 0 2px #2c2f3e, 0 3px 0 rgba(0, 0, 0, .45); }
+  #roombox { padding: 5px 12px !important; gap: 4px; min-width: 0; }
+  #roomname { color: #fff; }
+  #roomop { font-size: 12px; }
+  #roompath { border: 0 !important; border-image: none !important; padding: 0; }
+  #roompath i { width: 10px; height: 6px; box-shadow: 0 0 0 1px #000; }
+  #chipline { color: #d8dae6; }
+  #kills { padding: 4px 10px !important; font-size: 24px; color: #fff; }
+  #kills span { color: #d8dae6; }
+  #pausebtn { width: 44px; height: 44px; }
+  #hudfold { height: 32px; padding: 0 10px !important; color: #fff; }
+  #xpbar.track { height: 12px; border: 2px solid #000 !important; border-image: none !important; background: #191b25; box-shadow: inset 0 0 0 1px #343849; }
+  #xplv { font-size: 12px; color: #a6ffc2; }
+  #dots.play { display: none !important; }
+  body.paused #dots.play { display: flex !important; }
+  #hint .sep { display: inline-block; width: 10px; }
+  #hint.pix { padding: 6px 12px; }
+  /* 튜토리얼 안내/팁: 가운데 아래(알림 자리)와 겹치지 않게 왼쪽 위, 상태판 아래로 */
+  body #tut, body #tuttip { left: calc(var(--sal) + 12px) !important; right: auto !important; transform: none !important; top: calc(var(--sat) + 84px) !important; bottom: auto !important; max-width: 340px !important; }
+  body.paused #tut, body.paused #tuttip { display: none !important; }
 </style>
 </head>
 <body>
@@ -580,7 +603,7 @@
   <output id="dot-val" class="px" aria-live="polite">×4</output>
   <button type="button" class="btn" id="dot-plus" aria-label="도트 크게">+</button>
 </div>
-<p id="hint" class="pix" hidden><kbd class="k">WASD</kbd>이동<span class="sep">·</span><kbd class="k">J</kbd><kbd class="k">클릭</kbd>공격<span class="sep">·</span><kbd class="k">K</kbd><kbd class="k">우클릭</kbd>특수기<span class="sep">·</span><kbd class="k">SPACE</kbd>대시<span class="sep">·</span><kbd class="k">E</kbd>변형<span class="sep">·</span><span class="od"><kbd class="k">Q</kbd>오버드라이브</span></p>
+<p id="hint" class="pix" hidden><kbd class="k">WASD</kbd>이동<span class="sep"></span><kbd class="k">J</kbd><kbd class="k">클릭</kbd>공격<span class="sep"></span><kbd class="k">K</kbd><kbd class="k">우클릭</kbd>특수기<span class="sep"></span><kbd class="k">SPACE</kbd>대시<span class="sep"></span><kbd class="k">E</kbd>변형<span class="sep"></span><span class="od"><kbd class="k">Q</kbd>오버드라이브</span></p>
 <div id="pad" hidden>
   <button type="button" id="dashbtn"><svg viewBox="0 0 9 9" shape-rendering="crispEdges" aria-hidden="true"><path fill="currentColor" d="M1 2h1v1h1v1h1v1H3v1H2v1H1zM5 2h1v1h1v1h1v1H7v1H6v1H5z"/></svg>대시</button>
   <button type="button" id="spbtn"><svg viewBox="0 0 9 9" shape-rendering="crispEdges" aria-hidden="true"><path fill="currentColor" d="M4 0h1v3h1V2h1v1H6v1h3v1H6v1h1v1H6V6H5v3H4V6H3v1H2V6h1V5H0V4h3V3H2V2h1v1h1z"/></svg><span>특수</span><i></i></button>
