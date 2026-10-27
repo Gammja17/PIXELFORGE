@@ -7490,7 +7490,7 @@ const css = (c, a = 1) => `rgba(${c.map((v) => Math.round(Math.min(1, v) * 255))
 
 // 바닥 테두리: 네 모서리 ㄱ자 브래킷 (드롭이 뭔지 색으로 구분)
 function bracketGeo() {
-  const g = new Geometry(), h = 0.7, L = 0.34, w = 0.07;
+  const g = new Geometry(), h = 0.7, L = 0.4, w = 0.13;
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
     g.merge(Geometry.box(L, 0.04, w), { position: [sx * (h - L / 2), 0, sz * h] });
     g.merge(Geometry.box(w, 0.04, L), { position: [sx * h, 0, sz * (h - L / 2)] });
@@ -7535,7 +7535,7 @@ class Pickups {
     // 이미 최대 레벨이거나 자리가 없는 부품은 떨어뜨리지 않는다 (줍자마자 분해 → 경험치로 기체만 계속 커지던 문제)
     if (!g.salvageChoice(kind, id, this.parts.filter((q) => q.kind === kind && q.id === id).length)) return;
     const node = g.scene.add(partPreview(kind, id, g.player.loadout.paint));
-    const beam = g.scene.add(new Mesh(Geometry.cylinder(0.05, 0.05, 1, 5, [1, 0.8, 0.3]), new Material({ emissive: 1, outline: false, castShadow: false, opacity: 0.5 })));
+    const beam = g.scene.add(new Mesh(Geometry.cylinder(0.11, 0.11, 1, 6, [1, 0.8, 0.3]), new Material({ emissive: 1, outline: false, castShadow: false, opacity: 0.5 })));
     const a = Math.random() * 6.28;
     this.parts.push({ kind, id, x, z, y: 1.2, vx: Math.cos(a) * 3, vz: Math.sin(a) * 3, vy: 7, t: 0, node, beam, spin: (Math.random() - 0.5) * 14 });
     const name = kind === 'weapon' ? WEAPONS[id].name : MODULES[id].name;
@@ -7640,19 +7640,35 @@ class Pickups {
     this.frameMesh.dirty = true;
   }
 
-  // 오버레이: 드롭 위에 테두리 있는 이름표 (무기/모듈/상자 구분). project(p) → [디바이스 x, y] | null
+  // 오버레이: 드롭을 화면에서 굵은 테두리(네 모서리 ㄱ자)로 감싸고 위에 이름표 (무기/모듈/상자 구분).
+  //  project(p) → [디바이스 x, y] | null, px: 도트 1칸 (디바이스 픽셀)
   drawLabels(ctx, project, px) {
     const g = this.game;
     if (g.state !== 'play' && g.state !== 'install') return;
-    const fs = Math.round(px * 5.5);
+    const fs = Math.round(px * 8);
     ctx.font = `bold ${fs}px system-ui, sans-serif`;
     ctx.textBaseline = 'middle';
-    const tag = (pt, text, color, badge) => {
-      const s = project(pt);
-      if (!s) return;
+    const t = g.time || 0;
+    // 테두리: 검은 외곽 → 색 → 안쪽 옅은 색 채움. big = 상자/코어/노획 부품
+    const box = (s, color, big) => {
+      const H = Math.round(px * (big ? 15 : 10) * (1 + Math.sin(t * 6) * 0.07)), L = Math.round(H * 0.6), T = Math.round(px * 2);
+      const x0 = Math.round(s[0] - H), y0 = Math.round(s[1] - H), x1 = Math.round(s[0] + H), y1 = Math.round(s[1] + H);
+      ctx.fillStyle = css(color, 0.14); ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+      // 두 점 사이 사각형 (o 만큼 부풀림)
+      const rect = (ax, ay, bx, by, o) => ctx.fillRect(Math.min(ax, bx) - o, Math.min(ay, by) - o, Math.abs(bx - ax) + o * 2, Math.abs(by - ay) + o * 2);
+      for (const [o, c] of [[px, '#0b0910'], [0, css(color)]]) {
+        ctx.fillStyle = c;
+        for (const [cx, sx] of [[x0, 1], [x1, -1]]) for (const [cy, sy] of [[y0, 1], [y1, -1]]) {
+          rect(cx, cy, cx + sx * L, cy + sy * T, o); // 가로
+          rect(cx, cy, cx + sx * T, cy + sy * L, o); // 세로
+        }
+      }
+      return y0 - px * 2;
+    };
+    const tag = (s, top, text, color, badge) => {
       const bw = badge ? ctx.measureText(badge).width + px * 3 : 0;
       const tw = ctx.measureText(text).width, w = Math.round(tw + bw + px * 6), h = Math.round(fs + px * 4);
-      const x = Math.round(s[0] - w / 2), y = Math.round(s[1] - h);
+      const x = Math.round(s[0] - w / 2), y = Math.round(top - h - px * 2);
       // 어두운 판 + 색 테두리 2겹 (도트 느낌으로 모서리만 깎음)
       ctx.fillStyle = '#120f18';
       ctx.fillRect(x - px, y, w + px * 2, h); ctx.fillRect(x, y - px, w, h + px * 2);
@@ -7668,8 +7684,12 @@ class Pickups {
       // 아래로 꼬리 (가리키는 대상)
       ctx.fillStyle = css(color); ctx.fillRect(Math.round(s[0] - px), y + h, px * 2, px * 2);
     };
-    for (const q of this.parts) tag([q.x, q.y + 1.6, q.z], q.label, PART_COLORS[q.kind], q.badge);
-    for (const it of this.items) if (!(it.t > 25 && Math.sin(it.t * 20) < 0)) tag([it.x, it.y + 1.1, it.z], ITEM_NAMES[it.kind], ITEM_COLORS[it.kind]);
+    for (const q of this.parts) { const s = project([q.x, q.y + 0.3, q.z]); if (s) tag(s, box(s, PART_COLORS[q.kind], true), q.label, PART_COLORS[q.kind], q.badge); }
+    for (const it of this.items) {
+      if (it.t > 25 && Math.sin(it.t * 20) < 0) continue;
+      const s = project([it.x, it.y + 0.1, it.z]), big = it.kind === 'crate' || it.kind === 'core';
+      if (s) tag(s, box(s, ITEM_COLORS[it.kind], big), ITEM_NAMES[it.kind], ITEM_COLORS[it.kind]);
+    }
   }
 
   clear() { for (const q of this.parts || []) { this.game.scene.remove(q.node); this.game.scene.remove(q.beam); } this.parts = []; this.gems = []; this.items = []; this.gemMesh.count = 0; this.itemMesh.count = 0; this.frameMesh.count = 0; }
@@ -7683,6 +7703,7 @@ __m["game/player.js"] = (() => {
 
 const { Mesh, Material, Geometry, dampAngle } = __m["engine/index.js"];
 const { LEGS, FRAMES, HEADS, buildMech, animateMech } = __m["game/parts.js"];
+const { WEAPONS, lvOf } = __m["game/weapons.js"];
 
 // 스탯 업그레이드 (외형 변화 없음 → 드론 튜닝 연출)
 const STAT_UPS = {
@@ -7855,6 +7876,49 @@ class Player {
     if (X > 0.5 && Math.random() < 0.5) fx.sparks.emit({ position: [this.x - Math.sin(this.yaw) * 0.4 * this.size, 1.5 * this.size, this.z - Math.cos(this.yaw) * 0.4 * this.size], velocity: [(Math.random() - 0.5) * 2, 3, (Math.random() - 0.5) * 2], life: 0.35, size: 2, sizeEnd: 1, color: [1, 0.8, 0.3], colorEnd: [1, 0.2, 0.1], emissive: 1, gravity: -0.3 });
     // 변형 순간: 몸이 살짝 움찔
     if (this.transformT > 0) { const t = this.transformT / 0.35; m.upper.position[1] += Math.sin(t * Math.PI) * 0.12; }
+  }
+
+  // ---- 조준 가이드: 주무장이 실제로 닿는 범위를 바닥에 그린다 ----
+  //  부채꼴 무기(화염, 베기, 채찍) = 양쪽 테두리 + 끝 호, 총/빔 = 화살표 한 줄. 쏘는 중엔 더 밝게
+  updateAimGuide() {
+    const g = this.game, st = this.stats;
+    if (!this.guide) {
+      this.guide = [];
+      for (let i = 0; i < 14; i++) { const m = g.scene.add(new Mesh(Geometry.box(1, 1, 1, [1, 1, 1]), new Material({ emissive: 1, outline: false, castShadow: false }))); m.visible = false; this.guide.push(m); }
+    }
+    let n = 0;
+    const bar = (x0, z0, x1, z1, w, col, op) => {
+      const m = this.guide[n++]; if (!m) return;
+      const dx = x1 - x0, dz = z1 - z0, len = Math.hypot(dx, dz);
+      m.position = [(x0 + x1) / 2, 0.08, (z0 + z1) / 2]; m.rotation = [0, Math.atan2(dx, dz), 0]; m.scale = [w, 0.03, len];
+      m.material.color = col.map((c) => c * op); m.visible = true; // 반투명은 디더링으로 점선이 돼서 밝기로 조절
+    };
+    const show = g.state === 'play' && this.mode !== 'snipe'; // 저격 모드는 자체 조준선
+    const w = g.weapons.primary;
+    if (show) {
+      const L = w ? lvOf(w) : null, W = w ? WEAPONS[w.id] : null;
+      const yaw = this.attackYaw(W ? W.range * st.rangeMul : 4);
+      const firing = g.ctl?.attack || g.weapons.swingLock > 0;
+      const col = this.mouseActive ? [1, 0.6, 0.15] : [0.5, 0.9, 1], op = firing ? 1.1 : 0.6;
+      const x = this.x, z = this.z, r0 = this.r + 0.3;
+      let reach, half;
+      if (!w) { reach = 1.9 * st.areaMul; half = 0.95; }                                       // 주먹
+      else if (L.cone) { reach = W.range * st.rangeMul * (L.far || 1); half = (L.cone * st.areaMul) / 2; } // 화염
+      else if (L.arc && L.reach) { reach = L.reach * st.rangeMul; half = L.arc / 2; }          // 채찍
+      else if (L.arc) { reach = L.radius * st.areaMul; half = Math.min(3.1, L.arc / 2); }      // 사벨
+      if (reach) {
+        const pt = (a, r) => [x + Math.sin(a) * r, z + Math.cos(a) * r];
+        for (const s of [-1, 1]) { const a = pt(yaw + s * half, r0), b = pt(yaw + s * half, reach); bar(a[0], a[1], b[0], b[1], 0.16, col, op); }
+        const seg = Math.max(3, Math.min(10, Math.round(half * 4)));
+        for (let i = 0; i < seg; i++) { const a = pt(yaw - half + (2 * half * i) / seg, reach), b = pt(yaw - half + (2 * half * (i + 1)) / seg, reach); bar(a[0], a[1], b[0], b[1], 0.16, col, op); }
+      } else {
+        // 총/빔: 6칸까지 가는 화살표
+        const len = Math.min(6, W.range * st.rangeMul), [ex, ez] = [x + Math.sin(yaw) * len, z + Math.cos(yaw) * len];
+        bar(x + Math.sin(yaw) * r0, z + Math.cos(yaw) * r0, ex, ez, 0.12, col, op);
+        for (const s of [-1, 1]) bar(ex, ez, ex - Math.sin(yaw + s * 0.5) * 0.7, ez - Math.cos(yaw + s * 0.5) * 0.7, 0.16, col, op);
+      }
+    }
+    for (let i = n; i < this.guide.length; i++) this.guide[i].visible = false;
   }
 
   // ---- 오버드라이브 ----
@@ -8056,6 +8120,7 @@ class Player {
     m.upper.position[1] = this.upperY;
     m.upper.position[2] = -this.recoil * 0.12;
     this.applyModePose?.(dt);
+    this.updateAimGuide();
     for (const w of g.weapons.list) {
       const si = m.slotInfo[w.slot];
       if (si && w.id !== 'saber') si.inner.position[2] = -(w.kick || 0) * 0.5;
@@ -12033,7 +12098,13 @@ function start() {
 
   // ---- 마우스: 커서 방향 조준, 왼쪽 버튼 공격, 오른쪽 버튼 특수기 ----
   const canvas = $('view');
-  let mx = 0, my = 0, mouseT = -10;
+  let mx = 0, my = 0, mouseT = -10, mouseMode = false, inside = false, lastCur = null;
+  // 게임 중 커서: 어느 배경에서도 보이는 굵은 조준경 (흰 테 + 검은 외곽 + 주황 중심)
+  const CROSS = (() => {
+    const ring = (c, w) => `<circle cx="16" cy="16" r="9" fill="none" stroke="${c}" stroke-width="${w}"/><path d="M16 1v8M16 23v8M1 16h8M23 16h8" stroke="${c}" stroke-width="${w}"/>`;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" shape-rendering="crispEdges">${ring('#000', 5)}${ring('#fff', 2)}<rect x="14" y="14" width="4" height="4" fill="#ff8a1e" stroke="#000"/></svg>`;
+    return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 16 16, crosshair`;
+  })();
   const updateAim = () => {
     const cam = engine.camera, p = game.player;
     const ray = cam.screenRay(mx, my, canvas.clientWidth, canvas.clientHeight, engine.scale, engine.dpr);
@@ -12041,20 +12112,25 @@ function start() {
     const hx = ray.origin[0] + ray.dir[0] * t, hz = ray.origin[2] + ray.dir[2] * t;
     p.mouseYaw = Math.atan2(hx - p.x, hz - p.z);
   };
-  canvas.addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse') { mx = e.offsetX; my = e.offsetY; mouseT = performance.now(); } });
+  canvas.addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse') { mx = e.offsetX; my = e.offsetY; mouseT = performance.now(); inside = true; } });
   canvas.addEventListener('pointerdown', (e) => {
     if (game.state === 'install') { game.installer.skip(); return; }
     if (e.pointerType !== 'mouse') return;
-    mx = e.offsetX; my = e.offsetY; mouseT = performance.now();
+    mx = e.offsetX; my = e.offsetY; mouseT = performance.now(); inside = true; mouseMode = true;
     if (e.button === 0) { game.btn.attack = true; game.btn.attackPressed = true; }
     if (e.button === 2) game.btn.special = true;
   });
   addEventListener('pointerup', (e) => { if (e.pointerType === 'mouse' && e.button === 0) game.btn.attack = false; });
-  canvas.addEventListener('pointerleave', () => { mouseT = -10; });
+  canvas.addEventListener('pointerleave', () => { mouseT = -10; inside = false; });
   const prevUpdate = engine.onUpdate;
   engine.onUpdate = (dt, t) => {
-    const p = game.player;
-    p.mouseActive = !coarse && game.state === 'play' && performance.now() - mouseT < 2500;
+    const p = game.player, inp = engine.input;
+    // 마우스로 공격하면 커서가 화면 안에 있는 동안 계속 마우스 조준 (가만히 쏘고 있어도 방향이 안 튐).
+    // 키보드(J/K)로 공격하면 자동 조준으로 돌아가고, 그때는 최근에 마우스를 움직였을 때만 마우스 조준
+    if (inp.pressed('j') || inp.pressed('k')) mouseMode = false;
+    p.mouseActive = !coarse && game.state === 'play' && (mouseMode ? inside : performance.now() - mouseT < 2500);
+    const cur = !coarse && (game.state === 'play' || game.state === 'install') ? CROSS : '';
+    if (cur !== lastCur) { canvas.style.cursor = lastCur = cur; } // 격납고(grab)는 CSS 커서 그대로
     if (p.mouseActive) updateAim();
     prevUpdate(dt, t);
   };
