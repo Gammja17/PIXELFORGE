@@ -616,7 +616,8 @@ export class Rooms {
       const bob = P.y === 0 ? Math.sin(P.t * 3) * 0.05 : 0;
       P.mesh.position = [P.x, P.y, P.z]; P.glow.position = [P.x, P.y + bob, P.z];
       P.glow.material.color = [1, 1, 1].map(() => 0.8 + 0.2 * Math.sin(P.t * 5));
-      if (P.y === 0 && Math.hypot(p.x - P.x, p.z - P.z) < 1.9) { P.taken = true; this.claimPrize(); }
+      // 닿으면 획득. 오래 못 주우면 (구조물에 막혔을 때 대비) 12초 뒤 자동으로 회수
+      if (P.y === 0 && (Math.hypot(p.x - P.x, p.z - P.z) < 1.9 || P.t > 12)) { P.taken = true; this.claimPrize(); }
     }
     if (this.phase === 'reward' && P && P.taken && g.state === 'play') this.openDoors();
     if (this.phase === 'clear' && (this.reward === 'start' || (P && P.taken && g.state === 'play'))) this.openDoors();

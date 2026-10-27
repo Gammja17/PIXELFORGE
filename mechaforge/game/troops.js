@@ -384,7 +384,7 @@ export const TROOP_TYPES = {
       add(g, Geometry.cylinder(0.55, 0.65, 0.3, 6, GUN), [0, 0.15, 0]);
       add(g, Geometry.cylinder(0.2, 0.28, 1.2, 6, SLATE), [0, 0.9, 0]);
       for (let i = 0; i < 3; i++) add(g, Geometry.cylinder(0.42 - i * 0.08, 0.42 - i * 0.08, 0.06, 6, DARK), [0, 0.7 + i * 0.32, 0]);
-      add(glow, Geometry.icosphere(0.2, 0, [1, 0.25, 0.3]), [0, 1.62, 0]);
+      add(glow, Geometry.icosphere(0.2, 0, [0.85, 0.45, 1]), [0, 1.62, 0]);
       return { g, glow };
     },
     ai(en, e, c) {
@@ -393,8 +393,8 @@ export const TROOP_TYPES = {
       e.yaw += c.dt * 0.8;
       e.charging = Math.sin(g.time * 6) > 0.3;
       en.grid.query(e.x, e.z, R6, (o) => { if (o !== e && !o.dead && !o.T.part && !o.T.mine && o.type !== 'amp' && Math.hypot(o.x - e.x, o.z - e.z) < R6) o.ampT = g.time + 0.3; });
-      if ((e.pulse = (e.pulse || 0) - c.dt) <= 0) { e.pulse = 1.2; en.hazards.ring(e.x, e.z, R6, [1, 0.25, 0.3], 0.35); }
-      if ((g.frame & 3) === 0) en.grid.query(e.x, e.z, R6, (o) => { if (o.ampT > g.time && o !== e && Math.random() < 0.15) fx.pxr.emit({ position: [o.x, (o.y || 0) + 1.4, o.z], velocity: [0, 1.5, 0], life: 0.2, size: 1, sizeEnd: 1, ramp: [[1, 0.3, 0.35]], emissive: 0.6, hard: true }); });
+      if ((e.pulse = (e.pulse || 0) - c.dt) <= 0) { e.pulse = 1.2; en.hazards.ring(e.x, e.z, R6, [0.8, 0.45, 1], 0.3); }
+      if ((g.frame & 3) === 0) en.grid.query(e.x, e.z, R6, (o) => { if (o.ampT > g.time && o !== e && Math.random() < 0.15) fx.pxr.emit({ position: [o.x, (o.y || 0) + 1.4, o.z], velocity: [0, 1.5, 0], life: 0.2, size: 1, sizeEnd: 1, ramp: [[0.85, 0.5, 1]], emissive: 0.6, hard: true }); });
     },
   },
 };

@@ -3,6 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="메카를 조립해 떼거리를 쓸어버리는 도트 로그라이트. 방마다 보상을 고르고, 적 정예의 부품을 뜯어 내 기체에 단다.">
+<meta name="theme-color" content="#0b0b12">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10' shape-rendering='crispEdges'%3E%3Crect width='10' height='10' fill='%230b0b12'/%3E%3Crect x='2' y='2' width='6' height='5' fill='%23e8e4f0'/%3E%3Crect x='3' y='4' width='4' height='1' fill='%2338e0ff'/%3E%3Crect x='4' y='0' width='2' height='2' fill='%23ffb21e'/%3E%3Crect x='1' y='7' width='8' height='2' fill='%235a8dff'/%3E%3C/svg%3E">
 <title>MechaForge</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <style>
@@ -5596,7 +5599,7 @@ const BESTIARY = {
   charger:  { name: '돌격 기체', role: '돌격', what: '바닥에 경로를 그리고 직진 돌격', how: '옆으로 피하면 벽에 박혀 기절', drop: ['module', 'booster'], tint: [1.55, 0.75, 0.65] },
   grappler: { name: '견인 기체', role: '견인', what: '노란 조준선 뒤 갈고리. 맞으면 끌려간다', how: '선이 깜빡이면 대시로 피하라', drop: ['weapon', 'rod'], tint: [1.1, 1.3, 0.9] },
   leech:    { name: '흡착 드론', role: '흡착', what: '달라붙어 기동을 크게 떨어뜨린다', how: '대시하면 떨어져 나가 기절한다', drop: ['module', 'booster'], tint: [1.4, 0.8, 1.2] },
-  amp:      { name: '증폭 탑', role: '증폭', what: '붉은 고리 안의 적이 빨라지고 단단해진다', how: '탑부터 부숴라', drop: ['module', 'reactor'], tint: [1.4, 0.85, 0.85] },
+  amp:      { name: '증폭 탑', role: '증폭', what: '보라 고리 안의 적이 빨라지고 단단해진다', how: '탑부터 부숴라', drop: ['module', 'reactor'], tint: [1.4, 0.85, 0.85] },
   drone:    { name: '정찰 드론', role: '기본', what: '무리 지어 날아와 몸으로 부딪친다', how: '모아서 한 번에', drop: ['weapon', 'funnel'] },
   // ---- 중간 보스 ----
   warden: { name: '나선 포대', role: '중간 보스', what: '회전 나선과 고리 연사', how: '나선의 빈 줄을 타고 접근', drop: ['weapon', 'ricochet'] },
@@ -7114,7 +7117,7 @@ const TROOP_TYPES = {
       add(g, Geometry.cylinder(0.55, 0.65, 0.3, 6, GUN), [0, 0.15, 0]);
       add(g, Geometry.cylinder(0.2, 0.28, 1.2, 6, SLATE), [0, 0.9, 0]);
       for (let i = 0; i < 3; i++) add(g, Geometry.cylinder(0.42 - i * 0.08, 0.42 - i * 0.08, 0.06, 6, DARK), [0, 0.7 + i * 0.32, 0]);
-      add(glow, Geometry.icosphere(0.2, 0, [1, 0.25, 0.3]), [0, 1.62, 0]);
+      add(glow, Geometry.icosphere(0.2, 0, [0.85, 0.45, 1]), [0, 1.62, 0]);
       return { g, glow };
     },
     ai(en, e, c) {
@@ -7123,8 +7126,8 @@ const TROOP_TYPES = {
       e.yaw += c.dt * 0.8;
       e.charging = Math.sin(g.time * 6) > 0.3;
       en.grid.query(e.x, e.z, R6, (o) => { if (o !== e && !o.dead && !o.T.part && !o.T.mine && o.type !== 'amp' && Math.hypot(o.x - e.x, o.z - e.z) < R6) o.ampT = g.time + 0.3; });
-      if ((e.pulse = (e.pulse || 0) - c.dt) <= 0) { e.pulse = 1.2; en.hazards.ring(e.x, e.z, R6, [1, 0.25, 0.3], 0.35); }
-      if ((g.frame & 3) === 0) en.grid.query(e.x, e.z, R6, (o) => { if (o.ampT > g.time && o !== e && Math.random() < 0.15) fx.pxr.emit({ position: [o.x, (o.y || 0) + 1.4, o.z], velocity: [0, 1.5, 0], life: 0.2, size: 1, sizeEnd: 1, ramp: [[1, 0.3, 0.35]], emissive: 0.6, hard: true }); });
+      if ((e.pulse = (e.pulse || 0) - c.dt) <= 0) { e.pulse = 1.2; en.hazards.ring(e.x, e.z, R6, [0.8, 0.45, 1], 0.3); }
+      if ((g.frame & 3) === 0) en.grid.query(e.x, e.z, R6, (o) => { if (o.ampT > g.time && o !== e && Math.random() < 0.15) fx.pxr.emit({ position: [o.x, (o.y || 0) + 1.4, o.z], velocity: [0, 1.5, 0], life: 0.2, size: 1, sizeEnd: 1, ramp: [[0.85, 0.5, 1]], emissive: 0.6, hard: true }); });
     },
   },
 };
@@ -11003,7 +11006,8 @@ class Rooms {
       const bob = P.y === 0 ? Math.sin(P.t * 3) * 0.05 : 0;
       P.mesh.position = [P.x, P.y, P.z]; P.glow.position = [P.x, P.y + bob, P.z];
       P.glow.material.color = [1, 1, 1].map(() => 0.8 + 0.2 * Math.sin(P.t * 5));
-      if (P.y === 0 && Math.hypot(p.x - P.x, p.z - P.z) < 1.9) { P.taken = true; this.claimPrize(); }
+      // 닿으면 획득. 오래 못 주우면 (구조물에 막혔을 때 대비) 12초 뒤 자동으로 회수
+      if (P.y === 0 && (Math.hypot(p.x - P.x, p.z - P.z) < 1.9 || P.t > 12)) { P.taken = true; this.claimPrize(); }
     }
     if (this.phase === 'reward' && P && P.taken && g.state === 'play') this.openDoors();
     if (this.phase === 'clear' && (this.reward === 'start' || (P && P.taken && g.state === 'play'))) this.openDoors();

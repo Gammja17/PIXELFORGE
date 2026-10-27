@@ -17,7 +17,7 @@ export const BESTIARY = {
   charger:  { name: '돌격 기체', role: '돌격', what: '바닥에 경로를 그리고 직진 돌격', how: '옆으로 피하면 벽에 박혀 기절', drop: ['module', 'booster'], tint: [1.55, 0.75, 0.65] },
   grappler: { name: '견인 기체', role: '견인', what: '노란 조준선 뒤 갈고리. 맞으면 끌려간다', how: '선이 깜빡이면 대시로 피하라', drop: ['weapon', 'rod'], tint: [1.1, 1.3, 0.9] },
   leech:    { name: '흡착 드론', role: '흡착', what: '달라붙어 기동을 크게 떨어뜨린다', how: '대시하면 떨어져 나가 기절한다', drop: ['module', 'booster'], tint: [1.4, 0.8, 1.2] },
-  amp:      { name: '증폭 탑', role: '증폭', what: '붉은 고리 안의 적이 빨라지고 단단해진다', how: '탑부터 부숴라', drop: ['module', 'reactor'], tint: [1.4, 0.85, 0.85] },
+  amp:      { name: '증폭 탑', role: '증폭', what: '보라 고리 안의 적이 빨라지고 단단해진다', how: '탑부터 부숴라', drop: ['module', 'reactor'], tint: [1.4, 0.85, 0.85] },
   drone:    { name: '정찰 드론', role: '기본', what: '무리 지어 날아와 몸으로 부딪친다', how: '모아서 한 번에', drop: ['weapon', 'funnel'] },
   // ---- 중간 보스 ----
   warden: { name: '나선 포대', role: '중간 보스', what: '회전 나선과 고리 연사', how: '나선의 빈 줄을 타고 접근', drop: ['weapon', 'ricochet'] },
