@@ -923,7 +923,9 @@ export class Enemies {
       }
       // 자폭: 폭발 범위 원
       if (e.state === 'fuse' && nd < this.teleDisc.capacity) this.teleDisc.setAt(nd++, m4.fromTRS([e.x, 0.05, e.z], [0, 0, 0], [2.2, 1, 2.2]), RED.map((v) => v * blink), 1);
-      const M = this.meshes[e.type], i = counts[e.type]++;
+      const M = this.meshes[e.type];
+      if (counts[e.type] >= M.body.capacity) continue; // 강제 소환으로 그릴 칸을 넘으면 그 적은 그리지 않는다 (터지지 않게)
+      const i = counts[e.type]++;
       const pop = Math.min(1, e.spawnT / 0.25);
       const s = (e.elite ? 1.35 : 1) * (pop < 1 ? pop * (1.3 - 0.3 * pop) : 1) * (e.vis ?? 1);
       // 정예 특성 고리 (특성마다 하나, 바깥 고리는 반대로 돈다) + 보호막 거품

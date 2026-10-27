@@ -106,4 +106,5 @@ export function pixIcon(name, u = 4) {
   pixCache.set(k, c);
   return c;
 }
-export const pixURL = (name, u = 4) => pixIcon(name, u).toDataURL();
+const urlCache = new Map();
+export const pixURL = (name, u = 4) => { const k = name + u; if (!urlCache.has(k)) urlCache.set(k, pixIcon(name, u).toDataURL()); return urlCache.get(k); };

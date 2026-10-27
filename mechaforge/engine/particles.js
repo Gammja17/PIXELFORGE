@@ -32,8 +32,9 @@ export class ParticleSystem {
    * update(p, dt): 개별 움직임을 덮어쓰고 싶을 때
    */
   emit(o) {
-    if (this.list.length >= this.max) this.list.shift();
-    this.list.push({
+    // 꽉 차면 배열을 밀지 않고 한 칸을 돌아가며 덮어쓴다 (shift 는 매번 전체를 옮겨서 느림)
+    const full = this.list.length >= this.max;
+    const q = ({
       p: [...o.position], v: [...(o.velocity || [0, 0, 0])],
       life: o.life ?? 1, age: 0,
       size: o.size ?? 2, sizeEnd: o.sizeEnd ?? o.size ?? 2,
@@ -41,6 +42,7 @@ export class ParticleSystem {
       emissive: o.emissive ?? 0, fadeIn: o.fadeIn ?? 0, ramp: o.ramp || null, hard: !!o.hard,
       gravity: o.gravity ?? 1, update: o.update || null, seed: Math.random() * 100,
     });
+    if (full) { this._w = ((this._w || 0) + 1) % this.list.length; this.list[this._w] = q; } else this.list.push(q);
   }
 
   update(dt) {
@@ -48,7 +50,7 @@ export class ParticleSystem {
     for (let i = this.list.length - 1; i >= 0; i--) {
       const p = this.list[i];
       p.age += dt;
-      if (p.age >= p.life) { this.list.splice(i, 1); continue; }
+      if (p.age >= p.life) { const last = this.list.pop(); if (i < this.list.length) this.list[i] = last; continue; } // 맨 끝 것과 바꿔서 지우기 (splice 보다 빠름)
       if (p.update) p.update(p, dt);
       let gx = g[0], gy = g[1], gz = g[2];
       if (this.radialGravity) {

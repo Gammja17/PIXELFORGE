@@ -360,6 +360,14 @@ function start() {
     return;
   }
   window.game = game;
+  // 카드/무기 슬롯 썸네일을 격납고에서 미리 조금씩 만들어 둔다 (전투 중 처음 보는 부품 카드가 뜰 때 끊기지 않게)
+  const prewarm = () => {
+    if (game.state !== 'hangar') return setTimeout(prewarm, 1500);
+    const todo = [...Object.keys(WEAPONS).flatMap((id) => [{ kind: 'weapon', id }, { kind: 'evolve', id }]), ...Object.keys(MODULES).map((id) => ({ kind: 'module', id }))];
+    const step = () => { if (game.state !== 'hangar') return setTimeout(prewarm, 1500); const c = todo.shift(); if (!c) return; try { game.player.loadout.paint = game.selection.paint; cardImage(game, c); } catch { /* 무시 */ } setTimeout(step, 90); };
+    step();
+  };
+  setTimeout(prewarm, 1200);
   game.partPreview = partPreview; // 디버그: 부품 썸네일
   const { engine } = game;
 
