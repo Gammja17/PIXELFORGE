@@ -11,7 +11,7 @@ import { PIX } from './icons.js';
 export const ARCHETYPES = {
   striker: {
     name: '강습', tag: 'STRIKER', icon: 'a_striker', color: [0.45, 0.85, 1],
-    rule: '관통 대시', ruleDesc: '대시로 적을 꿰뚫고 베어 낸다. 대시 중에 처치하면 대시가 바로 다시 찬다',
+    rule: '돌파 대시', ruleDesc: '대시로 적을 꿰뚫고 베어 낸다. 대시 중에 처치하면 대시가 바로 다시 찬다',
     kitText: '대시 +1회', kit: [], stats: { mul: { dashCd: 0.85, maxHp: 0.9 }, add: { dashCharges: 1 } },
     flaw: '최대 체력 -10%',
   },

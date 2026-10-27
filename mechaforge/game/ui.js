@@ -547,7 +547,7 @@ function start() {
     };
     if (T.arch) {
       const cur = sel.arch || 'striker';
-      const showA = (id) => { const A = ARCHETYPES[id], lock = !archUnlocked(game, id); desc(`${A.name} 계열  ${A.rule}`, `${lock ? `잠김: ${A.unlock.text}. ` : ''}${A.ruleDesc}. 시작 장비: ${A.kitText}. 단점: ${A.flaw}`); };
+      const showA = (id) => { const A = ARCHETYPES[id], lock = !archUnlocked(game, id); desc(`${A.name} 계열: ${A.rule}`, `${lock ? `잠김: ${A.unlock.text}. ` : ''}${A.ruleDesc}. 시작 장비: ${A.kitText}. 단점: ${A.flaw}`); };
       for (const id of T.ids) {
         const A = ARCHETYPES[id], locked = !archUnlocked(game, id);
         const el = opt(A.name, cur === id, () => {

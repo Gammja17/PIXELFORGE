@@ -12091,7 +12091,7 @@ const { PIX } = __m["game/icons.js"];
 const ARCHETYPES = {
   striker: {
     name: '강습', tag: 'STRIKER', icon: 'a_striker', color: [0.45, 0.85, 1],
-    rule: '관통 대시', ruleDesc: '대시로 적을 꿰뚫고 베어 낸다. 대시 중에 처치하면 대시가 바로 다시 찬다',
+    rule: '돌파 대시', ruleDesc: '대시로 적을 꿰뚫고 베어 낸다. 대시 중에 처치하면 대시가 바로 다시 찬다',
     kitText: '대시 +1회', kit: [], stats: { mul: { dashCd: 0.85, maxHp: 0.9 }, add: { dashCharges: 1 } },
     flaw: '최대 체력 -10%',
   },
@@ -12796,7 +12796,7 @@ class Game {
     this.fx.drawNumbers(ctx, (q) => { const s = this.project(q); return s && s[0] > -50 && s[1] > -50 && s[0] < c.width + 50 && s[1] < c.height + 50 ? s : null; }, px);
   }
 
-  srcName(id) { const w = this.weapons.get(id); return id === 'fist' ? '주먹' : id === 'other' ? '기타 (연쇄/세트)' : id === 'dash' ? '관통 대시' : id === 'escort' ? '호위 드론' : id === 'counter' ? '반격 충격파' : w ? weaponName(w) : WEAPONS[id]?.name || id; }
+  srcName(id) { const w = this.weapons.get(id); return id === 'fist' ? '주먹' : id === 'other' ? '기타 (연쇄/세트)' : id === 'dash' ? '돌파 대시' : id === 'escort' ? '호위 드론' : id === 'counter' ? '반격 충격파' : w ? weaponName(w) : WEAPONS[id]?.name || id; }
 
   // 적 머리 위: 맞은 적은 체력 막대 (떼거리 제외), 정예는 항상 금색 막대 + 특성 이름
   drawEnemyBars(ctx, px) {
@@ -13584,7 +13584,7 @@ function start() {
     };
     if (T.arch) {
       const cur = sel.arch || 'striker';
-      const showA = (id) => { const A = ARCHETYPES[id], lock = !archUnlocked(game, id); desc(`${A.name} 계열  ${A.rule}`, `${lock ? `잠김: ${A.unlock.text}. ` : ''}${A.ruleDesc}. 시작 장비: ${A.kitText}. 단점: ${A.flaw}`); };
+      const showA = (id) => { const A = ARCHETYPES[id], lock = !archUnlocked(game, id); desc(`${A.name} 계열: ${A.rule}`, `${lock ? `잠김: ${A.unlock.text}. ` : ''}${A.ruleDesc}. 시작 장비: ${A.kitText}. 단점: ${A.flaw}`); };
       for (const id of T.ids) {
         const A = ARCHETYPES[id], locked = !archUnlocked(game, id);
         const el = opt(A.name, cur === id, () => {

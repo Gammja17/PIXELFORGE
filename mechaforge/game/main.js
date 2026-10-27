@@ -525,7 +525,7 @@ export class Game {
     this.fx.drawNumbers(ctx, (q) => { const s = this.project(q); return s && s[0] > -50 && s[1] > -50 && s[0] < c.width + 50 && s[1] < c.height + 50 ? s : null; }, px);
   }
 
-  srcName(id) { const w = this.weapons.get(id); return id === 'fist' ? '주먹' : id === 'other' ? '기타 (연쇄/세트)' : id === 'dash' ? '관통 대시' : id === 'escort' ? '호위 드론' : id === 'counter' ? '반격 충격파' : w ? weaponName(w) : WEAPONS[id]?.name || id; }
+  srcName(id) { const w = this.weapons.get(id); return id === 'fist' ? '주먹' : id === 'other' ? '기타 (연쇄/세트)' : id === 'dash' ? '돌파 대시' : id === 'escort' ? '호위 드론' : id === 'counter' ? '반격 충격파' : w ? weaponName(w) : WEAPONS[id]?.name || id; }
 
   // 적 머리 위: 맞은 적은 체력 막대 (떼거리 제외), 정예는 항상 금색 막대 + 특성 이름
   drawEnemyBars(ctx, px) {
