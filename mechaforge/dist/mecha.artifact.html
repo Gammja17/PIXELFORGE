@@ -13188,8 +13188,12 @@ function start() {
       const top = s.dps.slice(0, 6), max = top[0]?.dps || 1;
       $('resdps').innerHTML = top.length ? `<span class="lbl">무기별 초당 피해</span>${top.map((q) => `<div class="dpsrow"><span>${q.name}</span><i><em style="width:${(q.dps / max) * 100}%"></em></i><b>${Math.round(q.dps)}</b><small>${Math.round(q.share * 100)}%</small></div>`).join('')}` : '';
       $('resach').innerHTML = s.achieved.map((a) => `<div class="achnew"><img class="px-img" alt="" src="${pixURL('trophy', 3)}"><div><b>업적: ${a.name}</b><small>보상: ${a.reward}</small></div></div>`).join('');
-      const P = PILOTS[s.pilot];
-      $('resparts').textContent = `파일럿 ${P.role} ${P.name}, 고철 ×${s.scrapMul.toFixed(1)}${s.bonus ? `, 위협 신기록 보너스 +${s.bonus}` : ''}\n보유 고철 ${s.total}. 격납고에서 새 부품과 연구를 해금할 수 있어요.\n무장: ${s.weapons.join(', ')}${s.modules.length ? `\n부품: ${s.modules.join(', ')}` : ''}`;
+      const P = PILOTS[s.pilot], AR = ARCHETYPES[game.arch];
+      // 새로 열린 기체 계열 알림
+      let seen = []; try { seen = JSON.parse(localStorage.getItem('mechaforge.archSeen') || '[]'); } catch { /* 무시 */ }
+      const fresh = ARCH_IDS.filter((id) => archUnlocked(game, id) && ARCHETYPES[id].unlock && !seen.includes(id));
+      if (fresh.length) { try { localStorage.setItem('mechaforge.archSeen', JSON.stringify([...seen, ...fresh])); } catch { /* 무시 */ } $('resach').innerHTML += fresh.map((id) => `<div class="achnew"><img class="px-img" alt="" src="${pixURL(ARCHETYPES[id].icon, 3)}"><div><b>새 기체 계열: ${ARCHETYPES[id].name}</b><small>${ARCHETYPES[id].rule}. 격납고 계열 탭에서 고를 수 있어요</small></div></div>`).join(''); }
+      $('resparts').textContent = `${AR ? `${AR.name} 계열, ` : ''}파일럿 ${P.role} ${P.name}, 고철 ×${s.scrapMul.toFixed(1)}${s.bonus ? `, 위협 신기록 보너스 +${s.bonus}` : ''}\n보유 고철 ${s.total}. 격납고에서 새 부품과 연구를 해금할 수 있어요.\n무장: ${s.weapons.join(', ')}${s.modules.length ? `\n부품: ${s.modules.join(', ')}` : ''}`;
       $('result').hidden = false;
       $('pad').hidden = true; $('banner').hidden = true;
       setTimeout(() => $('retry').focus(), 50);
