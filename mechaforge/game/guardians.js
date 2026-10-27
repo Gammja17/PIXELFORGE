@@ -210,6 +210,7 @@ export class Guardian {
     }
     game.ui.bossBar(1, this.name);
     game.ui.banner(`경고: 구역 수호자 ${this.name}`, true);
+    game.ui.enemyIntro?.(this.kind, true);
     game.sfx.play('alarm');
   }
 

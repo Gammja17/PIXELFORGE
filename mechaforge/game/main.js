@@ -126,6 +126,7 @@ export class Game {
     this.weapons.reset(); this.weapons.list = this.loadout.weapons.map((w) => ({ ...w, level: 1, cd: 0.4 }));
     this.time = 0;
     this.stats = { kills: 0, dealt: 0, taken: 0, bestCombo: 0, mids: 0, byWeapon: {} };
+    this.seen = new Set(['mite', 'drone']); // 이번 런에 만난 적 (처음 만나면 소개 카드)
     this.combo = 0; this.comboT = 0;
     this.level = 1; this.xp = 0; this.xpNeed = xpNeedFor(1); this.pendingLevels = 0; this.pendingCrates = 0; this.chips = 1 + this.mods.chips;
     this.enemies.clear(); this.shots.clear(); this.pickups.clear();

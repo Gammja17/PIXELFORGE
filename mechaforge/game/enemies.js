@@ -9,6 +9,7 @@ import { GUARDIAN_PARTS, Guardian } from './guardians.js';
 import { MIDBOSS_TYPES, MidBoss, Hazards, laserHits } from './midbosses.js';
 import { TROOP_TYPES } from './troops.js';
 import { OP_TYPES } from './ops.js';
+import { BESTIARY } from './bestiary.js';
 
 const TAU = Math.PI * 2;
 const add = (g, part, position = [0, 0, 0], rotation = [0, 0, 0]) => g.merge(part, { position, rotation });
@@ -219,6 +220,9 @@ export class Enemies {
       this.game.ui.toast(`정예 기체 출현 [${keys.map((k) => AFFIXES[k].name).join(', ')}]! 처치하면 부품 획득`);
     } else if (elite) this.game.ui.toast('정예 기체 출현! 처치하면 부품 획득');
     this.list.push(e);
+    // 처음 만난 적: 오른쪽에 소개 카드 (컨셉, 공략, 노획 부품)
+    const g = this.game;
+    if (BESTIARY[type] && !T.swarm && g.seen && !g.seen.has(type) && g.state === 'play') { g.seen.add(type); g.ui.enemyIntro?.(type); }
     return e;
   }
 
@@ -332,6 +336,7 @@ export class Enemies {
     g.ui.banner('경고: 대형 기체 강하!', true);
     g.sfx.play('alarm');
     g.ui.bossBar(1, '타이탄 MK-I');
+    g.ui.enemyIntro?.('titan', true);
   }
 
   // 타이탄이 처음 쓰러지면: 다리가 터져 나가고 비행 코어 MK-II 로 재기동 (체력 55% 로 다시)
@@ -598,6 +603,8 @@ export class Enemies {
 
   kill(e) {
     const g = this.game, fx = g.fx;
+    if (e._killed) return; // 같은 적이 한 프레임에 두 번 처치되지 않게 (보상 중복 방지)
+    e._killed = true;
     e.dead = true;
     if (e.T.inert) { fx.explosion(e.x, e.y, e.z, 0.6, { scorch: false }); return; } // 장식 부위 (히드라 목)
     if (e.T.mine) {
@@ -650,12 +657,11 @@ export class Enemies {
     if (T.bomb) this.blast(e.x, e.z, 2.2, 26 * this.k.dmg, true, 0.04);
     else if (chain && Math.random() < chain) this.blast(e.x, e.z, 1.6 + (e.elite ? 1 : 0) + T.r, (8 + e.maxHp * 0.6) * g.player.stats.dmgMul, false, 0.07);
     // 부품 노획: 적의 부위가 뜯겨 나와 떨어진다
-    const sal = e.type === 'tank' ? (e.elite || Math.random() < 0.06 ? ['weapon', 'cannon'] : null)
-      : e.type === 'brute' ? (e.elite || Math.random() < 0.2 ? ['module', 'spike'] : null)
-      : e.type === 'drone' && e.elite ? ['weapon', 'funnel'] : null;
+    // 노획: 그 적의 컨셉 무기를 뜯어낸다 (정예는 항상, 역할 있는 일반 적은 가끔)
+    const B = BESTIARY[e.type], sal = B?.drop && (e.elite || (!T.swarm && e.type !== 'drone' && Math.random() < 0.04)) ? B.drop : null;
     if (e.elite) g.addChips(1);
-    if (sal) g.pickups.salvage(sal[0], sal[1], e.x, e.z);
-    else if (e.elite) g.pickups.drop('crate', e.x, e.z);
+    const got = sal && g.pickups.salvage(sal[0], sal[1], e.x, e.z, B.name, e.elite);
+    if (!got && e.elite) g.pickups.drop('crate', e.x, e.z);
     if (e.guard) e.guard.onKill(e);
     if (e.type === 'brute') { g.hitStop(0.05); }
     const xp = T.xp * (e.elite ? 5 : 1) * (this.k.xp || 1); // 초반 방은 경험치 보너스 (rooms CURVE)
@@ -948,7 +954,7 @@ export class Enemies {
       const hk = Math.max(0, e.flash) / 0.09, sq = 1 + hk * 0.28;
       const mat = m4.fromTRS([e.x, y, e.z], [e.rx || 0, e.yaw, roll], [s * sq, s / sq, s * sq]);
       const wind = e.state === 'wind' && Math.sin(e.st * 28) > 0, f = e.flash > 0;
-      const tint = f ? (hk > 0.45 ? [1.9, 1.9, 1.9] : [1.7, 0.85, 0.8]) : wind ? [2.4, 1, 1] : e.elite ? (e.tint || [1.35, 1.2, 0.75]) : (e.tint || [1.3, 1.22, 1.28]);
+      const tint = f ? (hk > 0.45 ? [1.9, 1.9, 1.9] : [1.7, 0.85, 0.8]) : wind ? [2.4, 1, 1] : e.elite ? (e.tint || [1.35, 1.2, 0.75]) : (e.tint || BESTIARY[e.type]?.tint || [1.3, 1.22, 1.28]);
       M.body.setAt(i, mat, tint, f ? 0.5 : wind ? 0.5 : 0.1);
       const glowK = e.charging || e.state === 'wind' ? 2.2 : 1;
       const gk = e.exposed ? 1.6 + Math.sin(time * 14) * 0.6 : glowK;

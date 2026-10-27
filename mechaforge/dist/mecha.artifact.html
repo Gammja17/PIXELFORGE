@@ -134,7 +134,7 @@
   #bossfill { position: absolute; inset: 0 auto 0 0; width: 100%; background: linear-gradient(180deg, #ffd1ee 0 3px, var(--pink) 3px 8px, #a8246f 8px); transition: width .15s; }
 
   /* 연속 처치 카운터 (오른쪽) */
-  #combo { --heat: 0; position: fixed; right: calc(var(--sar) + 12px); top: 36%; display: grid; justify-items: end; pointer-events: none; text-shadow: var(--outline), 0 3px 0 #000; }
+  #combo { --heat: 0; position: fixed; right: calc(var(--sar) + 12px); top: 52%; display: grid; justify-items: end; pointer-events: none; text-shadow: var(--outline), 0 3px 0 #000; }
   #combo b { font-size: 36px; line-height: 1.15; color: color-mix(in srgb, var(--accent) calc((1 - var(--heat)) * 100%), var(--hp)); font-weight: 800; }
   #combo span { font-size: 12px; font-weight: 700; color: var(--text); margin-top: 4px; }
   #combo i { height: 4px; background: var(--accent); width: 100%; margin-top: 3px; justify-self: end; box-shadow: 0 0 0 1px #000; }
@@ -653,6 +653,23 @@
   .rslot .in { height: 94px; }
   .rslot.oc .cd i { background: #fff; }
   @media (pointer: coarse) { .rslot .evo { display: none; } .rslot .in { height: 52px; } }
+  /* 적 소개 카드 (오른쪽 위, 조종석 프레임) */
+  #intro { position: fixed; right: calc(var(--sar) + 10px); top: calc(var(--sat) + 96px); width: 236px; zoom: var(--uiz); pointer-events: none; padding: 8px 12px 10px; box-sizing: border-box;
+    border: 2px solid var(--medge); --mk: #ff5d6c;
+    background:
+      linear-gradient(var(--mk) 0 0) 0 0 / 12px 3px no-repeat, linear-gradient(var(--mk) 0 0) 0 0 / 3px 12px no-repeat,
+      linear-gradient(var(--mk) 0 0) 100% 100% / 12px 3px no-repeat, linear-gradient(var(--mk) 0 0) 100% 100% / 3px 12px no-repeat,
+      repeating-linear-gradient(0deg, rgba(255, 255, 255, .03) 0 1px, transparent 1px 3px), rgba(8, 10, 16, .92);
+    box-shadow: 0 3px 0 rgba(0, 0, 0, .5); text-shadow: 0 2px 0 #000; }
+  #intro.in { animation: introIn .25s steps(4) both; }
+  @keyframes introIn { from { transform: translateX(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+  #intro .role { display: block; font-size: 12px; color: var(--mk); }
+  #intro b { display: block; font-size: 24px; color: #fff; line-height: 1.2; margin: 2px 0 4px; }
+  #intro p { margin: 0 0 3px; font-size: 12px; line-height: 1.45; color: #d8dae6; }
+  #intro .how { color: #ffd86a; }
+  #intro .drop { color: #8ff0ff; }
+  #intro.boss { --mk: #ffb43d; width: 260px; }
+  @media (pointer: coarse) { #intro { top: calc(var(--sat) + 200px); width: 220px; } #intro b { font-size: 12px; } }
 </style>
 
 <canvas id="view" tabindex="0" aria-label="메카포지 전투 화면"></canvas>
@@ -687,6 +704,7 @@
 </div>
 
 <div id="rack" hidden></div>
+<div id="intro" hidden></div>
 <div id="banner" class="pix dark" hidden></div>
 <div id="combo" hidden><b class="px">0</b><span>연속 처치</span><i></i></div>
 <div id="cutin" hidden></div>
@@ -5502,6 +5520,44 @@ class WeaponSystem {
 return { WEAPONS, MAX_LEVEL, EVOLUTIONS, lvOf, weaponName, Shots, ARCS, slotArc, ARC_FREE, WeaponSystem };
 })();
 
+__m["game/bestiary.js"] = (() => {
+// 적 도감: 적마다 컨셉 한 줄, 공략 한 줄, 대표 색, 뜯어낼 수 있는 부품
+//  처음 만나면 오른쪽에 소개 카드가 뜨고 (ui.enemyIntro), 정예/보스를 잡으면 그 부품이 떨어진다 (노획)
+//  tint: 몸 색 배율 (역할이 한눈에 구분되게). drop: [종류, id] 그 적의 컨셉 무기
+
+const BESTIARY = {
+  // ---- 일반 적 ----
+  bomber:   { name: '자폭 드론', role: '자폭', what: '붙으면 깜빡이다 터진다. 주변 적도 같이 날린다', how: '떼 한가운데로 끌어들여 터뜨려라', drop: ['weapon', 'missile'], tint: [1.5, 0.9, 0.7] },
+  tank:     { name: '경전차', role: '포격', what: '거리를 두고 포탄을 쏜다. 주황 조준선이 예고', how: '조준선 옆으로 비켜서 다가가라', drop: ['weapon', 'cannon'] },
+  spinner:  { name: '회전 포대 드론', role: '탄막', what: '맴돌며 회전하는 고리탄을 뿌린다', how: '고리 사이 틈으로 파고들어라', drop: ['weapon', 'turret'], tint: [1.4, 0.9, 1.3] },
+  brute:    { name: '중장 메카', role: '돌진', what: '느리지만 붉은 길을 따라 들이받는다', how: '돌진 길에서 옆으로 빠져라', drop: ['weapon', 'stomp'], tint: [1.2, 1.05, 1.35] },
+  sniper:   { name: '저격 기체', role: '저격', what: '멀리서 조준선이 고정되면 관통 레이저', how: '선이 고정되는 순간 옆으로', drop: ['weapon', 'gauss'], tint: [0.85, 1.15, 1.5] },
+  shield:   { name: '방패 기체', role: '방패', what: '정면 공격을 거의 다 막는다', how: '옆이나 뒤로 돌아가서 쳐라', drop: ['module', 'shield'], tint: [1.5, 1.3, 0.7] },
+  assassin: { name: '그림자 암살기', role: '암살', what: '사라졌다가 등 뒤에 표식, 곧 베기', how: '표식이 뜨면 대시로 빠져라', drop: ['weapon', 'saw'], tint: [0.75, 0.65, 1.05] },
+  splitter: { name: '분열 기체', role: '분열', what: '부서지면 작은 조각 3개로 갈라진다', how: '범위 공격으로 한꺼번에', drop: ['weapon', 'cluster'], tint: [1.5, 1.05, 0.6] },
+  medic:    { name: '수리 드론', role: '수리', what: '다친 적을 수리 빔으로 고친다', how: '이놈부터 잡아라', drop: ['module', 'reactor'], tint: [0.8, 1.5, 0.9] },
+  miner:    { name: '지뢰 부설기', role: '지뢰', what: '맴돌며 지뢰를 깐다', how: '지뢰는 쏘면 터진다. 적 근처에서 터뜨려라', drop: ['weapon', 'mine'], tint: [1.5, 1.4, 0.55] },
+  charger:  { name: '돌격 기체', role: '돌격', what: '바닥에 경로를 그리고 직진 돌격', how: '옆으로 피하면 벽에 박혀 기절', drop: ['module', 'booster'], tint: [1.55, 0.75, 0.65] },
+  drone:    { name: '정찰 드론', role: '기본', what: '무리 지어 날아와 몸으로 부딪친다', how: '모아서 한 번에', drop: ['weapon', 'funnel'] },
+  // ---- 중간 보스 ----
+  warden: { name: '나선 포대', role: '중간 보스', what: '회전 나선과 고리 연사', how: '나선의 빈 줄을 타고 접근', drop: ['weapon', 'ricochet'] },
+  lancer: { name: '레이저 랜서', role: '중간 보스', what: '경고선을 긋고 레이저로 휩쓴다', how: '선이 그어지면 선 밖으로', drop: ['weapon', 'laser'] },
+  hive:   { name: '하이브 캐리어', role: '중간 보스', what: '자폭 드론을 계속 사출한다', how: '드론부터 정리하고 본체를', drop: ['weapon', 'funnel'] },
+  mortar: { name: '박격 포대', role: '중간 보스', what: '바닥 표식에 포탄이 떨어진다', how: '표식에서 벗어나 계속 움직여라', drop: ['weapon', 'cluster'] },
+  prism:  { name: '분광 수정체', role: '중간 보스', what: '멈췄다 터지는 탄, 휘는 나선', how: '멈춘 탄 근처에 있지 마라', drop: ['weapon', 'tesla'] },
+  reaper: { name: '추적 돌격기', role: '중간 보스', what: '돌진하며 탄을 깔고 지나간다', how: '돌진 경로 옆으로 피하고 뒤를 쳐라', drop: ['weapon', 'disc'] },
+  // ---- 최종 보스 ----
+  titan: { name: '타이탄', role: '최종 보스', what: '내려찍기, 탄막, 돌진을 번갈아 쓴다. 쓰러뜨리면 MK-II 로 다시 일어난다', how: '붉은 원과 예고선을 보고 움직이고, 오버드라이브는 MK-II 에 아껴라' },
+  // ---- 구역 수호자 ----
+  worm:   { name: '샌드웜', role: '수호자', what: '땅속으로 파고들었다가 발밑에서 솟구친다', how: '마디를 부술수록 머리가 약해진다', drop: ['module', 'armor'] },
+  crane:  { name: '크레인 워커', role: '수호자', what: '미사일 팔과 집게 팔이 붙어 있으면 몸통이 단단하다', how: '팔부터 뜯어라. 뜯은 팔은 내 것', drop: ['weapon', 'missile'] },
+  spider: { name: '거미 전차', role: '수호자', what: '다리 4개로 걷다가 위로 도약해 내려찍는다', how: '다리를 부수면 주저앉아 도약을 못 한다', drop: ['weapon', 'stomp'] },
+  hydra:  { name: '히드라 포대', role: '수호자', what: '레이저, 산탄, 박격 머리 3개', how: '머리를 하나씩 끊어야 몸통이 드러난다. 끊은 머리는 내 것', drop: ['weapon', 'laser'] },
+};
+
+return { BESTIARY };
+})();
+
 __m["game/midbosses.js"] = (() => {
 // 중간 보스: 일반 전투 방 중반에 강하하는 탄막 기체 (깊을수록 자주, 여럿)
 //  수호자 부위처럼 enemies.list 에 들어가고 (e.ctrl, e.guard = 이 객체) 여기서 움직인다.
@@ -5515,6 +5571,7 @@ __m["game/midbosses.js"] = (() => {
 //  추적 돌격기 (reaper): 경고선 → 돌진하며 탄을 깔고 (돌진이 끝나면 양옆으로 퍼짐), 초승달 휩쓸기, 조여 오는 고리
 
 const { Geometry, Mesh, Material } = __m["engine/index.js"];
+const { BESTIARY } = __m["game/bestiary.js"];
 
 const add = (g, part, position = [0, 0, 0], rotation = [0, 0, 0]) => g.merge(part, { position, rotation });
 const R = Math.random, TAU = Math.PI * 2;
@@ -5682,6 +5739,7 @@ class MidBoss {
     this.vy = 0; this.state = 'drop'; this.st = 0; this.pat = (R() * 3) | 0; this.yaw = 0; this.spin = 0; this.lasers = [];
     this.marks = [];
     game.ui.banner(`중간 보스 강하: ${this.name}`, true);
+    game.ui.enemyIntro?.(kind, true);
     game.sfx.play('alarm');
   }
   get phase2() { return this.e.hp < this.e.maxHp * 0.5; }
@@ -5694,7 +5752,9 @@ class MidBoss {
     g.sfx.play('bigboom'); g.hitStop(0.12); g.slowMo(0.6); g.fx.addTrauma(0.8);
     g.fx.explosion(e.x, 1.2, e.z, 2.4, { color: [1, 0.5, 0.4] });
     for (let i = 0; i < 12; i++) g.pickups.gem(e.x + (R() - 0.5) * 3, e.z + (R() - 0.5) * 3, 4);
-    g.pickups.drop('crate', e.x, e.z);
+    // 노획: 중간 보스의 컨셉 무기 (자리가 없거나 최대 레벨이면 부품 상자)
+    const D = BESTIARY[this.kind]?.drop;
+    if (!(D && g.pickups.salvage(D[0], D[1], e.x, e.z, this.name, true))) g.pickups.drop('crate', e.x, e.z);
     if (R() < 0.5) g.pickups.drop('kit', e.x + 1, e.z);
     g.addChips(1, '중간 보스');
     g.shots.enemyList.length = 0; // 격파 순간 탄막 해제
@@ -6192,6 +6252,7 @@ class Guardian {
     }
     game.ui.bossBar(1, this.name);
     game.ui.banner(`경고: 구역 수호자 ${this.name}`, true);
+    game.ui.enemyIntro?.(this.kind, true);
     game.sfx.play('alarm');
   }
 
@@ -7226,6 +7287,7 @@ const { GUARDIAN_PARTS, Guardian } = __m["game/guardians.js"];
 const { MIDBOSS_TYPES, MidBoss, Hazards, laserHits } = __m["game/midbosses.js"];
 const { TROOP_TYPES } = __m["game/troops.js"];
 const { OP_TYPES } = __m["game/ops.js"];
+const { BESTIARY } = __m["game/bestiary.js"];
 
 const TAU = Math.PI * 2;
 const add = (g, part, position = [0, 0, 0], rotation = [0, 0, 0]) => g.merge(part, { position, rotation });
@@ -7436,6 +7498,9 @@ class Enemies {
       this.game.ui.toast(`정예 기체 출현 [${keys.map((k) => AFFIXES[k].name).join(', ')}]! 처치하면 부품 획득`);
     } else if (elite) this.game.ui.toast('정예 기체 출현! 처치하면 부품 획득');
     this.list.push(e);
+    // 처음 만난 적: 오른쪽에 소개 카드 (컨셉, 공략, 노획 부품)
+    const g = this.game;
+    if (BESTIARY[type] && !T.swarm && g.seen && !g.seen.has(type) && g.state === 'play') { g.seen.add(type); g.ui.enemyIntro?.(type); }
     return e;
   }
 
@@ -7549,6 +7614,7 @@ class Enemies {
     g.ui.banner('경고: 대형 기체 강하!', true);
     g.sfx.play('alarm');
     g.ui.bossBar(1, '타이탄 MK-I');
+    g.ui.enemyIntro?.('titan', true);
   }
 
   // 타이탄이 처음 쓰러지면: 다리가 터져 나가고 비행 코어 MK-II 로 재기동 (체력 55% 로 다시)
@@ -7815,6 +7881,8 @@ class Enemies {
 
   kill(e) {
     const g = this.game, fx = g.fx;
+    if (e._killed) return; // 같은 적이 한 프레임에 두 번 처치되지 않게 (보상 중복 방지)
+    e._killed = true;
     e.dead = true;
     if (e.T.inert) { fx.explosion(e.x, e.y, e.z, 0.6, { scorch: false }); return; } // 장식 부위 (히드라 목)
     if (e.T.mine) {
@@ -7867,12 +7935,11 @@ class Enemies {
     if (T.bomb) this.blast(e.x, e.z, 2.2, 26 * this.k.dmg, true, 0.04);
     else if (chain && Math.random() < chain) this.blast(e.x, e.z, 1.6 + (e.elite ? 1 : 0) + T.r, (8 + e.maxHp * 0.6) * g.player.stats.dmgMul, false, 0.07);
     // 부품 노획: 적의 부위가 뜯겨 나와 떨어진다
-    const sal = e.type === 'tank' ? (e.elite || Math.random() < 0.06 ? ['weapon', 'cannon'] : null)
-      : e.type === 'brute' ? (e.elite || Math.random() < 0.2 ? ['module', 'spike'] : null)
-      : e.type === 'drone' && e.elite ? ['weapon', 'funnel'] : null;
+    // 노획: 그 적의 컨셉 무기를 뜯어낸다 (정예는 항상, 역할 있는 일반 적은 가끔)
+    const B = BESTIARY[e.type], sal = B?.drop && (e.elite || (!T.swarm && e.type !== 'drone' && Math.random() < 0.04)) ? B.drop : null;
     if (e.elite) g.addChips(1);
-    if (sal) g.pickups.salvage(sal[0], sal[1], e.x, e.z);
-    else if (e.elite) g.pickups.drop('crate', e.x, e.z);
+    const got = sal && g.pickups.salvage(sal[0], sal[1], e.x, e.z, B.name, e.elite);
+    if (!got && e.elite) g.pickups.drop('crate', e.x, e.z);
     if (e.guard) e.guard.onKill(e);
     if (e.type === 'brute') { g.hitStop(0.05); }
     const xp = T.xp * (e.elite ? 5 : 1) * (this.k.xp || 1); // 초반 방은 경험치 보너스 (rooms CURVE)
@@ -8165,7 +8232,7 @@ class Enemies {
       const hk = Math.max(0, e.flash) / 0.09, sq = 1 + hk * 0.28;
       const mat = m4.fromTRS([e.x, y, e.z], [e.rx || 0, e.yaw, roll], [s * sq, s / sq, s * sq]);
       const wind = e.state === 'wind' && Math.sin(e.st * 28) > 0, f = e.flash > 0;
-      const tint = f ? (hk > 0.45 ? [1.9, 1.9, 1.9] : [1.7, 0.85, 0.8]) : wind ? [2.4, 1, 1] : e.elite ? (e.tint || [1.35, 1.2, 0.75]) : (e.tint || [1.3, 1.22, 1.28]);
+      const tint = f ? (hk > 0.45 ? [1.9, 1.9, 1.9] : [1.7, 0.85, 0.8]) : wind ? [2.4, 1, 1] : e.elite ? (e.tint || [1.35, 1.2, 0.75]) : (e.tint || BESTIARY[e.type]?.tint || [1.3, 1.22, 1.28]);
       M.body.setAt(i, mat, tint, f ? 0.5 : wind ? 0.5 : 0.1);
       const glowK = e.charging || e.state === 'wind' ? 2.2 : 1;
       const gk = e.exposed ? 1.6 + Math.sin(time * 14) * 0.6 : glowK;
@@ -8364,22 +8431,27 @@ class Pickups {
 
   // ---- 노획 부품: 적에게서 뜯겨 나온 실제 부품이 바닥에 떨어진다 ----
   //  kind: 'weapon' | 'module', id: 무기/모듈 id
-  salvage(kind, id, x, z) {
+  salvage(kind, id, x, z, src = null, big = false) {
     const g = this.game;
-    if (this.parts.length >= 6) return;
+    if (this.parts.length >= 6) return false;
     // 이미 최대 레벨이거나 자리가 없는 부품은 떨어뜨리지 않는다 (줍자마자 분해 → 경험치로 기체만 계속 커지던 문제)
-    if (!g.salvageChoice(kind, id, this.parts.filter((q) => q.kind === kind && q.id === id).length)) return;
+    if (!g.salvageChoice(kind, id, this.parts.filter((q) => q.kind === kind && q.id === id).length)) return false;
     const node = g.scene.add(partPreview(kind, id, g.player.loadout.paint));
     const beam = g.scene.add(new Mesh(Geometry.cylinder(0.11, 0.11, 1, 6, [1, 0.8, 0.3]), new Material({ emissive: 1, outline: false, castShadow: false, opacity: 0.5 })));
     const a = Math.random() * 6.28;
     this.parts.push({ kind, id, x, z, y: 1.2, vx: Math.cos(a) * 3, vz: Math.sin(a) * 3, vy: 7, t: 0, node, beam, spin: (Math.random() - 0.5) * 14 });
     const name = kind === 'weapon' ? WEAPONS[id].name : MODULES[id].name;
     const owned = kind === 'weapon' ? !!g.weapons.get(id) : !!g.player.loadout.modules?.[id];
-    this.parts.at(-1).label = `${kind === 'weapon' ? '무기' : '모듈'}: ${name}`;
+    this.parts.at(-1).label = src ? `${src}의 ${name}` : `${kind === 'weapon' ? '무기' : '모듈'}: ${name}`;
     this.parts.at(-1).badge = owned ? '강화' : 'NEW';
-    g.ui.toast(`${name} 떨어짐! 가까이 가서 줍기`);
+    if (big) {
+      // 뜯어내는 순간: 잠깐 느려지고 금빛 섬광, 노획 알림
+      g.slowMo?.(0.45); g.fx.starPx([x, 1.4, z], 8, [1, 0.85, 0.3], 1.6, 0.3, Math.random()); g.fx.ring(x, 0.15, z, 3.2, [1, 0.85, 0.3], 0.4);
+      g.ui.banner(`노획! ${src}의 ${name}`);
+    } else g.ui.toast(`${src ? src + '의 ' : ''}${name} 떨어짐! 가까이 가서 줍기`);
     g.sfx.play('clank', { vol: 0.6 });
     g.fx.ring(x, 0.15, z, 2, [1, 0.8, 0.3], 0.3);
+    return true;
   }
   // 바닥 테두리 하나 찍기 (천천히 돌며 숨쉬듯 커졌다 작아짐)
   frame(x, z, t, color, s = 1) {
@@ -10119,10 +10191,10 @@ const SPECIALS = {
 const CURVE = [
   //      dens  dPw   dmg   mPw   hp   hpE   swarm mid         haz   troop xp    guard bul
   /* 0 */ [0.7, 0.03, 0.55, 0, 1.0, 0.3, 1.0, [1.2, 0.4], 0, 0, 1.5, 1, 1],
-  /* 1 */ [0.7, 0.03, 0.55, 0, 1.0, 0.3, 1.0, [1.2, 0.4], 0.35, 0, 1.5, 1, 1],
-  /* 2 */ [0.8, 0.04, 0.6, 0, 1.3, 0.35, 1.25, [1.5, 0.4], 0.3, 0, 1.3, 0.6, 0.45],
-  /* 3 */ [0.95, 0.07, 1.0, 0.01, 1.6, 0.45, 1.5, [1.8, 0.45], 0.65, 0.1, 1.4, 1, 0.75],
-  /* 4 */ [1.05, 0.09, 1.1, 0.02, 2.0, 0.55, 1.8, [2.5, 0.55], 0.85, 0.16, 1.35, 1, 0.9],
+  /* 1 */ [0.7, 0.03, 0.55, 0, 1.0, 0.3, 1.0, [1.2, 0.4], 0.35, 0.1, 1.5, 1, 1],
+  /* 2 */ [0.8, 0.04, 0.6, 0, 1.3, 0.35, 1.25, [1.5, 0.4], 0.3, 0.12, 1.3, 0.6, 0.45],
+  /* 3 */ [0.95, 0.07, 1.0, 0.01, 1.6, 0.45, 1.5, [1.8, 0.45], 0.65, 0.16, 1.4, 1, 0.75],
+  /* 4 */ [1.05, 0.09, 1.1, 0.02, 2.0, 0.55, 1.8, [2.5, 0.55], 0.85, 0.2, 1.35, 1, 0.9],
   /* 5 */ [1.2, 0.11, 1.1, 0.03, 2.4, 0.62, 2.1, [3.0, 0.6], 0.6, 0.2, 1.15, 0.75, 0.6],
   /* 6 */ [1.3, 0.13, 1.5, 0.04, 2.9, 0.7, 2.4, [3.6, 0.65], 1.05, 0.25, 1.1, 1, 1],
   /* 7 */ [1.5, 0.15, 1.7, 0.05, 3.4, 0.76, 2.7, [4.1, 0.7], 1.2, 0.3, 1, 1, 1],
@@ -10131,7 +10203,8 @@ const CURVE = [
 const curveAt = (depth) => CURVE[Math.max(0, Math.min(CURVE.length - 1, depth | 0))];
 
 // 처음 나오는 깊이 (스폰 조건). 위 표의 '새로 나오는 적' 칸과 같다
-const FIRST = { tank: 3, charger: 3, splitter: 3, shield: 4, sniper: 4, brute: 4, spinner: 4, gunDrone: 4, assassin: 6, miner: 6, medic: 6 };
+// 역할 있는 적은 초반부터 하나씩 섞어서 컨셉을 보여준다 (처음 만나면 소개 카드)
+const FIRST = { tank: 1, charger: 1, splitter: 2, shield: 2, sniper: 3, brute: 3, spinner: 3, gunDrone: 4, assassin: 4, miner: 3, medic: 4 };
 
 // 역할 기체 스폰 표: [종류, 물량 비용, 마리 수, 이 깊이부터 +1]. 등장 깊이는 FIRST
 const TROOPS = [
@@ -11791,6 +11864,7 @@ class Game {
     this.weapons.reset(); this.weapons.list = this.loadout.weapons.map((w) => ({ ...w, level: 1, cd: 0.4 }));
     this.time = 0;
     this.stats = { kills: 0, dealt: 0, taken: 0, bestCombo: 0, mids: 0, byWeapon: {} };
+    this.seen = new Set(['mite', 'drone']); // 이번 런에 만난 적 (처음 만나면 소개 카드)
     this.combo = 0; this.comboT = 0;
     this.level = 1; this.xp = 0; this.xpNeed = xpNeedFor(1); this.pendingLevels = 0; this.pendingCrates = 0; this.chips = 1 + this.mods.chips;
     this.enemies.clear(); this.shots.clear(); this.pickups.clear();
@@ -12425,6 +12499,7 @@ const { SETS, setProgress, setOf } = __m["game/sets.js"];
 const { applySkin } = __m["game/skin.js"];
 const { applyStatMods } = __m["game/runhooks.js"];
 const { cardImage } = __m["game/upgrades.js"];
+const { BESTIARY } = __m["game/bestiary.js"];
 const { GALMURI } = __m["game/font-data.js"];
 
 // 도트 글꼴 (UI 를 게임 화면의 픽셀 느낌과 맞춘다)
@@ -12458,6 +12533,17 @@ function start() {
   layout();
   addEventListener('resize', layout);
   let bannerT = 0, toastT = 0, frameN = 0, cutT = 0, cutBusy = 0, lowOn = false;
+  const introQ = []; let introOn = false;
+  function nextIntro() {
+    const q = introQ.shift(), el = $('intro');
+    if (!q) { introOn = false; el.hidden = true; return; }
+    introOn = true;
+    const { B, boss } = q, D = B.drop, dn = D ? (D[0] === 'weapon' ? WEAPONS[D[1]]?.name : MODULES[D[1]]?.name) : '';
+    el.className = boss ? 'boss' : '';
+    el.innerHTML = `<span class="role">${boss ? 'WARNING' : 'NEW CONTACT'}  ${B.role}</span><b>${B.name}</b><p>${B.what}</p><p class="how">공략: ${B.how}</p>${dn ? `<p class="drop">노획: ${dn}</p>` : ''}`;
+    el.hidden = false; el.classList.remove('in'); void el.offsetWidth; el.classList.add('in');
+    setTimeout(nextIntro, boss ? 6000 : 4200);
+  }
   $('hpicon').src = pixURL('heart', 2);
   const cutQueue = [];
   const doorEls = new Map();
@@ -12465,6 +12551,13 @@ function start() {
   const ui = {
     banner(text, warn = false) { const b = $('banner'); b.textContent = text; b.hidden = false; b.classList.toggle('warn', warn); bannerT = warn ? 2.4 : 1.8; },
     toast(text) { const t = $('toast'); t.textContent = text; t.hidden = false; toastT = 1.6; },
+    // 적 소개 카드: 처음 만난 적/보스의 컨셉, 공략, 노획 부품 (차례로 하나씩)
+    enemyIntro(type, boss = false) {
+      const B = BESTIARY[type];
+      if (!B) return;
+      introQ.push({ B, boss });
+      if (!introOn) nextIntro();
+    },
     hurtFlash() { const h = $('hurt'); h.classList.add('on'); setTimeout(() => h.classList.remove('on'), 200); },
     fade(on) { $('fade').classList.toggle('on', on); },
     bossBar(k, name) {

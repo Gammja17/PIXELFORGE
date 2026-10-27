@@ -57,22 +57,27 @@ export class Pickups {
 
   // ---- 노획 부품: 적에게서 뜯겨 나온 실제 부품이 바닥에 떨어진다 ----
   //  kind: 'weapon' | 'module', id: 무기/모듈 id
-  salvage(kind, id, x, z) {
+  salvage(kind, id, x, z, src = null, big = false) {
     const g = this.game;
-    if (this.parts.length >= 6) return;
+    if (this.parts.length >= 6) return false;
     // 이미 최대 레벨이거나 자리가 없는 부품은 떨어뜨리지 않는다 (줍자마자 분해 → 경험치로 기체만 계속 커지던 문제)
-    if (!g.salvageChoice(kind, id, this.parts.filter((q) => q.kind === kind && q.id === id).length)) return;
+    if (!g.salvageChoice(kind, id, this.parts.filter((q) => q.kind === kind && q.id === id).length)) return false;
     const node = g.scene.add(partPreview(kind, id, g.player.loadout.paint));
     const beam = g.scene.add(new Mesh(Geometry.cylinder(0.11, 0.11, 1, 6, [1, 0.8, 0.3]), new Material({ emissive: 1, outline: false, castShadow: false, opacity: 0.5 })));
     const a = Math.random() * 6.28;
     this.parts.push({ kind, id, x, z, y: 1.2, vx: Math.cos(a) * 3, vz: Math.sin(a) * 3, vy: 7, t: 0, node, beam, spin: (Math.random() - 0.5) * 14 });
     const name = kind === 'weapon' ? WEAPONS[id].name : MODULES[id].name;
     const owned = kind === 'weapon' ? !!g.weapons.get(id) : !!g.player.loadout.modules?.[id];
-    this.parts.at(-1).label = `${kind === 'weapon' ? '무기' : '모듈'}: ${name}`;
+    this.parts.at(-1).label = src ? `${src}의 ${name}` : `${kind === 'weapon' ? '무기' : '모듈'}: ${name}`;
     this.parts.at(-1).badge = owned ? '강화' : 'NEW';
-    g.ui.toast(`${name} 떨어짐! 가까이 가서 줍기`);
+    if (big) {
+      // 뜯어내는 순간: 잠깐 느려지고 금빛 섬광, 노획 알림
+      g.slowMo?.(0.45); g.fx.starPx([x, 1.4, z], 8, [1, 0.85, 0.3], 1.6, 0.3, Math.random()); g.fx.ring(x, 0.15, z, 3.2, [1, 0.85, 0.3], 0.4);
+      g.ui.banner(`노획! ${src}의 ${name}`);
+    } else g.ui.toast(`${src ? src + '의 ' : ''}${name} 떨어짐! 가까이 가서 줍기`);
     g.sfx.play('clank', { vol: 0.6 });
     g.fx.ring(x, 0.15, z, 2, [1, 0.8, 0.3], 0.3);
+    return true;
   }
   // 바닥 테두리 하나 찍기 (천천히 돌며 숨쉬듯 커졌다 작아짐)
   frame(x, z, t, color, s = 1) {

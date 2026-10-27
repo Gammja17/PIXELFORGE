@@ -10,6 +10,7 @@
 //  추적 돌격기 (reaper): 경고선 → 돌진하며 탄을 깔고 (돌진이 끝나면 양옆으로 퍼짐), 초승달 휩쓸기, 조여 오는 고리
 
 import { Geometry, Mesh, Material } from '../engine/index.js';
+import { BESTIARY } from './bestiary.js';
 
 const add = (g, part, position = [0, 0, 0], rotation = [0, 0, 0]) => g.merge(part, { position, rotation });
 const R = Math.random, TAU = Math.PI * 2;
@@ -177,6 +178,7 @@ export class MidBoss {
     this.vy = 0; this.state = 'drop'; this.st = 0; this.pat = (R() * 3) | 0; this.yaw = 0; this.spin = 0; this.lasers = [];
     this.marks = [];
     game.ui.banner(`중간 보스 강하: ${this.name}`, true);
+    game.ui.enemyIntro?.(kind, true);
     game.sfx.play('alarm');
   }
   get phase2() { return this.e.hp < this.e.maxHp * 0.5; }
@@ -189,7 +191,9 @@ export class MidBoss {
     g.sfx.play('bigboom'); g.hitStop(0.12); g.slowMo(0.6); g.fx.addTrauma(0.8);
     g.fx.explosion(e.x, 1.2, e.z, 2.4, { color: [1, 0.5, 0.4] });
     for (let i = 0; i < 12; i++) g.pickups.gem(e.x + (R() - 0.5) * 3, e.z + (R() - 0.5) * 3, 4);
-    g.pickups.drop('crate', e.x, e.z);
+    // 노획: 중간 보스의 컨셉 무기 (자리가 없거나 최대 레벨이면 부품 상자)
+    const D = BESTIARY[this.kind]?.drop;
+    if (!(D && g.pickups.salvage(D[0], D[1], e.x, e.z, this.name, true))) g.pickups.drop('crate', e.x, e.z);
     if (R() < 0.5) g.pickups.drop('kit', e.x + 1, e.z);
     g.addChips(1, '중간 보스');
     g.shots.enemyList.length = 0; // 격파 순간 탄막 해제

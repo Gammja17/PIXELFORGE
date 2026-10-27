@@ -13,6 +13,7 @@ import { SETS, setProgress, setOf } from './sets.js';
 import { applySkin } from './skin.js';
 import { applyStatMods } from './runhooks.js';
 import { cardImage } from './upgrades.js';
+import { BESTIARY } from './bestiary.js';
 import { GALMURI } from './font-data.js';
 
 // 도트 글꼴 (UI 를 게임 화면의 픽셀 느낌과 맞춘다)
@@ -46,6 +47,17 @@ function start() {
   layout();
   addEventListener('resize', layout);
   let bannerT = 0, toastT = 0, frameN = 0, cutT = 0, cutBusy = 0, lowOn = false;
+  const introQ = []; let introOn = false;
+  function nextIntro() {
+    const q = introQ.shift(), el = $('intro');
+    if (!q) { introOn = false; el.hidden = true; return; }
+    introOn = true;
+    const { B, boss } = q, D = B.drop, dn = D ? (D[0] === 'weapon' ? WEAPONS[D[1]]?.name : MODULES[D[1]]?.name) : '';
+    el.className = boss ? 'boss' : '';
+    el.innerHTML = `<span class="role">${boss ? 'WARNING' : 'NEW CONTACT'}  ${B.role}</span><b>${B.name}</b><p>${B.what}</p><p class="how">공략: ${B.how}</p>${dn ? `<p class="drop">노획: ${dn}</p>` : ''}`;
+    el.hidden = false; el.classList.remove('in'); void el.offsetWidth; el.classList.add('in');
+    setTimeout(nextIntro, boss ? 6000 : 4200);
+  }
   $('hpicon').src = pixURL('heart', 2);
   const cutQueue = [];
   const doorEls = new Map();
@@ -53,6 +65,13 @@ function start() {
   const ui = {
     banner(text, warn = false) { const b = $('banner'); b.textContent = text; b.hidden = false; b.classList.toggle('warn', warn); bannerT = warn ? 2.4 : 1.8; },
     toast(text) { const t = $('toast'); t.textContent = text; t.hidden = false; toastT = 1.6; },
+    // 적 소개 카드: 처음 만난 적/보스의 컨셉, 공략, 노획 부품 (차례로 하나씩)
+    enemyIntro(type, boss = false) {
+      const B = BESTIARY[type];
+      if (!B) return;
+      introQ.push({ B, boss });
+      if (!introOn) nextIntro();
+    },
     hurtFlash() { const h = $('hurt'); h.classList.add('on'); setTimeout(() => h.classList.remove('on'), 200); },
     fade(on) { $('fade').classList.toggle('on', on); },
     bossBar(k, name) {
