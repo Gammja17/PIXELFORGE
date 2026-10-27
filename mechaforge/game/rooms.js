@@ -66,10 +66,43 @@ export const SPECIALS = {
   storm: { name: '수축 방어막', desc: '방어막 수축! 붉은 고리 밖은 피해를 입는다' },
 };
 
-// 역할 기체 스폰 표: [종류, 등장 깊이, 물량 비용, 마리 수, 이 깊이부터 +1]
+// ---- 난이도 곡선 ----
+//  초반은 무쌍(적고 약하고, 빨리 크는 만큼 적이 따라 크지 않는다) → 깊이 3부터 새 위협을 하나씩 → 6부터 전부, 탄막 최대치.
+//  깊이 0 = 출격 방(전투 없음), 2·5 = 수호자, 8 = 타이탄. 위협 등급/파일럿(runhooks.js)은 이 결과 위에 곱한다.
+//  pw = 전력 지수 power() (시작 1, 방 1 끝 ~2, 깊이 4 ~4-6, 타이탄 ~8-14). pw' = pw - 1
+//
+//  깊이 | 물량 dens       | 피해 dmg        | 체력 hp      | 중간 보스 / 보스 탄 | 새로 나오는 적 / 규칙
+//   1   | 0.70 + 0.03·pw' | 0.55            | 1.0 · pw^.30 | 없음                | 벌레, 정찰 드론, 자폭 드론(1~2기씩). 정예 1기(특성 없음). 경험치 ×1.5, 위험 요소 적게
+//   2   | 수호자 + 벌레   | 0.60            | 1.3 · pw^.35 | 수호자 탄 45%       | 첫 수호자: 체력 ×0.6. 경험치 ×1.3
+//   3   | 0.95 + 0.07·pw' | 1.00 + 0.01·pw' | 1.6 · pw^.45 | 1 (탄 75%)          | 첫 중간 보스(나선/하이브/박격), 경전차(단발), 돌격, 분열. 정예 특성 1개. 경험치 ×1.4
+//   4   | 1.05 + 0.09·pw' | 1.10 + 0.02·pw' | 2.0 · pw^.55 | 1 (+35% 둘째, 90%)  | 방패, 저격, 중장 메카, 회전 포대, 총 든 드론, 중간 보스 6종 전부. 특수 방. 경험치 ×1.35
+//   5   | 수호자 + 물량   | 1.10 + 0.03·pw' | 2.4 · pw^.62 | 수호자 탄 60%       | 두 번째 수호자: 체력 ×0.75. 경험치 ×1.15
+//   6   | 1.30 + 0.13·pw' | 1.50 + 0.04·pw' | 2.9 · pw^.70 | 2                   | 암살, 지뢰 부설, 수리 드론. 정예 특성 2개, 포격 부채꼴 최대, 대규모 접근 3회. 경험치 ×1.1
+//   7   | 1.50 + 0.15·pw' | 1.70 + 0.05·pw' | 3.4 · pw^.76 | 2 (+35% 셋째)       | 전부, 위험 요소 최대
+//   8   | 타이탄 + 물량   | 2.00 + 0.05·pw' | 타이탄 공식  | -                   | 타이탄 → MK-II (가장 높은 벽)
+//  물량 상한 2.4. 떼거리 체력 = swarm · pw^(e/2). 중간 보스 체력 = 1500 · mid[0] · pw^mid[1].
+//  bul = 수호자/중간 보스 탄을 고르게 솎아 내고 남기는 비율 (틈이 넓어진다, enemies.shoot)
+export const CURVE = [
+  //      dens  dPw   dmg   mPw   hp   hpE   swarm mid         haz   troop xp    guard bul
+  /* 0 */ [0.7, 0.03, 0.55, 0, 1.0, 0.3, 1.0, [1.2, 0.4], 0, 0, 1.5, 1, 1],
+  /* 1 */ [0.7, 0.03, 0.55, 0, 1.0, 0.3, 1.0, [1.2, 0.4], 0.35, 0, 1.5, 1, 1],
+  /* 2 */ [0.8, 0.04, 0.6, 0, 1.3, 0.35, 1.25, [1.5, 0.4], 0.3, 0, 1.3, 0.6, 0.45],
+  /* 3 */ [0.95, 0.07, 1.0, 0.01, 1.6, 0.45, 1.5, [1.8, 0.45], 0.65, 0.1, 1.4, 1, 0.75],
+  /* 4 */ [1.05, 0.09, 1.1, 0.02, 2.0, 0.55, 1.8, [2.5, 0.55], 0.85, 0.16, 1.35, 1, 0.9],
+  /* 5 */ [1.2, 0.11, 1.1, 0.03, 2.4, 0.62, 2.1, [3.0, 0.6], 0.6, 0.2, 1.15, 0.75, 0.6],
+  /* 6 */ [1.3, 0.13, 1.5, 0.04, 2.9, 0.7, 2.4, [3.6, 0.65], 1.05, 0.25, 1.1, 1, 1],
+  /* 7 */ [1.5, 0.15, 1.7, 0.05, 3.4, 0.76, 2.7, [4.1, 0.7], 1.2, 0.3, 1, 1, 1],
+  /* 8 */ [1.6, 0.15, 2.0, 0.05, 3.8, 0.8, 3.0, [4.5, 0.7], 0.6, 0.3, 1, 1, 1],
+].map(([dens, densPw, dmg, dmgPw, hp, hpExp, swarm, mid, haz, troop, xp, guard, bul]) => ({ dens, densPw, dmg, dmgPw, hp, hpExp, swarm, mid, haz, troop, xp, guard, bul }));
+export const curveAt = (depth) => CURVE[Math.max(0, Math.min(CURVE.length - 1, depth | 0))];
+
+// 처음 나오는 깊이 (스폰 조건). 위 표의 '새로 나오는 적' 칸과 같다
+export const FIRST = { tank: 3, charger: 3, splitter: 3, shield: 4, sniper: 4, brute: 4, spinner: 4, gunDrone: 4, assassin: 6, miner: 6, medic: 6 };
+
+// 역할 기체 스폰 표: [종류, 물량 비용, 마리 수, 이 깊이부터 +1]. 등장 깊이는 FIRST
 const TROOPS = [
-  ['charger', 1, 3, 1, 5], ['splitter', 2, 2.5, 2, 6], ['shield', 2, 3, 1, 4], ['sniper', 2, 3.5, 1, 6],
-  ['miner', 2, 3, 1, 9], ['assassin', 3, 3.5, 1, 6], ['medic', 3, 4, 1, 9],
+  ['charger', 3, 1, 6], ['splitter', 2.5, 2, 6], ['shield', 3, 1, 6], ['sniper', 3.5, 1, 7],
+  ['miner', 3, 1, 9], ['assassin', 3.5, 1, 7], ['medic', 4, 1, 9],
 ];
 const DOOR_HALF = 2.2;
 const SIDE = { W: [-1, 0], S: [0, -1], E: [1, 0], N: [0, 1] }; // 방향 → (x, z) 부호
@@ -122,17 +155,22 @@ export class Rooms {
     const wp = ws.reduce((s, w) => s + (w.level || 1) + (w.evo ? 4 : 0), 0);
     return Math.max(1, (1 + ((g.level || 1) - 1) * 0.05 + Math.max(0, wp - 1) * 0.08) * (g.player?.stats?.dmgMul || 1));
   }
-  // 깊이 × 전력 → 적 체력/피해/물량 배율. 늦은 방에서 강해진 만큼 적도 따라온다 (떼거리는 덜 단단해지고 더 많아진다)
+  // 깊이 × 전력 → 적 체력/피해/물량 배율 (위 CURVE 표). 전력 보정은 초반엔 거의 없고 깊을수록 세진다
+  //  (떼거리는 덜 단단해지고 더 많아진다). xp: 적 경험치 배율 (초반 빠른 성장)
   scale() {
-    const d = Math.max(0, this.depth), pw = this.power();
+    const d = Math.max(0, this.depth), pw = this.power(), C = curveAt(d), p1 = pw - 1;
     return {
       pw,
-      hp: (1 + d * 0.45) * Math.pow(pw, 0.65),
-      swarmHp: (1 + d * 0.35) * Math.pow(pw, 0.3),
-      dmg: 1 + d * 0.12 + (pw - 1) * 0.05,
-      dens: Math.min(2.4, 0.9 + d * 0.06 + (pw - 1) * 0.15),
+      hp: C.hp * Math.pow(pw, C.hpExp),
+      swarmHp: C.swarm * Math.pow(pw, C.hpExp * 0.5),
+      dmg: C.dmg + p1 * C.dmgPw,
+      dens: Math.min(2.4, C.dens + p1 * C.densPw),
+      xp: C.xp, bul: C.bul,
     };
   }
+  // 중간 보스 체력 배율 (midbosses.js), 수호자 체력 배율 (guardians.js)
+  midHp(pw) { const [b, e] = curveAt(this.depth).mid; return b * Math.pow(pw, e); }
+  guardHp() { return curveAt(this.depth).guard; }
 
   newRun() { this.depth = -1; this.path = []; this.seed = (Math.random() * 1e9) | 0; this.zones = pickZones(this.seed); this.lastLayout = null; this.lastSpecial = null; }
 
@@ -177,7 +215,7 @@ export class Rooms {
     const hx = this.hx, hz = this.hz;
     // 특수 방 (연속으로는 안 나온다). 수축 방어막은 막힌 구조물이 없는 방에서만
     let special = this.force.special ?? null; // force.special: undefined = 무작위, null = 없음
-    if (this.force.special === undefined && combat && depth >= 2 && !this.lastSpecial && R() < 0.3) special = R() < 0.5 ? 'dark' : 'storm';
+    if (this.force.special === undefined && combat && depth >= 4 && !this.lastSpecial && R() < 0.3) special = R() < 0.5 ? 'dark' : 'storm';
     this.special = special; this.lastSpecial = special;
     let layout = this.force.layout || pickLayout(R, reward, this.lastLayout);
     if (special === 'storm' && !['open', 'pillars'].includes(layout)) layout = R() < 0.5 ? 'open' : 'pillars';
@@ -247,7 +285,7 @@ export class Rooms {
 
     // 내부: 레이아웃(벽, 기둥, 엄폐물, 소품) → 구역 위험 요소
     const H = this.hazards;
-    const ctx = { R, hx, hz, zone: zoneId, Z, depth, reward, geo, glow, colliders: this.colliders, lights: this.lights, nProps: reward === 'workshop' ? 2 : boss ? 4 : undefined, cover: (x, z) => H.addProp(Z.cover, x, z) };
+    const ctx = { R, hx, hz, zone: zoneId, Z, depth, reward, geo, glow, colliders: this.colliders, lights: this.lights, nProps: reward === 'workshop' ? 2 : boss ? 4 : undefined, hazMul: curveAt(depth).haz, cover: (x, z) => H.addProp(Z.cover, x, z) };
     H.begin(ctx);
     buildLayout(layout, ctx);
     H.populate(ctx);
@@ -326,16 +364,20 @@ export class Rooms {
       const r = R();
       const pt = this.spawnSpot(9);
       if (!pt) { this.acc = 0; break; }
-      // 역할 기체 (troops.js): 깊을수록 비중 ↑ (방 1: 10%, 방 7: 30%)
-      if (d >= 1 && R() < Math.min(0.3, 0.06 + d * 0.035)) {
-        const pool = TROOPS.filter((q) => d >= q[1]), q = pool[(R() * pool.length) | 0], n = q[3] + (d >= q[4] ? 1 : 0);
-        en.pack(q[0], pt[0], pt[1], n, 1.2); this.acc -= n * q[2];
+      // 역할 기체 (troops.js): 깊이 3부터, 깊을수록 비중 ↑ (CURVE troop: 10% → 30%)
+      const pool = TROOPS.filter((q) => d >= FIRST[q[0]]);
+      if (pool.length && R() < curveAt(d).troop) {
+        const q = pool[(R() * pool.length) | 0], n = q[2] + (d >= q[3] ? 1 : 0);
+        en.pack(q[0], pt[0], pt[1], n, 1.2); this.acc -= n * q[1];
         continue;
       }
-      if (d >= 3 && r < 0.06) { en.queue('brute', pt[0], pt[1], false, 0); this.acc -= 7; }
-      else if (d >= 3 && r < 0.12) { const n = d >= 6 ? 2 : 1; en.pack('spinner', pt[0], pt[1], n, 1.2); this.acc -= n * 3.5; }
-      else if (d >= 1 && r < 0.22) { const n = d >= 5 ? 2 : 1; en.pack('tank', pt[0], pt[1], n, 1.4); this.acc -= n * 3; }
-      else if (d >= 1 && r < 0.36) { const n = 2 + ((R() * (2 + d * 0.3)) | 0); en.pack('bomber', pt[0], pt[1], n, 1.2); this.acc -= n * 1.2; }
+      // 아직 안 나오는 종류의 몫은 벌레 떼로
+      const slot = r < 0.06 ? 'brute' : r < 0.12 ? 'spinner' : r < 0.22 ? 'tank' : null;
+      if (slot && d < FIRST[slot]) { const n = 8 + ((R() * 6) | 0) + d * 1.5; en.pack('mite', pt[0], pt[1], n | 0, 2); this.acc -= n * 0.4; }
+      else if (slot === 'brute') { en.queue('brute', pt[0], pt[1], false, 0); this.acc -= 7; }
+      else if (slot === 'spinner') { const n = d >= 6 ? 2 : 1; en.pack('spinner', pt[0], pt[1], n, 1.2); this.acc -= n * 3.5; }
+      else if (slot === 'tank') { const n = d >= 5 ? 2 : 1; en.pack('tank', pt[0], pt[1], n, 1.4); this.acc -= n * 3; }
+      else if (r < 0.32) { const n = d <= 2 ? 1 + ((R() * 2) | 0) : 2 + ((R() * (2 + d * 0.3)) | 0); en.pack('bomber', pt[0], pt[1], n, 1.2); this.acc -= n * 1.2; } // 초반 자폭 드론은 1~2기씩
       else if (r < 0.54) { const n = 3 + ((R() * 3) | 0) + (d >> 1); en.pack('drone', pt[0], pt[1], n, 1.4); this.acc -= n; }
       else { const n = 8 + ((R() * 6) | 0) + d * 1.5; en.pack('mite', pt[0], pt[1], n | 0, 2); this.acc -= n * 0.4; }
     }
@@ -351,7 +393,7 @@ export class Rooms {
       // 깊은 방: 포위망 사이사이에 포격 기체
       if (d >= 3 && i % 4 === 2) en.pack(d >= 5 && i % 8 === 2 ? 'spinner' : 'tank', x, z, 1, 0.5, i * 0.05);
       else if (d >= 4 && i % 4 === 0) en.pack('shield', x, z, 1, 0.5, i * 0.05); // 방패 기체가 포위망 앞을 막는다
-      else en.pack(d >= 2 && i % 3 === 0 ? 'bomber' : 'mite', x, z, n, 1.4, i * 0.05);
+      else en.pack(d >= 3 && i % 3 === 0 ? 'bomber' : 'mite', x, z, n, 1.4, i * 0.05); // 초반 포위망은 벌레만 (쓸어 담는 맛)
     }
   }
   spawnElite() {
@@ -359,25 +401,27 @@ export class Rooms {
     const pt = this.spawnSpot(8);
     if (!pt) return;
     const r = Math.random();
-    const troop = ['charger', 'shield', 'splitter', 'sniper', 'assassin'].slice(0, d >= 3 ? 5 : d >= 2 ? 3 : 1);
-    const type = d >= 1 && Math.random() < 0.3 ? troop[(Math.random() * troop.length) | 0]
-      : d >= 4 && r < 0.25 ? 'spinner' : d >= 3 && r < 0.6 ? 'brute' : d >= 1 && r < 0.8 ? 'tank' : 'drone';
+    // 이미 나온 종류 중에서 고른다. 방 1 은 정찰 드론 정예뿐 (특성 없음)
+    const troop = ['charger', 'shield', 'splitter', 'sniper', 'assassin'].filter((t) => d >= FIRST[t]);
+    const type = troop.length && Math.random() < 0.3 ? troop[(Math.random() * troop.length) | 0]
+      : d >= FIRST.spinner && r < 0.25 ? 'spinner' : d >= FIRST.brute && r < 0.6 ? 'brute' : d >= FIRST.tank && r < 0.8 ? 'tank' : 'drone';
     en.queue(type, pt[0], pt[1], true, 0);
   }
-  // 중간 보스: 방 중반에 강하. 깊을수록 확률 ↑, 깊은 방은 둘
+  // 중간 보스: 방 1 은 없음. 깊이 3 에 첫 중간 보스, 4 는 35% 로 둘, 6 부터 둘, 7 은 35% 로 셋.
+  //  정예 방은 하나 더 (최대 둘, 깊이 3 은 하나)
   planMids() {
     const d = this.depth, r = this.reward, R = rng(this.seed + d * 913);
     const out = [];
-    if (r === 'elite') out.push(0.3, 0.65);
+    if (d < 3) return out;
+    if (r === 'elite') out.push(...(d <= 3 ? [0.45] : [0.3, 0.65]));
     else if (d >= 6) out.push(0.35, 0.7);
-    else if (d >= 3) out.push(0.45);
-    else if (d >= 1 && R() < 0.6) out.push(0.5);
-    if (d >= 4 && r !== 'elite' && R() < 0.35 && out.length < 2) out.push(0.75);
+    else out.push(0.45);
+    if (r !== 'elite' && (d === 4 || d >= 7) && R() < 0.35) out.push(d >= 7 ? 0.85 : 0.75);
     return out;
   }
   spawnMid() {
     const en = this.game.enemies, p = this.game.player;
-    const kinds = this.depth >= 3 ? MIDBOSS_KINDS : ['warden', 'hive', 'mortar'];
+    const kinds = this.depth >= 4 ? MIDBOSS_KINDS : ['warden', 'hive', 'mortar']; // 첫 중간 보스(깊이 3)는 읽기 쉬운 3종
     const pool = kinds.filter((k) => !en.mids.some((m) => m.kind === k)), kind = pool[(Math.random() * pool.length) | 0] || kinds[0];
     // 플레이어 반대편 쪽, 적당히 떨어진 곳
     let x = -Math.sign(p.x || 1) * this.hx * 0.45, z = -Math.sign(p.z || 1) * this.hz * 0.45;
@@ -462,7 +506,7 @@ export class Rooms {
         const k = Math.min(1, this.roomT / this.duration), d = this.depth, midOn = en.mids.length > 0;
         this.stream(dt, (0.6 + 0.95 * k) * (midOn ? 0.5 : 1)); // 중간 보스가 있으면 물량은 절반 (탄막에 집중)
         // 대규모 접근: 사방에서 벌레 떼가 원형으로 몰려온다
-        for (const m of d >= 4 ? [0.3, 0.58, 0.85] : [0.38, 0.78]) if (k >= m && !this.marks.has(m)) { this.marks.add(m); this.surge(); }
+        for (const m of d >= 6 ? [0.3, 0.58, 0.85] : [0.38, 0.78]) if (k >= m && !this.marks.has(m)) { this.marks.add(m); this.surge(); }
         // 정예 기체 (처치하면 부품 상자)
         const eliteAt = this.reward === 'elite' ? [0.15, 0.35, 0.55, 0.75] : d >= 6 ? [0.2, 0.5, 0.8] : d >= 3 ? [0.3, 0.65] : [0.5];
         for (const m of eliteAt) if (k >= m && !this.marks.has('e' + m)) { this.marks.add('e' + m); this.spawnElite(); }
