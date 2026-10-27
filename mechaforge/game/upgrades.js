@@ -2,7 +2,7 @@
 //  kind 필터: 'part'(무기·모듈) / 'system'(스탯) / 'any'
 //  각 카드에는 그림이 붙는다: 무기·모듈 = 엔진으로 렌더한 3D 픽셀 썸네일, 스탯 = 도트 아이콘
 
-import { WEAPONS, MAX_LEVEL, EVOLUTIONS } from './weapons.js';
+import { WEAPONS, MAX_LEVEL, EVOLUTIONS, ARCS, ARC_FREE, slotArc } from './weapons.js';
 import { MODULES, SLOT_IDS, partPreview } from './parts.js';
 import { STAT_UPS } from './player.js';
 import { pixURL } from './icons.js';
@@ -66,7 +66,8 @@ export function rollChoices(game, kind = 'any', n = 3) {
   while (out.length < n) out.push({ kind: 'heal', id: 'repair', level: 0, name: '긴급 수리', tag: 'REPAIR', desc: '체력 50% 회복' });
   for (const c of out) {
     if (c.kind === 'evolve') { c.where = '무기 진화'; continue; }
-    c.where = c.kind === 'weapon' ? `${SLOT_NAMES[c.slot] || ''}${c.slot?.startsWith('arm') && WEAPONS[c.id].prefer === 'arm' ? ', 직접 조작' : ', 자동 사격'}` : c.kind === 'module' ? '몸통 부품' : c.kind === 'stat' ? '시스템 튜닝' : '정비';
+    const arc = ARC_FREE.has(c.id) ? 'any' : slotArc(c.slot || '');
+    c.where = c.kind === 'weapon' ? `${SLOT_NAMES[c.slot] || ''}${c.slot?.startsWith('arm') && WEAPONS[c.id].prefer === 'arm' ? ', 직접 조작' : arc === 'any' ? ', 자동 사격' : `, ${ARCS[arc].name}만 자동 사격 (피해 +${Math.round((ARCS[arc].dmg - 1) * 100)}%)`}` : c.kind === 'module' ? '몸통 부품' : c.kind === 'stat' ? '시스템 튜닝' : '정비';
   }
   return out;
 }

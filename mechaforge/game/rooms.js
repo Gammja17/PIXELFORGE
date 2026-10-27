@@ -328,8 +328,17 @@ export class Rooms {
     p.place();
     // 작전 시작 (플레이어 위치가 정해진 뒤: 비콘, 거점은 플레이어에게서 떨어진 곳에)
     this.k0 = g.stats.kills;
+    this.dmg0 = { ...(g.stats.byWeapon || {}) };
     if (this.op) { OPS[this.op].begin(this); setTimeout(() => g.ui.banner(OPS[this.op]?.banner || ''), 700); }
     g.ui.roomInfo(this);
+  }
+  // 이번 방에서 어떤 무기가 일했는지 (상위 3개 비중)
+  dmgReport() {
+    const g = this.game, B = g.stats.byWeapon || {}, d = Object.entries(B).map(([k, v]) => [k, v - (this.dmg0?.[k] || 0)]).filter(([k, v]) => v > 0 && k !== 'other');
+    const tot = d.reduce((a, [, v]) => a + v, 0);
+    if (!tot) return;
+    const top = d.sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, v]) => `${g.srcName ? g.srcName(k) : k} ${Math.round((v / tot) * 100)}%`);
+    setTimeout(() => g.ui.toast(`이번 방 피해  ${top.join('   ')}`), 900);
   }
   glowMat(opacity = 1) { return new Material({ emissive: 1, outline: false, castShadow: false, opacity }); }
   // 작전 진행도 [0~1, 문구], 화면 표지
@@ -541,6 +550,7 @@ export class Rooms {
           this.phase = 'reward';
           en.detonateAll();
           g.ui.banner('작전 완료!');
+          this.dmgReport();
           g.addChips(1);
           if (this.special) g.addChips(1, `${SPECIALS[this.special].name} 돌파`);
           g.sfx.play('clear');

@@ -653,6 +653,11 @@
   #bayframe span { position: absolute; font-size: 12px; color: var(--mk); text-shadow: 0 2px 0 #000; }
   #bayframe .tl { top: 8px; left: 12px; } #bayframe .br { bottom: 8px; right: 12px; color: #8d96b3; }
   .ui-narrow #bayframe { display: none; }
+  .rslot .evo { font-size: 12px; line-height: 1; color: #8d96b3; white-space: nowrap; max-width: 62px; overflow: hidden; }
+  .rslot.evoready .evo { color: var(--pink); animation: blink .5s steps(2) infinite; }
+  .rslot .in { height: 94px; }
+  .rslot.oc .cd i { background: #fff; }
+  @media (pointer: coarse) { .rslot .evo { display: none; } .rslot .in { height: 52px; } }
 </style>
 </head>
 <body>
@@ -4752,6 +4757,18 @@ const SPECIAL_NAMES = { mg: '탄막 사격', shotgun: '슬러그 폭발', laser:
 // 직접 조작 무기 = 팔에 단 arm 무기. 나머지는 팔에 달려도 자동 사격
 const isManual = (w) => w.slot.startsWith('arm') && WEAPONS[w.id].prefer === 'arm';
 const wrapA = (a) => ((a + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+// ---- 장착 위치가 사격 방향을 정한다 (우리 게임의 핵심 규칙) ----
+//  어깨 = 바라보는 앞쪽만, 등 = 뒤쪽만, 허리 = 가까운 적만 (대신 피해 보너스), 팔 = 어디든
+//  어디에 다느냐가 선택이 되고, 기체를 돌리는 게 조작이 된다
+const ARCS = {
+  fwd: { name: '전방', half: 1.15, rangeMul: 1, dmg: 1.2 },
+  rear: { name: '후방', half: 1.75, rangeMul: 1, dmg: 1.2 },
+  near: { name: '근접', half: Math.PI, rangeMul: 0.6, dmg: 1.3 },
+  any: { name: '자동', half: Math.PI, rangeMul: 1, dmg: 1 },
+};
+const slotArc = (slot) => (slot === 'shR' || slot === 'shL' ? 'fwd' : slot === 'back' ? 'rear' : slot === 'hpR' || slot === 'hpL' ? 'near' : 'any');
+// 방향 규칙이 안 맞는 무기 (제자리 범위, 흩뿌리기, 몰린 곳 자동 조준): 어디에 달든 자동
+const ARC_FREE = new Set(['stomp', 'mine', 'gravity', 'saw', 'turret', 'funnel']);
 // 쏘기 직전 모으는 동작이 있는 무기 (초): 예고 → 발사 → 사라짐 순서가 보이게
 const CHARGE = { gauss: 0.4, cannon: 0.25, cluster: 0.3, tesla: 0.3, missile: 0.2, gravity: 0.35 };
 
@@ -4792,6 +4809,11 @@ class WeaponSystem {
 
   reset() { this.list = []; this.combo = 0; this.comboT = 0; this.swingLock = 0; this.specialT = 0; this.barrage = 0; this.burns.clear(); this.waves = []; this.syncBits(); }
   get(id) { return this.list.find((w) => w.id === id); }
+  // 팔 무기(직접 조작)로 처치하면 자동 무기들의 재장전이 당겨진다: 손으로 싸우는 게 보상받게
+  overclock() {
+    for (const w of this.list) if (!isManual(w) && w.cd > 0) { w.cd = Math.max(0, w.cd - 0.12); w.ocT = this.game.time; }
+  }
+  isManualId(id) { const w = this.get(id); return !!w && isManual(w); }
   // 연출 배율: 레벨이 오를수록, 진화하면 더 크게 보인다 (Lv1 1.0 → Lv5 1.7, 진화 +0.5)
   vk(id) { const w = id && this.get(id); return w ? 1 + ((w.level || 1) - 1) * 0.18 + (w.evo ? 0.5 : 0) : 1; }
   get primary() { return this.list.find((w) => w.slot === 'armR') || null; }
@@ -5348,9 +5370,23 @@ class WeaponSystem {
       const target = en.nearest(p.x, p.z, W.range * p.stats.rangeMul);
       if (!target) continue;
       if (w.id === 'saber' || w.id === 'rod') { w.cd = 0.5; continue; }
-      // 팔 무기를 어깨에 달면 85% 위력, 원래 자동 무기는 그대로
-      this.autoTarget = target;
-      this.fire(w, Math.atan2(target.x - mz[0], target.z - mz[2]), W.prefer === 'arm' ? 0.85 : 1);
+      // 장착 위치의 사격 방향 안에서 대상 고르기 (가우스는 가장 튼튼한 적, 박격포는 가장 몰린 곳)
+      const arcId = ARC_FREE.has(w.id) ? 'any' : slotArc(w.slot), A = ARCS[arcId];
+      const R = W.range * p.stats.rangeMul * A.rangeMul, face = p.yaw;
+      let best = null, score = -1e9;
+      en.each(p.x, p.z, R, (e) => {
+        if (e.dead || e.spawnT < 0.2 || e.under || e.T.mine) return;
+        const dx = e.x - p.x, dz = e.z - p.z, d = Math.hypot(dx, dz);
+        if (A.half < Math.PI) { const da = Math.abs(wrapA(Math.atan2(dx, dz) - face)); if (arcId === 'rear' ? Math.PI - da > A.half : da > A.half) return; }
+        let s = -d;
+        if (w.id === 'gauss') s = e.hp;
+        else if (w.id === 'cluster') { let c = 0; en.each(e.x, e.z, 2.5, () => c++); s = c * 10 - d; }
+        if (s > score) { score = s; best = e; }
+      });
+      if (!best) continue;
+      // 팔 무기를 어깨에 달면 85% 위력, 방향이 좁을수록 피해 보너스
+      this.autoTarget = best;
+      this.fire(w, Math.atan2(best.x - mz[0], best.z - mz[2]), (W.prefer === 'arm' ? 0.85 : 1) * A.dmg);
     }
     this.autoTarget = null;
   }
@@ -5470,7 +5506,7 @@ class WeaponSystem {
   }
 }
 
-return { WEAPONS, MAX_LEVEL, EVOLUTIONS, lvOf, weaponName, Shots, WeaponSystem };
+return { WEAPONS, MAX_LEVEL, EVOLUTIONS, lvOf, weaponName, Shots, ARCS, slotArc, ARC_FREE, WeaponSystem };
 })();
 
 __m["game/midbosses.js"] = (() => {
@@ -7797,6 +7833,7 @@ class Enemies {
     }
     g.stats.kills++;
     g.onKill?.();
+    if (g.dmgSrc && g.weapons.isManualId?.(g.dmgSrc)) g.weapons.overclock(); // 손으로 잡으면 자동 무기 재장전 당김
     if (e.boss) {
       const B = e;
       for (let i = 0; i < 6; i++) setTimeout(() => fx.explosion(B.x + (Math.random() - 0.5) * 3, 1 + Math.random() * 3, B.z + (Math.random() - 0.5) * 3, 1.6), i * 120);
@@ -8986,7 +9023,7 @@ __m["game/upgrades.js"] = (() => {
 //  kind 필터: 'part'(무기·모듈) / 'system'(스탯) / 'any'
 //  각 카드에는 그림이 붙는다: 무기·모듈 = 엔진으로 렌더한 3D 픽셀 썸네일, 스탯 = 도트 아이콘
 
-const { WEAPONS, MAX_LEVEL, EVOLUTIONS } = __m["game/weapons.js"];
+const { WEAPONS, MAX_LEVEL, EVOLUTIONS, ARCS, ARC_FREE, slotArc } = __m["game/weapons.js"];
 const { MODULES, SLOT_IDS, partPreview } = __m["game/parts.js"];
 const { STAT_UPS } = __m["game/player.js"];
 const { pixURL } = __m["game/icons.js"];
@@ -9050,7 +9087,8 @@ function rollChoices(game, kind = 'any', n = 3) {
   while (out.length < n) out.push({ kind: 'heal', id: 'repair', level: 0, name: '긴급 수리', tag: 'REPAIR', desc: '체력 50% 회복' });
   for (const c of out) {
     if (c.kind === 'evolve') { c.where = '무기 진화'; continue; }
-    c.where = c.kind === 'weapon' ? `${SLOT_NAMES[c.slot] || ''}${c.slot?.startsWith('arm') && WEAPONS[c.id].prefer === 'arm' ? ', 직접 조작' : ', 자동 사격'}` : c.kind === 'module' ? '몸통 부품' : c.kind === 'stat' ? '시스템 튜닝' : '정비';
+    const arc = ARC_FREE.has(c.id) ? 'any' : slotArc(c.slot || '');
+    c.where = c.kind === 'weapon' ? `${SLOT_NAMES[c.slot] || ''}${c.slot?.startsWith('arm') && WEAPONS[c.id].prefer === 'arm' ? ', 직접 조작' : arc === 'any' ? ', 자동 사격' : `, ${ARCS[arc].name}만 자동 사격 (피해 +${Math.round((ARCS[arc].dmg - 1) * 100)}%)`}` : c.kind === 'module' ? '몸통 부품' : c.kind === 'stat' ? '시스템 튜닝' : '정비';
   }
   return out;
 }
@@ -10329,8 +10367,17 @@ class Rooms {
     p.place();
     // 작전 시작 (플레이어 위치가 정해진 뒤: 비콘, 거점은 플레이어에게서 떨어진 곳에)
     this.k0 = g.stats.kills;
+    this.dmg0 = { ...(g.stats.byWeapon || {}) };
     if (this.op) { OPS[this.op].begin(this); setTimeout(() => g.ui.banner(OPS[this.op]?.banner || ''), 700); }
     g.ui.roomInfo(this);
+  }
+  // 이번 방에서 어떤 무기가 일했는지 (상위 3개 비중)
+  dmgReport() {
+    const g = this.game, B = g.stats.byWeapon || {}, d = Object.entries(B).map(([k, v]) => [k, v - (this.dmg0?.[k] || 0)]).filter(([k, v]) => v > 0 && k !== 'other');
+    const tot = d.reduce((a, [, v]) => a + v, 0);
+    if (!tot) return;
+    const top = d.sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, v]) => `${g.srcName ? g.srcName(k) : k} ${Math.round((v / tot) * 100)}%`);
+    setTimeout(() => g.ui.toast(`이번 방 피해  ${top.join('   ')}`), 900);
   }
   glowMat(opacity = 1) { return new Material({ emissive: 1, outline: false, castShadow: false, opacity }); }
   // 작전 진행도 [0~1, 문구], 화면 표지
@@ -10542,6 +10589,7 @@ class Rooms {
           this.phase = 'reward';
           en.detonateAll();
           g.ui.banner('작전 완료!');
+          this.dmgReport();
           g.addChips(1);
           if (this.special) g.addChips(1, `${SPECIALS[this.special].name} 돌파`);
           g.sfx.play('clear');
@@ -11629,7 +11677,7 @@ __m["game/main.js"] = (() => {
 
 const { Engine, Geometry, Mesh, Material, clamp, damp, v3 } = __m["engine/index.js"];
 const { Fx } = __m["game/fx.js"];
-const { Shots, WeaponSystem, WEAPONS, weaponName } = __m["game/weapons.js"];
+const { Shots, WeaponSystem, WEAPONS, weaponName, ARCS, ARC_FREE, slotArc } = __m["game/weapons.js"];
 const { Enemies, AFFIXES } = __m["game/enemies.js"];
 const { Pickups } = __m["game/pickups.js"];
 const { Player } = __m["game/player.js"];
@@ -12013,7 +12061,7 @@ class Game {
     });
     // 무기별 피해 (실제로 깎은 체력) → 초당 피해
     const t = Math.max(1, this.time), total = Object.values(S.byWeapon).reduce((a, b) => a + b, 0) || 1;
-    const srcName = (id) => { const w = this.weapons.get(id); return id === 'fist' ? '주먹' : id === 'other' ? '기타 (연쇄/대시/세트)' : w ? weaponName(w) : WEAPONS[id]?.name || id; };
+    const srcName = (id) => this.srcName(id);
     return {
       scrap: run.gain, bonus: run.bonus, newBest: run.newBest, achieved: run.achieved, total: this.meta.scrap,
       threat: m.threat, bestThreat: this.meta.bestThreat, scrapMul: m.scrapMul, pilot: m.pilot, mids: S.mids,
@@ -12130,6 +12178,8 @@ class Game {
     this.fx.drawNumbers(ctx, (q) => { const s = this.project(q); return s && s[0] > -50 && s[1] > -50 && s[0] < c.width + 50 && s[1] < c.height + 50 ? s : null; }, px);
   }
 
+  srcName(id) { const w = this.weapons.get(id); return id === 'fist' ? '주먹' : id === 'other' ? '기타 (연쇄/대시/세트)' : w ? weaponName(w) : WEAPONS[id]?.name || id; }
+
   // 적 머리 위: 맞은 적은 체력 막대 (떼거리 제외), 정예는 항상 금색 막대 + 특성 이름
   drawEnemyBars(ctx, px) {
     const dpr = this.engine.dpr, u = Math.max(1, Math.round(dpr)), fs = 12 * Math.max(1, Math.round(px / 2)), now = this.time;
@@ -12160,6 +12210,26 @@ class Game {
     const p = this.player, st = p.stats, dpr = this.engine.dpr, sz = p.size || 1;
     const base = this.project([p.x, 0, p.z]);
     if (!base) return;
+    // 사격 방향 표시: 어깨(전방), 등(후방) 무기가 있으면 발밑에 그 범위를 점선 호로. 쏠 준비가 되면 밝게
+    const arcs = {};
+    for (const w of this.weapons.list) {
+      const W = WEAPONS[w.id];
+      if ((W.prefer === 'arm' && w.slot.startsWith('arm')) || ARC_FREE.has(w.id)) continue;
+      const a = slotArc(w.slot);
+      if (a !== 'fwd' && a !== 'rear') continue;
+      const ready = (w.cd || 0) <= 0.05;
+      if (!arcs[a] || ready) arcs[a] = { c: W.color, ready };
+    }
+    for (const [a, q] of Object.entries(arcs)) {
+      const half = ARCS[a].half, mid = p.yaw + (a === 'rear' ? Math.PI : 0), R = 3.4 * sz;
+      ctx.beginPath();
+      for (let t = -half; t <= half + 1e-6; t += half / 10) {
+        const s = this.project([p.x + Math.sin(mid + t) * R, 0.05, p.z + Math.cos(mid + t) * R]);
+        if (s) { if (t === -half) ctx.moveTo(s[0], s[1]); else ctx.lineTo(s[0], s[1]); }
+      }
+      ctx.setLineDash([4 * dpr, 4 * dpr]); ctx.lineWidth = Math.round(2 * dpr);
+      ctx.strokeStyle = `rgba(${q.c.map((v) => Math.round(v * 255)).join(',')},${q.ready ? 0.85 : 0.3})`; ctx.stroke(); ctx.setLineDash([]);
+    }
     const u = Math.round(dpr), W = Math.round(64 * dpr), H = Math.round(7 * dpr);
     const x0 = Math.round(base[0] - W / 2), y0 = Math.round(base[1] + 12 * dpr);
     const k = Math.max(0, p.hp / st.maxHp);
@@ -12351,7 +12421,7 @@ __m["game/ui.js"] = (() => {
 
 const { boot } = __m["game/main.js"];
 const { LEGS, FRAMES, HEADS, PAINTS, HANGAR_PAINTS, MODULES, partPreview } = __m["game/parts.js"];
-const { WEAPONS, weaponName, MAX_LEVEL } = __m["game/weapons.js"];
+const { WEAPONS, weaponName, MAX_LEVEL, EVOLUTIONS, ARCS, ARC_FREE, slotArc } = __m["game/weapons.js"];
 const { computeStats, MODES, STAT_UPS } = __m["game/player.js"];
 const { ZONES, REWARDS } = __m["game/rooms.js"];
 const { OPS } = __m["game/ops.js"];
@@ -12621,6 +12691,7 @@ function start() {
   const MOUNT = { armR: 'R-ARM', armL: 'L-ARM', shR: 'R-SHLD', shL: 'L-SHLD', back: 'BACK', hpR: 'R-HIP', hpL: 'L-HIP' };
   const MORDER = ['armR', 'armL', 'shR', 'shL', 'back', 'hpR', 'hpL'];
   let rackKey = '', rackEls = [];
+  const rackArc = (w) => (WEAPONS[w.id].prefer === 'arm' && w.slot.startsWith('arm') ? '수동' : ARCS[ARC_FREE.has(w.id) ? 'any' : slotArc(w.slot)].name);
   function drawRack(g) {
     const box = $('rack'), on = g.state === 'play' || g.state === 'install';
     box.hidden = !on;
@@ -12632,9 +12703,9 @@ function start() {
       rackEls = ws.map((w) => {
         const W = WEAPONS[w.id], c = W.color || [1, 1, 1], el = document.createElement('div');
         el.className = 'rslot'; el.style.setProperty('--c', `rgb(${c.map((v) => Math.round(v * 255)).join(',')})`);
-        el.innerHTML = `<div class="in"><span class="mnt">${MOUNT[w.slot] || ''}</span><img class="px-img" alt="" src="${cardImage(g, { kind: 'weapon', id: w.id })}"><b>${W.tag}</b><span class="lv">${w.evo ? 'EVO' : 'LV' + w.level}</span><span class="cd"><i></i></span></div>`;
+        el.innerHTML = `<div class="in"><span class="mnt">${MOUNT[w.slot] || ''}</span><img class="px-img" alt="" src="${cardImage(g, { kind: 'weapon', id: w.id })}"><b>${W.tag}</b><span class="lv">${w.evo ? 'EVO' : 'LV' + w.level} ${rackArc(w)}</span><span class="evo"></span><span class="cd"><i></i></span></div>`;
         box.appendChild(el);
-        return { el, w, bar: el.querySelector('.cd i') };
+        return { el, w, bar: el.querySelector('.cd i'), evo: el.querySelector('.evo') };
       });
     }
     for (const r of rackEls) {
@@ -12643,6 +12714,11 @@ function start() {
       r.bar.style.width = `${Math.round(k * 100)}%`;
       r.el.classList.toggle('fire', g.time - (w.fireT ?? -9) < 0.12);
       r.el.classList.toggle('ready', k >= 1);
+      r.el.classList.toggle('oc', g.time - (w.ocT ?? -9) < 0.15);
+      // 최대 레벨: 진화에 필요한 모듈 (있으면 진화 대기)
+      const E = EVOLUTIONS[w.id], need = E && !w.evo && w.level >= MAX_LEVEL ? E.need : null, has = need && (g.player.loadout.modules || {})[need];
+      const et = need ? (has ? '진화 준비' : `+${MODULES[need]?.name || need}`) : '';
+      if (r.evo.textContent !== et) { r.evo.textContent = et; r.el.classList.toggle('evoready', !!has); }
     }
   }
 

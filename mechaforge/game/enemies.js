@@ -609,6 +609,7 @@ export class Enemies {
     }
     g.stats.kills++;
     g.onKill?.();
+    if (g.dmgSrc && g.weapons.isManualId?.(g.dmgSrc)) g.weapons.overclock(); // 손으로 잡으면 자동 무기 재장전 당김
     if (e.boss) {
       const B = e;
       for (let i = 0; i < 6; i++) setTimeout(() => fx.explosion(B.x + (Math.random() - 0.5) * 3, 1 + Math.random() * 3, B.z + (Math.random() - 0.5) * 3, 1.6), i * 120);

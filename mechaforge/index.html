@@ -653,6 +653,11 @@
   #bayframe span { position: absolute; font-size: 12px; color: var(--mk); text-shadow: 0 2px 0 #000; }
   #bayframe .tl { top: 8px; left: 12px; } #bayframe .br { bottom: 8px; right: 12px; color: #8d96b3; }
   .ui-narrow #bayframe { display: none; }
+  .rslot .evo { font-size: 12px; line-height: 1; color: #8d96b3; white-space: nowrap; max-width: 62px; overflow: hidden; }
+  .rslot.evoready .evo { color: var(--pink); animation: blink .5s steps(2) infinite; }
+  .rslot .in { height: 94px; }
+  .rslot.oc .cd i { background: #fff; }
+  @media (pointer: coarse) { .rslot .evo { display: none; } .rslot .in { height: 52px; } }
 </style>
 </head>
 <body>

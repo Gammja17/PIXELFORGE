@@ -622,6 +622,18 @@ const SPECIAL_NAMES = { mg: '탄막 사격', shotgun: '슬러그 폭발', laser:
 // 직접 조작 무기 = 팔에 단 arm 무기. 나머지는 팔에 달려도 자동 사격
 const isManual = (w) => w.slot.startsWith('arm') && WEAPONS[w.id].prefer === 'arm';
 const wrapA = (a) => ((a + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+// ---- 장착 위치가 사격 방향을 정한다 (우리 게임의 핵심 규칙) ----
+//  어깨 = 바라보는 앞쪽만, 등 = 뒤쪽만, 허리 = 가까운 적만 (대신 피해 보너스), 팔 = 어디든
+//  어디에 다느냐가 선택이 되고, 기체를 돌리는 게 조작이 된다
+export const ARCS = {
+  fwd: { name: '전방', half: 1.15, rangeMul: 1, dmg: 1.2 },
+  rear: { name: '후방', half: 1.75, rangeMul: 1, dmg: 1.2 },
+  near: { name: '근접', half: Math.PI, rangeMul: 0.6, dmg: 1.3 },
+  any: { name: '자동', half: Math.PI, rangeMul: 1, dmg: 1 },
+};
+export const slotArc = (slot) => (slot === 'shR' || slot === 'shL' ? 'fwd' : slot === 'back' ? 'rear' : slot === 'hpR' || slot === 'hpL' ? 'near' : 'any');
+// 방향 규칙이 안 맞는 무기 (제자리 범위, 흩뿌리기, 몰린 곳 자동 조준): 어디에 달든 자동
+export const ARC_FREE = new Set(['stomp', 'mine', 'gravity', 'saw', 'turret', 'funnel']);
 // 쏘기 직전 모으는 동작이 있는 무기 (초): 예고 → 발사 → 사라짐 순서가 보이게
 const CHARGE = { gauss: 0.4, cannon: 0.25, cluster: 0.3, tesla: 0.3, missile: 0.2, gravity: 0.35 };
 
@@ -662,6 +674,11 @@ export class WeaponSystem {
 
   reset() { this.list = []; this.combo = 0; this.comboT = 0; this.swingLock = 0; this.specialT = 0; this.barrage = 0; this.burns.clear(); this.waves = []; this.syncBits(); }
   get(id) { return this.list.find((w) => w.id === id); }
+  // 팔 무기(직접 조작)로 처치하면 자동 무기들의 재장전이 당겨진다: 손으로 싸우는 게 보상받게
+  overclock() {
+    for (const w of this.list) if (!isManual(w) && w.cd > 0) { w.cd = Math.max(0, w.cd - 0.12); w.ocT = this.game.time; }
+  }
+  isManualId(id) { const w = this.get(id); return !!w && isManual(w); }
   // 연출 배율: 레벨이 오를수록, 진화하면 더 크게 보인다 (Lv1 1.0 → Lv5 1.7, 진화 +0.5)
   vk(id) { const w = id && this.get(id); return w ? 1 + ((w.level || 1) - 1) * 0.18 + (w.evo ? 0.5 : 0) : 1; }
   get primary() { return this.list.find((w) => w.slot === 'armR') || null; }
@@ -1218,9 +1235,23 @@ export class WeaponSystem {
       const target = en.nearest(p.x, p.z, W.range * p.stats.rangeMul);
       if (!target) continue;
       if (w.id === 'saber' || w.id === 'rod') { w.cd = 0.5; continue; }
-      // 팔 무기를 어깨에 달면 85% 위력, 원래 자동 무기는 그대로
-      this.autoTarget = target;
-      this.fire(w, Math.atan2(target.x - mz[0], target.z - mz[2]), W.prefer === 'arm' ? 0.85 : 1);
+      // 장착 위치의 사격 방향 안에서 대상 고르기 (가우스는 가장 튼튼한 적, 박격포는 가장 몰린 곳)
+      const arcId = ARC_FREE.has(w.id) ? 'any' : slotArc(w.slot), A = ARCS[arcId];
+      const R = W.range * p.stats.rangeMul * A.rangeMul, face = p.yaw;
+      let best = null, score = -1e9;
+      en.each(p.x, p.z, R, (e) => {
+        if (e.dead || e.spawnT < 0.2 || e.under || e.T.mine) return;
+        const dx = e.x - p.x, dz = e.z - p.z, d = Math.hypot(dx, dz);
+        if (A.half < Math.PI) { const da = Math.abs(wrapA(Math.atan2(dx, dz) - face)); if (arcId === 'rear' ? Math.PI - da > A.half : da > A.half) return; }
+        let s = -d;
+        if (w.id === 'gauss') s = e.hp;
+        else if (w.id === 'cluster') { let c = 0; en.each(e.x, e.z, 2.5, () => c++); s = c * 10 - d; }
+        if (s > score) { score = s; best = e; }
+      });
+      if (!best) continue;
+      // 팔 무기를 어깨에 달면 85% 위력, 방향이 좁을수록 피해 보너스
+      this.autoTarget = best;
+      this.fire(w, Math.atan2(best.x - mz[0], best.z - mz[2]), (W.prefer === 'arm' ? 0.85 : 1) * A.dmg);
     }
     this.autoTarget = null;
   }

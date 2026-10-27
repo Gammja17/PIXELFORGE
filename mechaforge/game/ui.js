@@ -2,7 +2,7 @@
 
 import { boot } from './main.js';
 import { LEGS, FRAMES, HEADS, PAINTS, HANGAR_PAINTS, MODULES, partPreview } from './parts.js';
-import { WEAPONS, weaponName, MAX_LEVEL } from './weapons.js';
+import { WEAPONS, weaponName, MAX_LEVEL, EVOLUTIONS, ARCS, ARC_FREE, slotArc } from './weapons.js';
 import { computeStats, MODES, STAT_UPS } from './player.js';
 import { ZONES, REWARDS } from './rooms.js';
 import { OPS } from './ops.js';
@@ -272,6 +272,7 @@ function start() {
   const MOUNT = { armR: 'R-ARM', armL: 'L-ARM', shR: 'R-SHLD', shL: 'L-SHLD', back: 'BACK', hpR: 'R-HIP', hpL: 'L-HIP' };
   const MORDER = ['armR', 'armL', 'shR', 'shL', 'back', 'hpR', 'hpL'];
   let rackKey = '', rackEls = [];
+  const rackArc = (w) => (WEAPONS[w.id].prefer === 'arm' && w.slot.startsWith('arm') ? '수동' : ARCS[ARC_FREE.has(w.id) ? 'any' : slotArc(w.slot)].name);
   function drawRack(g) {
     const box = $('rack'), on = g.state === 'play' || g.state === 'install';
     box.hidden = !on;
@@ -283,9 +284,9 @@ function start() {
       rackEls = ws.map((w) => {
         const W = WEAPONS[w.id], c = W.color || [1, 1, 1], el = document.createElement('div');
         el.className = 'rslot'; el.style.setProperty('--c', `rgb(${c.map((v) => Math.round(v * 255)).join(',')})`);
-        el.innerHTML = `<div class="in"><span class="mnt">${MOUNT[w.slot] || ''}</span><img class="px-img" alt="" src="${cardImage(g, { kind: 'weapon', id: w.id })}"><b>${W.tag}</b><span class="lv">${w.evo ? 'EVO' : 'LV' + w.level}</span><span class="cd"><i></i></span></div>`;
+        el.innerHTML = `<div class="in"><span class="mnt">${MOUNT[w.slot] || ''}</span><img class="px-img" alt="" src="${cardImage(g, { kind: 'weapon', id: w.id })}"><b>${W.tag}</b><span class="lv">${w.evo ? 'EVO' : 'LV' + w.level} ${rackArc(w)}</span><span class="evo"></span><span class="cd"><i></i></span></div>`;
         box.appendChild(el);
-        return { el, w, bar: el.querySelector('.cd i') };
+        return { el, w, bar: el.querySelector('.cd i'), evo: el.querySelector('.evo') };
       });
     }
     for (const r of rackEls) {
@@ -294,6 +295,11 @@ function start() {
       r.bar.style.width = `${Math.round(k * 100)}%`;
       r.el.classList.toggle('fire', g.time - (w.fireT ?? -9) < 0.12);
       r.el.classList.toggle('ready', k >= 1);
+      r.el.classList.toggle('oc', g.time - (w.ocT ?? -9) < 0.15);
+      // 최대 레벨: 진화에 필요한 모듈 (있으면 진화 대기)
+      const E = EVOLUTIONS[w.id], need = E && !w.evo && w.level >= MAX_LEVEL ? E.need : null, has = need && (g.player.loadout.modules || {})[need];
+      const et = need ? (has ? '진화 준비' : `+${MODULES[need]?.name || need}`) : '';
+      if (r.evo.textContent !== et) { r.evo.textContent = et; r.el.classList.toggle('evoready', !!has); }
     }
   }
 

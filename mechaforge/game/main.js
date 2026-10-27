@@ -5,7 +5,7 @@
 
 import { Engine, Geometry, Mesh, Material, clamp, damp, v3 } from '../engine/index.js';
 import { Fx } from './fx.js';
-import { Shots, WeaponSystem, WEAPONS, weaponName } from './weapons.js';
+import { Shots, WeaponSystem, WEAPONS, weaponName, ARCS, ARC_FREE, slotArc } from './weapons.js';
 import { Enemies, AFFIXES } from './enemies.js';
 import { Pickups } from './pickups.js';
 import { Player } from './player.js';
@@ -389,7 +389,7 @@ export class Game {
     });
     // 무기별 피해 (실제로 깎은 체력) → 초당 피해
     const t = Math.max(1, this.time), total = Object.values(S.byWeapon).reduce((a, b) => a + b, 0) || 1;
-    const srcName = (id) => { const w = this.weapons.get(id); return id === 'fist' ? '주먹' : id === 'other' ? '기타 (연쇄/대시/세트)' : w ? weaponName(w) : WEAPONS[id]?.name || id; };
+    const srcName = (id) => this.srcName(id);
     return {
       scrap: run.gain, bonus: run.bonus, newBest: run.newBest, achieved: run.achieved, total: this.meta.scrap,
       threat: m.threat, bestThreat: this.meta.bestThreat, scrapMul: m.scrapMul, pilot: m.pilot, mids: S.mids,
@@ -506,6 +506,8 @@ export class Game {
     this.fx.drawNumbers(ctx, (q) => { const s = this.project(q); return s && s[0] > -50 && s[1] > -50 && s[0] < c.width + 50 && s[1] < c.height + 50 ? s : null; }, px);
   }
 
+  srcName(id) { const w = this.weapons.get(id); return id === 'fist' ? '주먹' : id === 'other' ? '기타 (연쇄/대시/세트)' : w ? weaponName(w) : WEAPONS[id]?.name || id; }
+
   // 적 머리 위: 맞은 적은 체력 막대 (떼거리 제외), 정예는 항상 금색 막대 + 특성 이름
   drawEnemyBars(ctx, px) {
     const dpr = this.engine.dpr, u = Math.max(1, Math.round(dpr)), fs = 12 * Math.max(1, Math.round(px / 2)), now = this.time;
@@ -536,6 +538,26 @@ export class Game {
     const p = this.player, st = p.stats, dpr = this.engine.dpr, sz = p.size || 1;
     const base = this.project([p.x, 0, p.z]);
     if (!base) return;
+    // 사격 방향 표시: 어깨(전방), 등(후방) 무기가 있으면 발밑에 그 범위를 점선 호로. 쏠 준비가 되면 밝게
+    const arcs = {};
+    for (const w of this.weapons.list) {
+      const W = WEAPONS[w.id];
+      if ((W.prefer === 'arm' && w.slot.startsWith('arm')) || ARC_FREE.has(w.id)) continue;
+      const a = slotArc(w.slot);
+      if (a !== 'fwd' && a !== 'rear') continue;
+      const ready = (w.cd || 0) <= 0.05;
+      if (!arcs[a] || ready) arcs[a] = { c: W.color, ready };
+    }
+    for (const [a, q] of Object.entries(arcs)) {
+      const half = ARCS[a].half, mid = p.yaw + (a === 'rear' ? Math.PI : 0), R = 3.4 * sz;
+      ctx.beginPath();
+      for (let t = -half; t <= half + 1e-6; t += half / 10) {
+        const s = this.project([p.x + Math.sin(mid + t) * R, 0.05, p.z + Math.cos(mid + t) * R]);
+        if (s) { if (t === -half) ctx.moveTo(s[0], s[1]); else ctx.lineTo(s[0], s[1]); }
+      }
+      ctx.setLineDash([4 * dpr, 4 * dpr]); ctx.lineWidth = Math.round(2 * dpr);
+      ctx.strokeStyle = `rgba(${q.c.map((v) => Math.round(v * 255)).join(',')},${q.ready ? 0.85 : 0.3})`; ctx.stroke(); ctx.setLineDash([]);
+    }
     const u = Math.round(dpr), W = Math.round(64 * dpr), H = Math.round(7 * dpr);
     const x0 = Math.round(base[0] - W / 2), y0 = Math.round(base[1] + 12 * dpr);
     const k = Math.max(0, p.hp / st.maxHp);
