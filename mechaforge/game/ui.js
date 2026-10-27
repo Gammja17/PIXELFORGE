@@ -81,14 +81,14 @@ function start() {
       doorEls.clear();
     },
     onStart() {
-      for (const id of ['hangar', 'result', 'paused', 'levelup', 'achv']) $(id).hidden = true;
+      for (const id of ['hangar', 'result', 'paused', 'levelup', 'achv', 'bayframe']) $(id).hidden = true;
       $('hud').hidden = false; $('boss').hidden = true;
       $('pad').hidden = !coarse; $('hint').hidden = coarse; $('dots').hidden = coarse; $('dots').classList.add('play');
       $('view').focus();
     },
     onHangar() {
       for (const id of ['hud', 'result', 'paused', 'levelup', 'pad', 'hint', 'banner', 'skip', 'combo', 'cutin', 'station']) $(id).hidden = true;
-      $('hangar').hidden = false; $('dots').hidden = coarse; $('dots').classList.remove('play');
+      $('hangar').hidden = false; $('bayframe').hidden = false; $('dots').hidden = coarse; $('dots').classList.remove('play');
       for (const el of doorEls.values()) el.remove();
       doorEls.clear();
       renderHangar();

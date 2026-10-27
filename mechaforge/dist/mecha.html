@@ -603,6 +603,56 @@
     .ui-narrow #rack, .ui-tiny #rack { top: calc(var(--sat) + 142px); }
     .ui-narrow body #tut, .ui-narrow body #tuttip, .ui-tiny body #tut, .ui-tiny body #tuttip { top: calc(var(--sat) + 206px) !important; }
   }
+
+  /* ==== 격납고 리마스터 (v7): 조종석 프레임으로 통일 ==== */
+  #hangar .modal, #station .modal, #result .modal {
+    border: 2px solid var(--medge) !important; border-image: none !important;
+    background:
+      linear-gradient(var(--mk) 0 0) 0 0 / 16px 3px no-repeat, linear-gradient(var(--mk) 0 0) 0 0 / 3px 16px no-repeat,
+      linear-gradient(var(--mk) 0 0) 100% 0 / 16px 3px no-repeat, linear-gradient(var(--mk) 0 0) 100% 0 / 3px 16px no-repeat,
+      linear-gradient(var(--mk) 0 0) 0 100% / 16px 3px no-repeat, linear-gradient(var(--mk) 0 0) 0 100% / 3px 16px no-repeat,
+      linear-gradient(var(--mk) 0 0) 100% 100% / 16px 3px no-repeat, linear-gradient(var(--mk) 0 0) 100% 100% / 3px 16px no-repeat,
+      repeating-linear-gradient(0deg, rgba(255, 255, 255, .025) 0 1px, transparent 1px 3px),
+      rgba(8, 10, 16, .94) !important;
+    box-shadow: 0 4px 0 rgba(0, 0, 0, .5), 0 0 0 1px #000 !important; padding: 12px 14px !important; position: relative;
+  }
+  #hangar .modal::before, #station .modal::before { content: "ASSEMBLY BAY  UNIT MF-01"; position: absolute; top: -1px; left: 28px; padding: 0 6px; font-size: 12px; line-height: 14px; color: #0b0d14; background: var(--mk); }
+  #station .modal::before { content: "MAINTENANCE BAY"; }
+  #hangar .logo { margin-top: 6px; }
+  #hangar .sub { color: #aab1c8; }
+  /* 탭, 부품 칸: 무기 슬롯과 같은 모양. 고르면 호박색 테두리 */
+  #hangar .tab, #hangar .opt, #tabbody.screenbox, #station .screenbox {
+    border: 2px solid #2a3042 !important; border-image: none !important; background: #0c0f17 !important;
+  }
+  #hangar .tab { clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px); }
+  #hangar .tab[aria-selected="true"] { border-color: var(--mk) !important; background: rgba(255, 180, 61, .12) !important; box-shadow: inset 0 -3px 0 var(--mk); }
+  #hangar .opt { clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px); }
+  #hangar .opt[aria-pressed="true"] { border-color: var(--mk) !important; background: rgba(255, 180, 61, .14) !important; }
+  #hangar .opt:hover, #hangar .tab:hover { border-color: #5a6584 !important; filter: none; }
+  #tabdesc b { color: var(--mk); }
+  /* 능력치: 칸으로 나뉜 계기판 막대 */
+  .sbar span { color: #aab1c8; }
+  .sbar i { height: 10px; background: #111522; box-shadow: 0 0 0 1px #000, 0 0 0 2px #2a3042; }
+  .sbar i em { background: repeating-linear-gradient(90deg, var(--mk) 0 6px, transparent 6px 8px) !important; }
+  .sbar i em.up { background: repeating-linear-gradient(90deg, var(--xp) 0 6px, transparent 6px 8px) !important; }
+  .sbar i em.down { background: repeating-linear-gradient(90deg, var(--hp) 0 6px, transparent 6px 8px) !important; }
+  /* 버튼: 얇은 강철 테두리 (출격은 노란 경고 줄무늬 그대로) */
+  #hangar .btn:not(.primary), #station .btn:not(.primary), #result .btn:not(.primary), #paused .btn:not(.primary) {
+    border: 2px solid #3b4357 !important; border-image: none !important; background: #121621 !important; min-height: 42px; color: #fff;
+    clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+  }
+  #hangar .btn:not(.primary):hover, #station .btn:not(.primary):hover, #paused .btn:not(.primary):hover { border-color: var(--mk) !important; }
+  .mini { background: #121621 !important; box-shadow: inset 0 0 0 2px #3b4357 !important; color: #fff; }
+  /* 조립대 뷰포트: 기체 쪽 화면 모서리에 브래킷 + 표시 */
+  #bayframe { position: fixed; pointer-events: none; top: calc(var(--sat) + 18px); bottom: calc(var(--sab) + 76px); right: calc(var(--sar) + 18px); left: calc(var(--sal) + 520px); zoom: var(--uiz);
+    background:
+      linear-gradient(var(--mk) 0 0) 0 0 / 28px 3px no-repeat, linear-gradient(var(--mk) 0 0) 0 0 / 3px 28px no-repeat,
+      linear-gradient(var(--mk) 0 0) 100% 0 / 28px 3px no-repeat, linear-gradient(var(--mk) 0 0) 100% 0 / 3px 28px no-repeat,
+      linear-gradient(var(--mk) 0 0) 0 100% / 28px 3px no-repeat, linear-gradient(var(--mk) 0 0) 0 100% / 3px 28px no-repeat,
+      linear-gradient(var(--mk) 0 0) 100% 100% / 28px 3px no-repeat, linear-gradient(var(--mk) 0 0) 100% 100% / 3px 28px no-repeat; }
+  #bayframe span { position: absolute; font-size: 12px; color: var(--mk); text-shadow: 0 2px 0 #000; }
+  #bayframe .tl { top: 8px; left: 12px; } #bayframe .br { bottom: 8px; right: 12px; color: #8d96b3; }
+  .ui-narrow #bayframe { display: none; }
 </style>
 </head>
 <body>
@@ -663,6 +713,7 @@
 </div>
 <div id="stick" hidden><div id="knob"></div></div>
 
+<div id="bayframe"><span class="tl">SCAN: UNIT MF-01</span><span class="br">SYSTEM READY</span></div>
 <section id="hangar" class="screen">
   <div class="modal pix">
     <div class="hhead">
@@ -12379,14 +12430,14 @@ function start() {
       doorEls.clear();
     },
     onStart() {
-      for (const id of ['hangar', 'result', 'paused', 'levelup', 'achv']) $(id).hidden = true;
+      for (const id of ['hangar', 'result', 'paused', 'levelup', 'achv', 'bayframe']) $(id).hidden = true;
       $('hud').hidden = false; $('boss').hidden = true;
       $('pad').hidden = !coarse; $('hint').hidden = coarse; $('dots').hidden = coarse; $('dots').classList.add('play');
       $('view').focus();
     },
     onHangar() {
       for (const id of ['hud', 'result', 'paused', 'levelup', 'pad', 'hint', 'banner', 'skip', 'combo', 'cutin', 'station']) $(id).hidden = true;
-      $('hangar').hidden = false; $('dots').hidden = coarse; $('dots').classList.remove('play');
+      $('hangar').hidden = false; $('bayframe').hidden = false; $('dots').hidden = coarse; $('dots').classList.remove('play');
       for (const el of doorEls.values()) el.remove();
       doorEls.clear();
       renderHangar();
