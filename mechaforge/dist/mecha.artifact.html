@@ -4758,7 +4758,8 @@ const ARCS = {
   near: { name: '근접', half: Math.PI, rangeMul: 0.6, dmg: 1.3 },
   any: { name: '자동', half: Math.PI, rangeMul: 1, dmg: 1 },
 };
-const slotArc = (slot) => (slot === 'shR' || slot === 'shL' ? 'fwd' : slot === 'back' ? 'rear' : slot === 'hpR' || slot === 'hpL' ? 'near' : 'any');
+// 장착 위치별 사격 방향 규칙은 플레이 피드백(재미없음)으로 꺼 둠: 모든 자리가 어디든 자동 조준
+const slotArc = () => 'any';
 // 방향 규칙이 안 맞는 무기 (제자리 범위, 흩뿌리기, 몰린 곳 자동 조준): 어디에 달든 자동
 const ARC_FREE = new Set(['stomp', 'mine', 'gravity', 'saw', 'turret', 'funnel']);
 // 쏘기 직전 모으는 동작이 있는 무기 (초): 예고 → 발사 → 사라짐 순서가 보이게
