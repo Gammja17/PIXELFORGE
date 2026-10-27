@@ -27,6 +27,8 @@ export class ParticleSystem {
    * life: 초, size: 시작 크기(픽셀), sizeEnd: 끝 크기
    * color / colorEnd: [r,g,b], emissive: 0~1 (블룸)
    * fadeIn: 0~1 수명 비율만큼 서서히 나타남
+   * ramp: [[r,g,b], ...] 수명에 따라 계단식으로 바뀌는 색 (도트 그림 같은 단계 색. color/colorEnd 대신)
+   * hard: true 면 끝까지 또렷하다가 수명이 다하면 바로 사라짐 (디더 페이드 없음)
    * update(p, dt): 개별 움직임을 덮어쓰고 싶을 때
    */
   emit(o) {
@@ -36,7 +38,7 @@ export class ParticleSystem {
       life: o.life ?? 1, age: 0,
       size: o.size ?? 2, sizeEnd: o.sizeEnd ?? o.size ?? 2,
       color: o.color || [1, 1, 1], colorEnd: o.colorEnd || o.color || [1, 1, 1],
-      emissive: o.emissive ?? 0, fadeIn: o.fadeIn ?? 0,
+      emissive: o.emissive ?? 0, fadeIn: o.fadeIn ?? 0, ramp: o.ramp || null, hard: !!o.hard,
       gravity: o.gravity ?? 1, update: o.update || null, seed: Math.random() * 100,
     });
   }
@@ -67,13 +69,16 @@ export class ParticleSystem {
     for (const p of this.list) {
       const t = p.age / p.life, o = n * STRIDE;
       d[o] = p.p[0]; d[o + 1] = p.p[1]; d[o + 2] = p.p[2];
-      d[o + 3] = lerp(p.color[0], p.colorEnd[0], t);
-      d[o + 4] = lerp(p.color[1], p.colorEnd[1], t);
-      d[o + 5] = lerp(p.color[2], p.colorEnd[2], t);
+      if (p.ramp) { const c = p.ramp[Math.min(p.ramp.length - 1, (t * p.ramp.length) | 0)]; d[o + 3] = c[0]; d[o + 4] = c[1]; d[o + 5] = c[2]; }
+      else {
+        d[o + 3] = lerp(p.color[0], p.colorEnd[0], t);
+        d[o + 4] = lerp(p.color[1], p.colorEnd[1], t);
+        d[o + 5] = lerp(p.color[2], p.colorEnd[2], t);
+      }
       d[o + 6] = p.emissive;
       const fadeOut = Math.min(1, (1 - t) * 3);
       const fadeIn = p.fadeIn > 0 ? Math.min(1, t / p.fadeIn) : 1;
-      d[o + 7] = fadeOut * fadeIn;
+      d[o + 7] = p.hard ? 1 : fadeOut * fadeIn;
       d[o + 8] = lerp(p.size, p.sizeEnd, t);
       n++;
     }

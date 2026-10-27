@@ -513,7 +513,7 @@ export class Shots {
       });
       for (let k = 0; k < 3; k++) {
         const a = Math.random() * Math.PI * 2, r = w.r * rr(0.6, 1);
-        fx.trail.emit({ position: [w.x + Math.cos(a) * r, rr(0.2, 1.2), w.z + Math.sin(a) * r], velocity: [-Math.cos(a) * r * 2.4 - Math.sin(a) * 3, 0.3, -Math.sin(a) * r * 2.4 + Math.cos(a) * 3], life: 0.4, size: 2, sizeEnd: 1, color: [0.85, 0.6, 1], colorEnd: [0.3, 0.1, 0.6], emissive: 1, gravity: 0 });
+        fx.pxr.emit({ position: [w.x + Math.cos(a) * r, rr(0.2, 1.2), w.z + Math.sin(a) * r], velocity: [-Math.cos(a) * r * 2.2 - Math.sin(a) * 3, 0.3, -Math.sin(a) * r * 2.2 + Math.cos(a) * 3], life: 0.4, size: 2, sizeEnd: 1, ramp: [[1, 0.85, 1], [0.8, 0.5, 1], [0.5, 0.25, 0.9], [0.3, 0.1, 0.6]], emissive: 1, hard: true });
       }
       if (w.t >= w.dur) {
         if (w.pop) { en.blast(w.x, w.z, w.r * 0.85, w.dps * w.pop, false, 0); fx.light([w.x, 2, w.z], [0.8, 0.5, 1], w.r + 3, 2, 0.3); fx.addTrauma(0.2); }
@@ -922,13 +922,24 @@ export class WeaponSystem {
       en.each(c0.x, c0.z, J, (e) => { if (hit.has(e)) return; const d = (e.x - c0.x) ** 2 + (e.z - c0.z) ** 2; if (d < bd) { bd = d; cur = e; } });
     }
   }
+  // 번개: 꺾인 지그재그 선을 점으로 촘촘히 (흰 심 + 색 테두리), 끝에 작은 점 섬광
   bolt(a, b, col) {
-    const fx = this.game.fx, n = Math.max(3, Math.ceil(Math.hypot(b[0] - a[0], b[2] - a[2]) / 0.3));
-    for (let i = 0; i <= n; i++) {
-      const k = i / n, j = i && i < n ? 0.28 : 0;
-      fx.trail.emit({ position: [a[0] + (b[0] - a[0]) * k + rr(-j, j), a[1] + (b[1] - a[1]) * k + rr(-j, j), a[2] + (b[2] - a[2]) * k + rr(-j, j)], velocity: [0, 0, 0], life: 0.13, size: 3, sizeEnd: 1, color: [1, 1, 1], colorEnd: col, emissive: 1, gravity: 0 });
+    const fx = this.game.fx, L = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]) || 1, segs = Math.max(2, Math.round(L / 0.7));
+    const pts = [a];
+    for (let i = 1; i < segs; i++) { const k = i / segs, j = 0.45; pts.push([a[0] + (b[0] - a[0]) * k + rr(-j, j), a[1] + (b[1] - a[1]) * k + rr(-j, j) * 0.6, a[2] + (b[2] - a[2]) * k + rr(-j, j)]); }
+    pts.push(b);
+    const core = [[1, 1, 1], [1, 1, 1], col], glow = [col, col.map((v) => v * 0.6)];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p = pts[i], q = pts[i + 1], n = Math.max(2, Math.ceil(Math.hypot(q[0] - p[0], q[1] - p[1], q[2] - p[2]) / 0.11));
+      for (let k = 0; k < n; k++) {
+        const t = k / n, pos = [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, p[2] + (q[2] - p[2]) * t];
+        fx.pxr.emit({ position: pos, velocity: [0, 0, 0], life: 0.13, size: 3, sizeEnd: 2, ramp: core, emissive: 1, hard: true });
+        if (k % 2 === 0) fx.pxr.emit({ position: pos, velocity: [0, 0, 0], life: 0.1, size: 6, sizeEnd: 3, ramp: glow, emissive: 0.7, hard: true });
+      }
     }
-    this.game.fx.light(b, col, 3, 0.8, 0.1);
+    fx.starPx(b, 4, col, 0.7, 0.12, Math.random());
+    fx.shrapnel(b, 3, [[1, 1, 1], col], { speed: [3, 7], life: [0.1, 0.2] });
+    fx.light(b, col, 3, 0.8, 0.1);
   }
   // 충격파: 기체 주위를 쳐서 날려 보낸다
   quake(r, D) {
@@ -980,8 +991,7 @@ export class WeaponSystem {
       if (t) {
         en.hit(t, 50 * st.dmgMul, 0, 0, 3, { stun: 0.4 });
         // 하늘에서 지그재그로 떨어지는 번개
-        let x = t.x + rr(-0.6, 0.6), z = t.z + rr(-0.6, 0.6);
-        for (let y = 9; y > 0; y -= 0.45) { x += rr(-0.35, 0.35); z += rr(-0.35, 0.35); fx.trail.emit({ position: [x, y, z], velocity: [0, 0, 0], life: 0.14, size: 3, sizeEnd: 2, color: [1, 1, 1], colorEnd: [0.5, 0.8, 1], emissive: 1, gravity: 0 }); }
+        this.bolt([t.x + rr(-1.5, 1.5), 9, t.z + rr(-1.5, 1.5)], [t.x, 0.3, t.z], [0.55, 0.85, 1]);
         fx.light([t.x, 2, t.z], [0.6, 0.85, 1], 5, 1.4, 0.12);
         fx.ring(t.x, 0.12, t.z, 1.6, [0.6, 0.85, 1], 0.2);
         g.sfx.play('beam', { vol: 0.35, pitch: 1.6 });

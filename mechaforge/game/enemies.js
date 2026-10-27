@@ -565,20 +565,17 @@ export class Enemies {
       if (dmg <= 0) { e.flash = 0.04; return; }
     }
     e.hp -= dmg;
-    e.flash = 0.09;
+    // 하얀 번쩍임은 0.18초에 한 번만 (지속 피해가 계속 들어와도 하얗게 덮이지 않게). 치명타와 큰 공격은 항상
+    if (crit || !quiet || g.time - (e.lastFlash || -9) > 0.18) { e.flash = 0.09; e.lastFlash = g.time; }
     // 맞은 자리 모양 이펙트: 치명타는 8갈래 금빛 섬광 + 육각, 일반은 십자 + 맞은 방향으로 튀는 줄기, 잔탄은 가끔만
     if (crit || !quiet || Math.random() < 0.3) {
       const hp = [e.x - dirX * e.r * 0.5, (e.y || 0) + (e.boss ? 2.2 : 0.8), e.z - dirZ * e.r * 0.5], dir = (dirX || dirZ) ? [dirX, dirZ] : null;
       if (crit) {
-        g.fx.flare(hp, 'star4', [1, 1, 0.8], 0.8, 0.12);
-        g.fx.flare(hp, 'star8', [1, 0.75, 0.15], 2.1, 0.22, { spin: 5 });
-        g.fx.flare(hp, 'hex', [1, 0.85, 0.3], 1.4, 0.24, { grow: true, rot: 0 });
-        g.fx.streaks(hp, 5, [1, 0.85, 0.3], { dir, spread: 1.6, speed: [9, 16], len: 0.55, life: 0.2 });
-      } else {
-        const big = !quiet;
-        g.fx.flare(hp, Math.random() < 0.5 ? 'star4' : 'streak', Math.random() < 0.5 ? [1, 1, 1] : [1, 0.85, 0.4], big ? 0.6 : 0.4, 0.1, { sx: 1, sy: Math.random() < 0.5 ? 1 : 1.6 });
-        g.fx.streaks(hp, big ? 3 : 1, col[2] < 0.5 ? col : [1, 0.8, 0.45], { dir, spread: 1.4, speed: [6, 12], len: 0.4, life: 0.14 });
-      }
+        // 치명타: 금빛 8갈래 점 섬광 + 작은 고리 + 굵은 파편
+        g.fx.starPx(hp, 8, [1, 0.8, 0.2], 1.1, 0.18, Math.random());
+        g.fx.ring(hp[0], 0.12, hp[2], 1.3, [1, 0.8, 0.25], 0.2);
+        g.fx.shrapnel(hp, 6, [[1, 1, 0.8], [1, 0.85, 0.3], [1, 0.55, 0.15]], { dir, spread: 1.4, speed: [6, 12], size: [1, 3], up: [1, 4] });
+      } else g.fx.hitSpark(hp, col[2] < 0.5 ? col : [1, 0.8, 0.45], quiet ? 2 : 5, dir);
     }
     const k = knock / (e.mass || e.T.mass);
     e.kx += dirX * k; e.kz += dirZ * k;
@@ -942,8 +939,8 @@ export class Enemies {
       const hk = Math.max(0, e.flash) / 0.09, sq = 1 + hk * 0.28;
       const mat = m4.fromTRS([e.x, y, e.z], [e.rx || 0, e.yaw, roll], [s * sq, s / sq, s * sq]);
       const wind = e.state === 'wind' && Math.sin(e.st * 28) > 0, f = e.flash > 0;
-      const tint = f ? (hk > 0.45 ? [2.2, 2.2, 2.2] : [2, 0.9, 0.85]) : wind ? [2.4, 1, 1] : e.elite ? (e.tint || [1.35, 1.2, 0.75]) : (e.tint || [1.3, 1.22, 1.28]);
-      M.body.setAt(i, mat, tint, f ? 0.85 : wind ? 0.5 : 0.1);
+      const tint = f ? (hk > 0.45 ? [1.9, 1.9, 1.9] : [1.7, 0.85, 0.8]) : wind ? [2.4, 1, 1] : e.elite ? (e.tint || [1.35, 1.2, 0.75]) : (e.tint || [1.3, 1.22, 1.28]);
+      M.body.setAt(i, mat, tint, f ? 0.5 : wind ? 0.5 : 0.1);
       const glowK = e.charging || e.state === 'wind' ? 2.2 : 1;
       const gk = e.exposed ? 1.6 + Math.sin(time * 14) * 0.6 : glowK;
       M.glow.setAt(i, mat, e.elite ? [1.6 * glowK, 1.3 * glowK, 0.4] : [gk, gk, gk], 1);

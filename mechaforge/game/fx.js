@@ -11,46 +11,11 @@ class GameParticles extends ParticleSystem {
 const R = Math.random;
 const rr = (a, b) => a + (b - a) * R();
 
-// 납작한 고리 (충격파)
-function ringGeo(seg = 20, inner = 0.82) {
-  const g = new Geometry();
-  for (let i = 0; i < seg; i++) {
-    const a0 = (i / seg) * Math.PI * 2, a1 = ((i + 1) / seg) * Math.PI * 2;
-    const p = (a, r) => [Math.cos(a) * r, 0, Math.sin(a) * r];
-    g.quad(p(a0, inner), p(a1, inner), p(a1, 1), p(a0, 1), [1, 1, 1], null, [0, 1, 0]);
-  }
-  return g;
-}
-
-// ---- 모양 이펙트용 납작한 도형 (XY 평면, 화면을 향하게 돌려서 그린다) ----
-//  star4: 십자 섬광, star8: 8갈래 치명타 섬광, burst: 만화 같은 들쭉날쭉 폭발, streak: 가늘고 긴 불꽃 줄기, hex: 육각 테두리
-function fan(points, centerCol = [1, 1, 1], edgeCol = [0.85, 0.85, 0.85]) {
-  const g = new Geometry();
-  for (let i = 0; i < points.length; i++) {
-    const a = points[i], b = points[(i + 1) % points.length];
-    g.quad([0, 0, 0], [a[0], a[1], 0], [b[0], b[1], 0], [0, 0, 0], centerCol, null, [0, 0, 1]);
-  }
-  // 가장자리 색은 정점색으로 못 나누니 바깥 띠를 한 겹 더 (조금 어둡게)
-  void edgeCol;
-  return g;
-}
-function radial(n, rad) { const pts = []; for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2, r = rad(i); pts.push([Math.cos(a) * r, Math.sin(a) * r]); } return pts; }
-function shapeGeo(kind) {
-  if (kind === 'star4') return fan(radial(16, (i) => (i % 4 === 0 ? 1 : i % 2 === 0 ? 0.42 : 0.11)));
-  if (kind === 'star8') return fan(radial(16, (i) => (i % 2 === 0 ? (i % 4 === 0 ? 1 : 0.72) : 0.2)));
-  if (kind === 'burst') { let s = 7; const rnd = () => (s = (s * 9301 + 49297) % 233280) / 233280; return fan(radial(22, (i) => (i % 2 === 0 ? 0.72 + rnd() * 0.28 : 0.36 + rnd() * 0.18))); }
-  if (kind === 'streak') return fan([[0, 1], [0.1, 0.15], [0.06, -0.6], [0, -1], [-0.06, -0.6], [-0.1, 0.15]]);
-  if (kind === 'hex') {
-    const g = new Geometry();
-    for (let i = 0; i < 6; i++) {
-      const a0 = (i / 6) * Math.PI * 2 + Math.PI / 6, a1 = ((i + 1) / 6) * Math.PI * 2 + Math.PI / 6, p = (a, r) => [Math.cos(a) * r, Math.sin(a) * r, 0];
-      g.quad(p(a0, 0.8), p(a1, 0.8), p(a1, 1), p(a0, 1), [1, 1, 1], null, [0, 0, 1]);
-    }
-    return g;
-  }
-  return fan(radial(10, () => 1));
-}
-const SHAPES = { star4: 90, star8: 40, burst: 50, streak: 360, hex: 24 };
+// 도트 팔레트: 수명 따라 계단식으로 바뀌는 색 (흰 섬광 → 밝은색 → 본색 → 어두운색)
+const FIRE = [[1, 1, 1], [1, 0.95, 0.55], [1, 0.72, 0.22], [1, 0.42, 0.12], [0.72, 0.18, 0.1], [0.32, 0.24, 0.24]];
+const SMOKE = [[0.42, 0.38, 0.4], [0.3, 0.27, 0.3], [0.2, 0.18, 0.21]];
+const rampOf = (c) => [[1, 1, 1], [(1 + c[0]) / 2, (1 + c[1]) / 2, (1 + c[2]) / 2], c, c.map((v) => v * 0.6), c.map((v) => v * 0.35)];
+const isFire = (c) => c[0] > 0.8 && c[1] < 0.8 && c[2] < 0.45;
 
 // 3x5 도트 숫자 (데미지 표시용, 폰트 로딩과 무관하게 또렷함)
 const GLYPHS = {
@@ -66,31 +31,21 @@ export class Fx {
     this.sparks = new GameParticles(this, { max: 1600, gravity: [0, -9, 0], drag: 2.2 });
     this.smoke = new GameParticles(this, { max: 500, gravity: [0, 1.6, 0], drag: 2.6 });
     this.trail = new GameParticles(this, { max: 1400, gravity: [0, 0.4, 0], drag: 3 });
-    scene.particles.push(this.trail, this.smoke, this.sparks);
+    // 도트 이펙트: px = 흩뿌려지는 점 (중력, 공기 저항), pxr = 일정한 속도로 퍼지는 점 (고리, 섬광 갈래, 번개)
+    this.px = new GameParticles(this, { max: 3200, gravity: [0, -16, 0], drag: 2.6 });
+    this.pxr = new GameParticles(this, { max: 2400, gravity: [0, 0, 0], drag: 0 });
+    scene.particles.push(this.trail, this.smoke, this.sparks, this.px, this.pxr);
 
     this.lights = [];
     this.trauma = 0;
     this.numbers = [];
 
-    // 충격파 고리 풀
-    const rg = ringGeo();
-    this.rings = [];
-    for (let i = 0; i < 10; i++) {
-      const m = new Mesh(rg, new Material({ emissive: 1, outline: false, castShadow: false }));
-      m.visible = false;
-      scene.add(m);
-      this.rings.push({ mesh: m, t: 0, life: 0 });
-    }
     // 그을음 자국 (바닥 원판, 오래된 것부터 덮어씀)
     this.scorch = scene.add(new InstancedMesh(Geometry.cylinder(0.5, 0.5, 0.02, 7, [1, 1, 1]), new Material({ outline: false, castShadow: false }), 48));
     this.scorchN = 0;
     // 파편 (튀는 작은 상자)
     this.debrisMesh = scene.add(new InstancedMesh(Geometry.box(0.2, 0.2, 0.2), new Material({ castShadow: true }), 160));
     this.debris = [];
-    // 모양 이펙트 (섬광, 폭발 모양, 불꽃 줄기, 육각 고리)
-    this.shapeMesh = {};
-    for (const [k, cap] of Object.entries(SHAPES)) this.shapeMesh[k] = scene.add(new InstancedMesh(shapeGeo(k), new Material({ emissive: 1, outline: false, castShadow: false }), cap));
-    this.flares = [];
   }
 
   // 화면 흔들림: 설정 배율(shakeScale) 적용 + 이미 흔들리는 중이면 덜 쌓이게 (물량전에서 계속 흔들리지 않도록)
@@ -110,12 +65,14 @@ export class Fx {
     this.lights.push({ position: [...position], color, radius, intensity, base: intensity, age: 0, life });
   }
 
+  // 충격파 고리: 점들이 원으로 퍼져 나간다 (바닥 평면)
   ring(x, y, z, radius, color, life = 0.35) {
-    const r = this.rings.find((q) => !q.mesh.visible) || this.rings.reduce((a, b) => (a.t / a.life > b.t / b.life ? a : b));
-    Object.assign(r, { t: 0, life, radius });
-    r.mesh.visible = true;
-    r.mesh.position = [x, y, z];
-    r.mesh.material.color = color;
+    life = Math.max(0.16, life);
+    const n = Math.max(12, Math.min(80, Math.round(radius * 11))), ramp = rampOf(color).slice(1), a0 = R() * 6.28;
+    for (let i = 0; i < n; i++) {
+      const a = a0 + (i / n) * Math.PI * 2, c = Math.cos(a), s = Math.sin(a), r0 = radius * 0.12, sp = (radius - r0) / life * rr(0.92, 1.04);
+      this.pxr.emit({ position: [x + c * r0, y + 0.05, z + s * r0], velocity: [c * sp, 0, s * sp], life, size: i % 3 ? 2 : 3, sizeEnd: 1, ramp, emissive: 0.45, hard: true });
+    }
   }
 
   scorchMark(x, z, size) {
@@ -132,125 +89,94 @@ export class Fx {
     this.debris.push({ p: [x, y, z], v: [Math.cos(a) * sp * 0.6, rr(4, 8), Math.sin(a) * sp * 0.6], r: [R() * 6, R() * 6, 0], w: [rr(-12, 12), rr(-12, 12)], s: rr(0.6, 1.3), life: rr(1.2, 2.2), age: 0, color });
   }
 
-  // 폭발: size 0.5(작은 드론) ~ 3(보스)
-  explosion(x, y, z, size = 1, { color = [1, 0.6, 0.2], debris = [0.3, 0.3, 0.34], ring = true, scorch = true } = {}) {
-    // 모양: 흰 섬광 → 들쭉날쭉 폭발 2겹 + 방사형 불꽃 줄기
-    this.flare([x, y + 0.2, z], 'star8', [1, 1, 0.9], 0.9 + size * 0.9, 0.12);
-    this.flare([x, y + 0.2, z], 'burst', [1, 0.92, 0.6], 1 + size * 1.3, 0.2, { spin: rr(-3, 3) });
-    this.flare([x, y + 0.2, z], 'burst', color, 1.5 + size * 1.7, 0.3, { spin: rr(-2, 2), grow: true });
-    this.streaks([x, y + 0.2, z], Math.round(6 + size * 6), [1, 0.85, 0.45], { speed: [7, 16 + size * 6], len: 0.5 + size * 0.25, life: 0.26 });
-    const n = Math.round(3 + size * 5);
+  // ---- 도트 이펙트 기본 재료 ----
+  // 파편 점: 사방(또는 dir 부채꼴)으로 튀고 중력에 떨어진다
+  shrapnel(p, n, ramp, { speed = [4, 10], size = [1, 2], life = [0.18, 0.4], dir = null, spread = 6.28, up = [0.5, 4], gravity = 1, em = 0.6 } = {}) {
     for (let i = 0; i < n; i++) {
-      const a = R() * Math.PI * 2, e = rr(-0.2, 1), sp = rr(3, 9) * Math.sqrt(size);
-      this.sparks.emit({
-        position: [x, y, z], velocity: [Math.cos(a) * sp * Math.cos(e), Math.abs(Math.sin(e)) * sp + 2, Math.sin(a) * sp * Math.cos(e)],
-        life: rr(0.25, 0.6), size: rr(2, 3.5), sizeEnd: 1, color: [1, 0.95, 0.6], colorEnd: color, emissive: 1, gravity: 0.6,
-      });
+      const a = dir ? Math.atan2(dir[0], dir[1]) + rr(-spread, spread) / 2 : R() * 6.28, sp = rr(speed[0], speed[1]);
+      this.px.emit({ position: [p[0], p[1], p[2]], velocity: [Math.sin(a) * sp, rr(up[0], up[1]), Math.cos(a) * sp], life: rr(life[0], life[1]), size: Math.round(rr(size[0], size[1])), sizeEnd: 1, ramp, emissive: em, gravity, hard: true });
     }
-    for (let i = 0; i < Math.round(3 + size * 4); i++) {
-      this.smoke.emit({
-        position: [x + rr(-0.4, 0.4) * size, y + 0.2, z + rr(-0.4, 0.4) * size], velocity: [rr(-1, 1), rr(0.5, 2), rr(-1, 1)],
-        life: rr(0.7, 1.4), size: rr(3, 5) * Math.min(2, 0.6 + size * 0.5), sizeEnd: 1, color: [0.32, 0.28, 0.3], colorEnd: [0.15, 0.14, 0.17], fadeIn: 0.1,
-      });
+  }
+  // 불덩이: 큰 점들이 뭉쳐서 부풀었다가 색이 바뀌며 사라진다
+  fireball(p, size, ramp = FIRE) {
+    const n = Math.round(8 + size * 18), big = Math.min(1.8, 0.7 + size * 0.45);
+    for (let i = 0; i < n; i++) {
+      const a = R() * 6.28, e = rr(-0.3, 1.2), r = Math.sqrt(R()) * 0.5 * size, ox = Math.cos(a) * Math.cos(e), oz = Math.sin(a) * Math.cos(e), oy = Math.sin(e);
+      const sp = rr(1, 3.2) * Math.sqrt(size);
+      this.px.emit({ position: [p[0] + ox * r, p[1] + oy * r * 0.7, p[2] + oz * r], velocity: [ox * sp, oy * sp + 1.2, oz * sp], life: rr(0.22, 0.5) * (0.8 + size * 0.15), size: Math.round(rr(4, 7) * big), sizeEnd: 2, ramp, emissive: 0.7, gravity: -0.12, hard: true });
     }
-    // 화염 덩어리 (큰 발광 점)
-    for (let i = 0; i < Math.round(size * 2); i++) {
-      this.trail.emit({ position: [x + rr(-0.3, 0.3) * size, y + rr(0, 0.4), z + rr(-0.3, 0.3) * size], velocity: [rr(-1.5, 1.5), rr(1, 3), rr(-1.5, 1.5)], life: rr(0.2, 0.4), size: rr(5, 8) * Math.min(1.8, 0.5 + size * 0.5), sizeEnd: 2, color: [1, 0.9, 0.5], colorEnd: [1, 0.3, 0.1], emissive: 1 });
+  }
+  // 화면을 향한 갈래 섬광: 점들이 arms 갈래 직선으로 뻗어 나간다
+  starPx(p, arms, color, size = 1, life = 0.16, rot = 0) {
+    const cam = this.camera; if (!cam?.right) return;
+    const r = cam.right, u = cam.up, k = Math.max(2, Math.round(2 + size * 2)), ramp = [[1, 1, 1], ...rampOf(color).slice(1, 4)];
+    for (let i = 0; i < arms; i++) {
+      const a = rot + (i / arms) * Math.PI * 2, long = arms === 8 && i % 2 ? 0.6 : 1, c = Math.cos(a), s = Math.sin(a);
+      const d = [r[0] * c + u[0] * s, r[1] * c + u[1] * s, r[2] * c + u[2] * s];
+      for (let j = 1; j <= k; j++) {
+        const sp = (size * long * 2.2 * j) / k / life;
+        this.pxr.emit({ position: [...p], velocity: [d[0] * sp, d[1] * sp, d[2] * sp], life: life * (1 - j / (k + 2)), size: j < k / 2 ? 2 : 1, sizeEnd: 1, ramp, emissive: 0.6, hard: true });
+      }
+    }
+    this.pxr.emit({ position: [...p], velocity: [0, 0, 0], life: life * 0.5, size: Math.round(2 + size), sizeEnd: 1, ramp, emissive: 0.9, hard: true });
+  }
+
+  // 폭발: size 0.5(작은 드론) ~ 3(보스). 흰 핵 → 불덩이 점 뭉치 → 파편 점 → 바닥 고리 → 연기 점
+  explosion(x, y, z, size = 1, { color = [1, 0.6, 0.2], debris = [0.3, 0.3, 0.34], ring = true, scorch = true } = {}) {
+    const P = [x, y + 0.2, z], ramp = isFire(color) ? FIRE : [...rampOf(color), [0.3, 0.24, 0.3]];
+    this.pxr.emit({ position: P, velocity: [0, 0, 0], life: 0.05, size: Math.round(4 + size * 2), sizeEnd: 3, ramp: [[1, 1, 0.85]], emissive: 0.4, hard: true });
+    this.fireball(P, size, ramp);
+    this.shrapnel(P, Math.round(6 + size * 10), [[1, 1, 0.8], ramp[1], ramp[2], ramp[3]], { speed: [5, 11 + size * 4], size: [1, 2.4], life: [0.25, 0.55], up: [2, 7], gravity: 1 });
+    for (let i = 0; i < Math.round(2 + size * 3); i++) {
+      this.px.emit({ position: [x + rr(-0.4, 0.4) * size, y + 0.3 + rr(0, 0.4) * size, z + rr(-0.4, 0.4) * size], velocity: [rr(-1, 1), rr(1, 2.5), rr(-1, 1)], life: rr(0.6, 1.1), size: Math.round(rr(3, 5) * Math.min(1.6, 0.6 + size * 0.4)), sizeEnd: 1, ramp: SMOKE, emissive: 0, gravity: -0.12, hard: true });
     }
     for (let i = 0; i < Math.round(size * 3); i++) this.chunk(x, y, z, debris, 5 + size * 2);
     this.light([x, y + 1, z], color, 3 + size * 2.2, 1.1 + size * 0.25, 0.22 + size * 0.1);
-    if (ring) this.ring(x, 0.12, z, 1.4 + size * 1.6, [1, 0.75, 0.4], 0.28 + size * 0.06);
+    if (ring) this.ring(x, 0.12, z, 1.4 + size * 1.6, isFire(color) ? [1, 0.7, 0.3] : color, 0.24 + size * 0.06);
     if (scorch && size >= 0.8) this.scorchMark(x, z, 1 + size * 0.7);
     if (size >= 1) this.addTrauma((size - 0.7) * 0.12);
   }
 
-  // 작은 펑 (떼거리 적 처치용: 빛, 연기, 흔들림 없이 가볍게)
+  // 작은 펑 (떼거리 적 처치용): 작은 불덩이 + 파편 몇 점
   pop(x, y, z, color = [1, 0.6, 0.25]) {
-    this.flare([x, y + 0.1, z], 'burst', [1, 0.85, 0.45], 0.8, 0.14, { spin: rr(-4, 4) });
-    this.streaks([x, y + 0.1, z], 3, color, { speed: [5, 10], len: 0.35, life: 0.15 });
-    for (let i = 0; i < 2; i++) {
-      const a = R() * Math.PI * 2, sp = rr(2, 5);
-      this.sparks.emit({ position: [x, y, z], velocity: [Math.cos(a) * sp, rr(2, 5), Math.sin(a) * sp], life: rr(0.18, 0.4), size: rr(2, 3), sizeEnd: 1, color: [1, 0.95, 0.6], colorEnd: color, emissive: 1, gravity: 0.8 });
-    }
+    const P = [x, y + 0.1, z];
+    this.fireball(P, 0.3, isFire(color) ? FIRE : [...rampOf(color), [0.3, 0.24, 0.3]]);
+    this.shrapnel(P, 4, [[1, 1, 0.8], ...rampOf(color).slice(2)], { speed: [3, 7], life: [0.15, 0.35], up: [2, 5] });
     if (R() < 0.3) this.chunk(x, y, z, [0.35, 0.25, 0.2], 4);
   }
 
   muzzle(p, dir, color = [1, 0.85, 0.4], power = 1) {
     this.light(p, color, 2 + power, 0.6 + 0.25 * power, 0.07);
-    this.flare(p, 'star4', [1, 1, 0.85], 0.35 + power * 0.18, 0.07, { rot: R() * 0.6 });
-    this.streaks(p, 1 + power, color, { dir: [dir[0], dir[2]], spread: 0.5, speed: [10, 18], len: 0.3 + power * 0.1, life: 0.08, up: 0.1 });
-    for (let i = 0; i < 2 + power; i++) {
-      const sp = rr(4, 9);
-      this.sparks.emit({ position: p, velocity: [dir[0] * sp + rr(-1.5, 1.5), rr(0, 1.5), dir[2] * sp + rr(-1.5, 1.5)], life: rr(0.06, 0.14), size: 2, sizeEnd: 1, color: [1, 1, 0.8], colorEnd: color, emissive: 1, gravity: 0 });
-    }
+    // 총구: 흰 점 하나 번쩍 + 쏘는 방향으로 짧게 뻗는 점
+    this.pxr.emit({ position: [...p], velocity: [0, 0, 0], life: 0.05, size: 2 + power, sizeEnd: 2, ramp: [[1, 1, 0.9], (color)], emissive: 0.9, hard: true });
+    for (let j = 1; j <= 2 + power; j++) { const sp = 6 + j * 4; this.pxr.emit({ position: [...p], velocity: [dir[0] * sp, 0, dir[2] * sp], life: 0.06, size: j < 2 ? 2 : 1, sizeEnd: 1, ramp: [[1, 1, 0.85], color], emissive: 0.9, hard: true }); }
+    this.shrapnel(p, power, [[1, 1, 0.8], color], { dir: [dir[0], dir[2]], spread: 0.9, speed: [6, 12], life: [0.06, 0.14], up: [0, 1.5], size: [1, 1] });
   }
 
-  // ---- 모양 이펙트 ----
-  //  flare: 화면을 향한 도형 하나가 확 커졌다가 줄어든다 (rot: 화면상 회전, sx/sy: 가로세로 배율, spin: 회전 속도)
-  flare(p, shape, color, size = 1, life = 0.18, { rot = R() * 6.28, sx = 1, sy = 1, spin = 0, grow = false, em = null } = {}) {
-    if (this.flares.length > 520) return;
-    // 흰색은 블룸에 하얗게 번져 모양이 뭉개지므로 발광을 낮춘다
-    if (em === null) em = color[0] + color[1] + color[2] > 2.6 ? 0.45 : 0.75;
-    this.flares.push({ p: [...p], shape, color, size, life, t: 0, rot, sx, sy, spin, grow, em });
+  // ---- 예전 '모양 이펙트' 호출을 도트로 ----
+  //  star4 / star8: 갈래 섬광, burst: 불덩이, hex: 바닥 고리, streak: 파편 점
+  flare(p, shape, color, size = 1, life = 0.18, { rot = R() * 6.28 } = {}) {
+    if (shape === 'star4') this.starPx(p, 4, color, size, life, rot);
+    else if (shape === 'star8') this.starPx(p, 8, color, size, life, rot);
+    else if (shape === 'burst') this.fireball(p, size * 0.4, isFire(color) || color[0] + color[1] + color[2] > 2.5 ? FIRE : [...rampOf(color), [0.3, 0.24, 0.3]]);
+    else if (shape === 'hex') this.ring(p[0], 0.12, p[2], size * 0.75, color, life);
+    else this.shrapnel(p, 1, rampOf(color));
   }
-  // streaks: 가늘고 긴 불꽃 줄기 n 개. dir 를 주면 그 방향 부채꼴, 아니면 사방
-  streaks(p, n, color, { dir = null, spread = Math.PI, speed = [6, 14], len = 0.55, life = 0.2, width = 1, up = 0.4 } = {}) {
+  // 줄기: 머리 점 + 뒤따르는 꼬리 점 (빠른 파편)
+  streaks(p, n, color, { dir = null, spread = Math.PI, speed = [6, 14], life = 0.2, up = 0.4 } = {}) {
+    const ramp = [[1, 1, 1], ...rampOf(color).slice(1, 4)], tail = rampOf(color).slice(2);
     for (let i = 0; i < n; i++) {
-      let a = R() * 6.28;
-      if (dir) a = Math.atan2(dir[0], dir[1]) + rr(-spread, spread) / 2;
-      const sp = rr(speed[0], speed[1]);
-      const v = [Math.sin(a) * sp, rr(-0.2, 1) * sp * up, Math.cos(a) * sp];
-      if (this.flares.length > 520) return;
-      this.flares.push({ p: [...p], shape: 'streak', color, size: len * rr(0.7, 1.3), life: life * rr(0.7, 1.2), t: 0, v, sx: width, sy: 1, rot: 0, spin: 0, em: 0.8 });
+      const a = dir ? Math.atan2(dir[0], dir[1]) + rr(-spread, spread) / 2 : R() * 6.28, sp = rr(speed[0], speed[1]);
+      const v = [Math.sin(a) * sp, rr(-0.1, 1) * sp * up, Math.cos(a) * sp], L = life * rr(0.8, 1.2);
+      this.px.emit({ position: [...p], velocity: v, life: L, size: 2, sizeEnd: 1, ramp, emissive: 0.6, gravity: 0.6, hard: true });
+      this.px.emit({ position: [...p], velocity: v.map((q) => q * 0.82), life: L * 0.9, size: 1, sizeEnd: 1, ramp: tail, emissive: 0.6, gravity: 0.6, hard: true });
     }
-  }
-  updateFlares(dt) {
-    const cam = this.camera, cnt = {};
-    for (const k in this.shapeMesh) cnt[k] = 0;
-    if (!cam || !cam.right) { this.flares.length = 0; return; }
-    const r = cam.right, u = cam.up, f = [r[1] * u[2] - r[2] * u[1], r[2] * u[0] - r[0] * u[2], r[0] * u[1] - r[1] * u[0]];
-    const M = new Float32Array(16);
-    for (let i = this.flares.length - 1; i >= 0; i--) {
-      const q = this.flares[i];
-      q.t += dt;
-      const k = q.t / q.life;
-      if (k >= 1) { this.flares.splice(i, 1); continue; }
-      const mesh = this.shapeMesh[q.shape];
-      if (cnt[q.shape] >= mesh.capacity) continue;
-      let s, rot = q.rot + q.spin * q.t, sx = q.sx, sy = q.sy;
-      if (q.v) {
-        // 줄기: 날아가며 짧아지고, 속도 방향으로 길게
-        for (let j = 0; j < 3; j++) q.p[j] += q.v[j] * dt;
-        q.v[0] *= Math.exp(-5 * dt); q.v[2] *= Math.exp(-5 * dt); q.v[1] -= 6 * dt;
-        const vx = q.v[0] * r[0] + q.v[1] * r[1] + q.v[2] * r[2], vy = q.v[0] * u[0] + q.v[1] * u[1] + q.v[2] * u[2];
-        rot = Math.atan2(vy, vx) - Math.PI / 2;
-        const spd = Math.hypot(vx, vy);
-        s = q.size * (1 - k);
-        sy = 0.4 + spd * 0.09; sx = q.sx * 0.9;
-      } else if (q.grow) s = q.size * (0.3 + 0.7 * Math.sqrt(k)) * (k > 0.7 ? (1 - k) / 0.3 : 1);
-      else s = q.size * (k < 0.18 ? (k / 0.18) * 1.25 : 1.25 * (1 - (k - 0.18) / 0.82));
-      const c = Math.cos(rot), sn = Math.sin(rot);
-      const ax = [r[0] * c + u[0] * sn, r[1] * c + u[1] * sn, r[2] * c + u[2] * sn], ay = [-r[0] * sn + u[0] * c, -r[1] * sn + u[1] * c, -r[2] * sn + u[2] * c];
-      const X = s * sx, Y = s * sy;
-      M[0] = ax[0] * X; M[1] = ax[1] * X; M[2] = ax[2] * X; M[3] = 0;
-      M[4] = ay[0] * Y; M[5] = ay[1] * Y; M[6] = ay[2] * Y; M[7] = 0;
-      M[8] = f[0]; M[9] = f[1]; M[10] = f[2]; M[11] = 0;
-      // 카메라 쪽으로 살짝 당겨서 땅이나 몸에 파묻히지 않게
-      M[12] = q.p[0] - f[0] * 0.6; M[13] = q.p[1] - f[1] * 0.6; M[14] = q.p[2] - f[2] * 0.6; M[15] = 1;
-      const fade = q.v ? 1 : 1 - k * 0.4;
-      mesh.setAt(cnt[q.shape]++, M, q.color.map((v) => v * fade), q.em);
-    }
-    for (const k in this.shapeMesh) { this.shapeMesh[k].count = cnt[k]; this.shapeMesh[k].dirty = true; }
   }
 
-  hitSpark(p, color = [1, 0.9, 0.6], n = 4) {
-    // 맞은 자리: 십자 섬광 + 사방으로 튀는 불꽃 줄기 (원형 점만 있던 것보다 날카롭게)
-    this.flare(p, 'star4', color, 0.7 + n * 0.05, 0.14, { rot: Math.PI / 4 });
-    this.streaks(p, Math.min(5, 2 + (n >> 1)), color, { speed: [5, 11], len: 0.35, life: 0.16 });
-    for (let i = 0; i < (n >> 2); i++) {
-      const a = R() * Math.PI * 2, sp = rr(3, 7);
-      this.sparks.emit({ position: p, velocity: [Math.cos(a) * sp, rr(1, 5), Math.sin(a) * sp], life: rr(0.12, 0.28), size: 2, sizeEnd: 1, color: [1, 1, 1], colorEnd: color, emissive: 1 });
-    }
+  // 맞은 자리: 흰 점 번쩍 + 맞은 방향으로 튀는 점 몇 개
+  hitSpark(p, color = [1, 0.9, 0.6], n = 4, dir = null) {
+    this.pxr.emit({ position: [...p], velocity: [0, 0, 0], life: 0.05, size: 2, sizeEnd: 2, ramp: [[1, 0.95, 0.8]], emissive: 0.35, hard: true });
+    this.shrapnel(p, Math.min(6, 1 + (n >> 1)), rampOf(color).slice(1, 4), { dir, spread: dir ? 1.6 : 6.28, speed: [3, 8], life: [0.1, 0.24], up: [0.5, 3.5] });
   }
 
   dust(x, z, n = 1, color = [0.5, 0.42, 0.36]) {
@@ -271,17 +197,6 @@ export class Fx {
       const k = 1 - l.age / l.life;
       if (k <= 0) { this.lights.splice(i, 1); continue; }
       l.intensity = l.base * k * k;
-    }
-    // 고리
-    for (const r of this.rings) {
-      if (!r.mesh.visible) continue;
-      r.t += sdt;
-      const k = r.t / r.life;
-      if (k >= 1) { r.mesh.visible = false; continue; }
-      const s = r.radius * (0.3 + 0.7 * (1 - (1 - k) * (1 - k)));
-      r.mesh.scale = [s, 1, s];
-      r.mesh.material.opacity = 1 - k;
-      r.mesh.material.emissive = 0.5 * (1 - k); // 겹쳐도 블룸이 하얗게 타지 않게
     }
     // 파편 물리 (바닥에 튕김)
     let n = 0;
@@ -306,7 +221,6 @@ export class Fx {
       q.p[1] += realDt * (2.2 - q.t * 3);
       q.p[0] += q.vx * realDt;
     }
-    this.updateFlares(sdt);
     this.trauma = Math.max(0, this.trauma - realDt * 2.4);
     this.scene.lights = this.extraLights ? [...this.lights, ...this.extraLights] : this.lights;
   }
