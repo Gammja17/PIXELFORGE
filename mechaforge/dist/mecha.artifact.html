@@ -3070,9 +3070,10 @@ class Fx {
   // ---- 예전 '모양 이펙트' 호출을 도트로 ----
   //  star4 / star8: 갈래 섬광, burst: 불덩이, hex: 바닥 고리, streak: 파편 점
   flare(p, shape, color, size = 1, life = 0.18, { rot = R() * 6.28 } = {}) {
-    if (shape === 'star4') this.starPx(p, 4, color, size, life, rot);
-    else if (shape === 'star8') this.starPx(p, 8, color, size, life, rot);
-    else if (shape === 'burst') this.fireball(p, size * 0.4, isFire(color) || color[0] + color[1] + color[2] > 2.5 ? FIRE : [...rampOf(color), [0.3, 0.24, 0.3]]);
+    // 크기 상한: 섬광이 화면을 덮지 않게 (큰 값을 넘겨도 기체 두세 칸 정도까지만)
+    if (shape === 'star4') this.starPx(p, 4, color, Math.min(size, 2.2), Math.min(life, 0.2), rot);
+    else if (shape === 'star8') this.starPx(p, 8, color, Math.min(size, 2.2), Math.min(life, 0.22), rot);
+    else if (shape === 'burst') this.fireball(p, Math.min(1.2, size * 0.4), isFire(color) || color[0] + color[1] + color[2] > 2.5 ? FIRE : [...rampOf(color), [0.3, 0.24, 0.3]]);
     else if (shape === 'hex') this.ring(p[0], 0.12, p[2], size * 0.75, color, life);
     else this.shrapnel(p, 1, rampOf(color));
   }
