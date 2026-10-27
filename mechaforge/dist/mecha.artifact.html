@@ -4298,10 +4298,17 @@ class Shots {
 
   beam(from, yaw, len, width, color) {
     const b = this.beams.find((q) => !q.m.visible) || this.beams[0];
+    const vk = this.game.weapons?.vk(this.game.dmgSrc) || 1;
+    width *= 1.25 * Math.sqrt(vk);
     Object.assign(b, { t: 0, life: 0.3, from: [...from], yaw, len, width });
     b.m.material.color = color;
     b.m.visible = b.core.visible = true;
     this.updateBeam(b);
+    // 빔 줄기를 따라 점이 튄다 + 끝에 섬광
+    const fx = this.game.fx, dx = Math.sin(yaw), dz = Math.cos(yaw), ramp = [[1, 1, 1], color, color.map((v) => v * 0.55)];
+    for (let d = 0.6; d < len; d += 0.45) { const sp = rr(1.5, 4) * vk, a = rr(-1, 1) > 0 ? 1 : -1; fx.pxr.emit({ position: [from[0] + dx * d, from[1] + rr(-0.15, 0.15) * width, from[2] + dz * d], velocity: [dz * sp * a, rr(-1, 2), -dx * sp * a], life: rr(0.12, 0.26), size: Math.round(rr(1, 3)), sizeEnd: 1, ramp, emissive: 0.7, hard: true }); }
+    fx.starPx(from, 8, color, 0.9 * vk, 0.14, Math.random());
+    fx.starPx([from[0] + dx * len, from[1], from[2] + dz * len], 4, color, 0.7 * vk, 0.14, Math.random());
   }
   updateBeam(b) {
     const k = b.t / b.life, w = b.width * (1 - k * k) + 0.02;
@@ -4309,7 +4316,6 @@ class Shots {
     b.m.rotation = b.core.rotation = [0, b.yaw, 0];
     b.m.scale = [w, w, b.len];
     b.core.scale = [w * 0.45, w * 0.45, b.len];
-    b.m.material.opacity = 1 - k * 0.6;
   }
 
   update(dt) {
@@ -4367,10 +4373,10 @@ class Shots {
         if (dt > 0) { const bx = s.x - Math.sin(yaw) * 0.4, bz = s.z - Math.cos(yaw) * 0.4; g.fx.pxr.emit({ position: [bx, s.y, bz], velocity: [0, 0, 0], life: 0.08, size: 3, sizeEnd: 2, ramp: [[1, 1, 0.7], [1, 0.6, 0.2]], emissive: 0.8, hard: true }); if (Math.random() < 0.5) g.fx.px.emit({ position: [bx, s.y, bz], velocity: [0, 0.8, 0], life: 0.45, size: 3, sizeEnd: 1, ramp: [[0.55, 0.52, 0.55], [0.38, 0.36, 0.4], [0.25, 0.24, 0.28]], emissive: 0, gravity: -0.05, hard: true }); }
       }
       else {
-        const sc = s.scale || [0.16, 0.16, 0.8];
-        this.bulletMesh.setAt(nb++, m4.fromTRS([s.x, s.y, s.z], [0, yaw, 0], [sc[0] * 1.35, sc[1] * 1.35, sc[2] * 1.2]), s.color, 1);
+        const sc = s.scale || [0.16, 0.16, 0.8], vk = s.vk || (s.vk = g.weapons?.vk(s.src) || 1);
+        this.bulletMesh.setAt(nb++, m4.fromTRS([s.x, s.y, s.z], [0, yaw, 0], [sc[0] * 1.4 * vk, sc[1] * 1.4 * vk, sc[2] * 1.25 * Math.sqrt(vk)]), s.color, 1);
         // 꼬리: 지나간 자리에 탄 색 점이 잠깐 남는다 (내 탄이 어디로 가는지 또렷하게)
-        if (dt > 0 && (s.trailK = (s.trailK || 0) + 1) % (this.list.length > 160 ? 3 : 1) === 0) g.fx.pxr.emit({ position: [s.x, s.y, s.z], velocity: [0, 0, 0], life: 0.09, size: sc[0] > 0.22 ? 3 : 2, sizeEnd: 1, ramp: [s.color || [1, 0.85, 0.3], (s.color || [1, 0.85, 0.3]).map((v) => v * 0.55)], emissive: 0.5, hard: true });
+        if (dt > 0 && (s.trailK = (s.trailK || 0) + 1) % (this.list.length > 160 ? 3 : 1) === 0) g.fx.pxr.emit({ position: [s.x, s.y, s.z], velocity: [0, 0, 0], life: 0.08 + 0.03 * vk, size: Math.round((sc[0] > 0.22 ? 3 : 2) * Math.min(1.6, vk)), sizeEnd: 1, ramp: [s.color || [1, 0.85, 0.3], (s.color || [1, 0.85, 0.3]).map((v) => v * 0.55)], emissive: 0.5, hard: true });
       }
     }
     this.bulletMesh.count = nb; this.missileMesh.count = nm;
@@ -4428,7 +4434,10 @@ class Shots {
       }
       if (m.life <= 0) { fx.pop(m.x, 0.2, m.z, [0.6, 0.6, 0.55]); this.mines.splice(i, 1); continue; }
       const armed = m.t > 0.5, blink = armed && Math.floor(m.t * (m.fuse >= 0 ? 30 : 3)) % 2 === 0;
-      this.mineMesh.setAt(n++, m4.fromTRS([x, y, z], [0, m.t * (k < 1 ? 14 : 0), 0], [1, 1, 1]), blink ? [1.6, 0.7, 0.6] : [1, 1, 1], blink ? 0.6 : 0);
+      const mvk = m.vk || (m.vk = g.weapons?.vk(m.src) || 1), ms = 1.5 * Math.sqrt(mvk);
+      this.mineMesh.setAt(n++, m4.fromTRS([x, y, z], [0, m.t * (k < 1 ? 14 : 0), 0], [ms, ms, ms]), blink ? [1.8, 0.6, 0.5] : [1.1, 1.1, 1.1], blink ? 0.8 : 0.1);
+      // 깔린 지뢰: 붉은 점이 깜빡여 위치를 알린다
+      if (k >= 1 && dt > 0 && (g.frame & 15) === 0) fx.pxr.emit({ position: [x, y + 0.35, z], velocity: [0, 0, 0], life: 0.12, size: 3, sizeEnd: 2, ramp: [[1, 0.35, 0.3]], emissive: 0.9, hard: true });
     }
     this.mineMesh.count = n; this.mineMesh.dirty = true;
 
@@ -4454,7 +4463,9 @@ class Shots {
         g.sfx.play('tink', { pitch: 1.4 });
       });
       if (Math.random() < 0.5) fx.trail.emit({ position: [d.x + rr(-0.3, 0.3) * d.size, 1, d.z + rr(-0.3, 0.3) * d.size], velocity: [0, 0, 0], life: 0.15, size: 2, sizeEnd: 1, color: [0.8, 1, 1], colorEnd: [0.3, 0.7, 1], emissive: 1, gravity: 0 });
-      this.discMesh.setAt(n++, m4.fromTRS([d.x, 1, d.z], [0, d.t * 22, 0], [d.size, 1, d.size]), d.evo ? [1.2, 1, 0.6] : [1, 1, 1], 0.6);
+      const ds = d.size * 1.3;
+      this.discMesh.setAt(n++, m4.fromTRS([d.x, 1, d.z], [0, d.t * 22, 0], [ds, 1, ds]), d.evo ? [1.2, 1, 0.6] : [1.1, 1.1, 1.1], 0.7);
+      if (dt > 0) for (const s of [-1, 1]) fx.pxr.emit({ position: [d.x + Math.sin(d.t * 22) * 0.45 * ds * s, 1, d.z + Math.cos(d.t * 22) * 0.45 * ds * s], velocity: [0, 0, 0], life: 0.14, size: 2, sizeEnd: 1, ramp: d.evo ? [[1, 0.9, 0.5], [0.7, 0.5, 0.2]] : [[0.6, 1, 0.95], [0.25, 0.6, 0.55]], emissive: 0.6, hard: true });
     }
     this.discMesh.count = n; this.discMesh.dirty = true;
 
@@ -4507,7 +4518,8 @@ class Shots {
         this.lobs.splice(i, 1); continue;
       }
       if (Math.random() < 0.6) fx.smoke.emit({ position: [x, y, z], velocity: [0, 0.2, 0], life: 0.4, size: 2, sizeEnd: 3, color: [0.6, 0.58, 0.6], colorEnd: [0.3, 0.3, 0.33] });
-      this.lobMesh.setAt(n++, m4.fromTRS([x, y, z], [L.t * 7, L.t * 5, 0], [1, 1, 1]), [1, 1, 1], 0);
+      this.lobMesh.setAt(n++, m4.fromTRS([x, y, z], [L.t * 7, L.t * 5, 0], [1.5, 1.5, 1.5]), [1.1, 1.1, 1.1], 0.2);
+      if (dt > 0) { fx.pxr.emit({ position: [x, y, z], velocity: [0, 0, 0], life: 0.1, size: 3, sizeEnd: 2, ramp: [[1, 0.95, 0.6], [1, 0.55, 0.2]], emissive: 0.8, hard: true }); if (Math.random() < 0.6) fx.px.emit({ position: [x, y, z], velocity: [0, 0.4, 0], life: 0.5, size: 3, sizeEnd: 1, ramp: [[0.55, 0.52, 0.55], [0.38, 0.36, 0.4], [0.25, 0.24, 0.28]], emissive: 0, gravity: -0.03, hard: true }); }
     }
     this.lobMesh.count = n; this.lobMesh.dirty = true;
   }
@@ -4571,7 +4583,7 @@ class WeaponSystem {
     this.turretBeams = [];
     const bg = beamGeo();
     for (let i = 0; i < 4; i++) {
-      const m = game.scene.add(new Mesh(bg, new Material({ color: [1, 0.35, 0.5], emissive: 1, outline: false, castShadow: false, opacity: 0.85 })));
+      const m = game.scene.add(new Mesh(bg, new Material({ color: [1, 0.35, 0.5], emissive: 1, outline: false, castShadow: false })));
       const core = game.scene.add(new Mesh(bg, new Material({ color: [1, 1, 1], emissive: 1, outline: false, castShadow: false })));
       m.visible = core.visible = false;
       this.turretBeams.push({ m, core });
@@ -4598,6 +4610,8 @@ class WeaponSystem {
 
   reset() { this.list = []; this.combo = 0; this.comboT = 0; this.swingLock = 0; this.specialT = 0; this.barrage = 0; this.burns.clear(); this.waves = []; this.syncBits(); }
   get(id) { return this.list.find((w) => w.id === id); }
+  // 연출 배율: 레벨이 오를수록, 진화하면 더 크게 보인다 (Lv1 1.0 → Lv5 1.7, 진화 +0.5)
+  vk(id) { const w = id && this.get(id); return w ? 1 + ((w.level || 1) - 1) * 0.18 + (w.evo ? 0.5 : 0) : 1; }
   get primary() { return this.list.find((w) => w.slot === 'armR') || null; }
   get primaryKind() { const p = this.primary; return p ? p.id : 'fist'; }
   get specialName() { return SPECIAL_NAMES[this.primaryKind] || '특수기'; }
@@ -4830,12 +4844,19 @@ class WeaponSystem {
       en.hit(e, c ? D * 2 : D, dx / d, dz / d, 1.2, { crit: c, quiet: !c });
       this.ignite(e, L.burn * st.dmgMul);
     });
-    const blue = w.evo;
-    for (let k = 0; k < 7; k++) {
-      const a = yaw + rr(-half, half) * 0.9, sp = reach * rr(2.6, 3.4);
-      fx.trail.emit({ position: [mz[0], mz[1], mz[2]], velocity: [Math.sin(a) * sp, rr(0, 1.2), Math.cos(a) * sp], life: rr(0.3, 0.45), size: 3, sizeEnd: 7, color: blue ? [0.8, 0.95, 1] : [1, 0.95, 0.55], colorEnd: blue ? [0.2, 0.4, 1] : [1, 0.25, 0.05], emissive: 1, gravity: -0.6 });
+    // 불길: 굵은 도트 불꽃이 부채꼴로 쏟아져 사거리 끝까지 간다 (레벨이 오를수록 많고 굵게)
+    const blue = w.evo, vk = this.vk('flamer');
+    const ramp = blue ? [[1, 1, 1], [0.8, 0.95, 1], [0.5, 0.75, 1], [0.3, 0.45, 1], [0.18, 0.22, 0.65], [0.24, 0.24, 0.3]]
+      : [[1, 1, 0.85], [1, 0.95, 0.5], [1, 0.75, 0.2], [1, 0.52, 0.1], [0.88, 0.28, 0.08], [0.5, 0.16, 0.1], [0.28, 0.22, 0.22]];
+    const n = Math.round(24 * vk);
+    for (let k = 0; k < n; k++) {
+      const a = yaw + rr(-half, half) * Math.sqrt(R()), life = rr(0.1, 0.46), sp = (reach * rr(0.8, 1.08) * 2.6) / (1 - Math.exp(-2.6 * life));
+      fx.px.emit({ position: [mz[0] + rr(-0.1, 0.1), mz[1] + rr(-0.1, 0.1), mz[2] + rr(-0.1, 0.1)], velocity: [Math.sin(a) * sp, rr(-0.5, 1.8), Math.cos(a) * sp], life, size: Math.round(rr(2, 3)), sizeEnd: Math.round(rr(6, 10) * Math.sqrt(vk)), ramp, emissive: 0.85, gravity: -0.08, hard: true });
     }
-    if (Math.random() < 0.4) fx.smoke.emit({ position: [mz[0] + Math.sin(yaw) * reach * 0.7, 1, mz[2] + Math.cos(yaw) * reach * 0.7], velocity: [0, 1, 0], life: 0.7, size: 3, sizeEnd: 6, color: [0.4, 0.36, 0.36], colorEnd: [0.2, 0.2, 0.22] });
+    fx.pxr.emit({ position: [...mz], velocity: [0, 0, 0], life: 0.05, size: Math.round(4 * vk), sizeEnd: 3, ramp: [ramp[0], ramp[1]], emissive: 0.8, hard: true });
+    // 바닥 불씨 + 끝자락 연기
+    for (let k = 0; k < 2; k++) { const a = yaw + rr(-half, half), d = reach * rr(0.4, 1); fx.px.emit({ position: [p.x + Math.sin(a) * d, 0.15, p.z + Math.cos(a) * d], velocity: [rr(-0.5, 0.5), rr(1, 2.5), rr(-0.5, 0.5)], life: rr(0.3, 0.6), size: Math.round(rr(1, 2)), sizeEnd: 1, ramp: ramp.slice(2, 6), emissive: 0.8, gravity: 0.15, hard: true }); }
+    if (Math.random() < 0.5) { const d = reach * rr(0.8, 1.1); fx.px.emit({ position: [mz[0] + Math.sin(yaw) * d, 1.2, mz[2] + Math.cos(yaw) * d], velocity: [rr(-0.5, 0.5), 1.6, rr(-0.5, 0.5)], life: 0.8, size: 4, sizeEnd: 2, ramp: [[0.42, 0.38, 0.4], [0.3, 0.28, 0.31], [0.2, 0.19, 0.22]], emissive: 0, gravity: -0.05, hard: true }); }
     fx.light([mz[0] + Math.sin(yaw) * 2, 1, mz[2] + Math.cos(yaw) * 2], blue ? [0.5, 0.7, 1] : [1, 0.55, 0.2], 5, 0.9, 0.1);
     g.sfx.play('missile', { vol: 0.3, pitch: 0.55 });
   }
@@ -5163,10 +5184,12 @@ class WeaponSystem {
           e._saw = now + 0.3;
           const c = Math.random() < st.crit, D = L.dmg * st.dmgMul;
           en.hit(e, c ? D * 2 : D, Math.sin(a + 1.57 * sp), Math.cos(a + 1.57 * sp), 4, { crit: c, quiet: !c });
-          for (let j = 0; j < 3; j++) fx.sparks.emit({ position: [x, 1, z], velocity: [rr(-4, 4), rr(1, 3), rr(-4, 4)], life: 0.18, size: 2, sizeEnd: 1, color: [1, 1, 0.8], colorEnd: [1, 0.5, 0.2], emissive: 1, gravity: 0.4 });
+          fx.shrapnel([x, 1, z], 5, [[1, 1, 0.8], [1, 0.8, 0.3], [1, 0.5, 0.15]], { dir: [Math.sin(a + 1.57 * sp), Math.cos(a + 1.57 * sp)], spread: 1.2, speed: [4, 9], life: [0.12, 0.25], up: [1, 3] });
           g.sfx.play('tink', { pitch: 0.7 });
         });
-        if (n < this.sawMesh.capacity) this.sawMesh.setAt(n++, m4.fromTRS([x, 1, z], [0, now * 18 * sp, 0], [big, 1, big]), saw.evo ? [1.3, 1.05, 0.7] : [1, 1, 1], 0.15);
+        const vk = this.vk('saw'), bs = big * 1.35 * vk;
+        if (n < this.sawMesh.capacity) this.sawMesh.setAt(n++, m4.fromTRS([x, 1, z], [0, now * 18 * sp, 0], [bs, 1, bs]), saw.evo ? [1.3, 1.05, 0.7] : [1.15, 1.15, 1.15], 0.35);
+        if (live && dt > 0) fx.pxr.emit({ position: [x, 1, z], velocity: [0, 0, 0], life: 0.12, size: Math.round(2 * Math.min(1.6, vk)), sizeEnd: 1, ramp: saw.evo ? [[1, 0.9, 0.5], [0.8, 0.5, 0.2]] : [[0.85, 0.92, 1], [0.45, 0.5, 0.65]], emissive: 0.5, hard: true });
       }
     }
     this.sawMesh.count = n; this.sawMesh.dirty = true;
@@ -5174,7 +5197,7 @@ class WeaponSystem {
     const nb = tur && p.mech.root.visible ? lvOf(tur).beams : 0;
     if (nb) {
       g.dmgSrc = 'turret';
-      const L = lvOf(tur), len = L.len * st.rangeMul, mz = p.mech.muzzle(tur.slot);
+      const L = lvOf(tur), len = L.len * st.rangeMul, vk = this.vk('turret'), mz = [p.x, 1.0 * (p.size || 1), p.z];
       tur.ang = (tur.ang || 0) + L.spin * Math.sqrt(st.rateMul) * dt;
       if (live) en.each(p.x, p.z, len, (e) => {
         if ((e._tur || 0) > now) return;
@@ -5193,11 +5216,19 @@ class WeaponSystem {
         const on = i < nb;
         b.m.visible = b.core.visible = on;
         if (!on) return;
-        const a = tur.ang + (i / nb) * Math.PI * 2, w = 0.32 + Math.sin(now * 40 + i) * 0.04;
-        b.m.position = b.core.position = mz;
+        const a = tur.ang + (i / nb) * Math.PI * 2, w = (0.46 + Math.sin(now * 40 + i) * 0.05) * vk, sa = Math.sin(a), ca = Math.cos(a), col = tur.evo ? [0.6, 0.85, 1] : [1, 0.35, 0.55];
+        const o = [mz[0] + sa * 0.6, mz[1], mz[2] + ca * 0.6];
+        b.m.position = b.core.position = o;
         b.m.rotation = b.core.rotation = [0, a, 0];
-        b.m.scale = [w, w, len]; b.core.scale = [w * 0.4, w * 0.4, len];
-        b.m.material.color = tur.evo ? [0.6, 0.85, 1] : [1, 0.35, 0.5];
+        b.m.scale = [w, w, len]; b.core.scale = [w * 0.45, w * 0.45, len];
+        b.m.material.color = col;
+        if (live && dt > 0) {
+          // 빔이 지나간 바닥에 그을린 불씨, 끝에서 튀는 불꽃, 줄기를 따라 반짝이는 점
+          const ramp = [[1, 1, 1], col, col.map((v) => v * 0.55), [0.3, 0.12, 0.18]];
+          for (let k = 0; k < 2; k++) { const d = rr(1, len); fx.px.emit({ position: [o[0] + sa * d, 0.1, o[2] + ca * d], velocity: [rr(-0.6, 0.6), rr(0.5, 2), rr(-0.6, 0.6)], life: rr(0.25, 0.5), size: Math.round(rr(1, 2.5)), sizeEnd: 1, ramp: ramp.slice(1), emissive: 0.7, gravity: 0.2, hard: true }); }
+          fx.shrapnel([o[0] + sa * len, o[1], o[2] + ca * len], 2, ramp, { speed: [3, 7], life: [0.12, 0.25], up: [1, 4] });
+          const d = rr(0.5, len); fx.pxr.emit({ position: [o[0] + sa * d, o[1] + rr(-0.2, 0.2) * w, o[2] + ca * d], velocity: [0, rr(0.5, 1.5), 0], life: 0.15, size: 2, sizeEnd: 1, ramp, emissive: 0.8, hard: true });
+        }
       });
       if (live && Math.random() < 0.3) fx.light([mz[0], 1.5, mz[2]], tur.evo ? [0.6, 0.85, 1] : [1, 0.35, 0.5], len, 0.5, 0.1);
     } else for (const b of this.turretBeams) b.m.visible = b.core.visible = false;
@@ -5240,6 +5271,8 @@ class WeaponSystem {
       }
       b.mesh.position = [b.x, b.y, b.z];
       b.mesh.rotation = [0.5, yaw, 0];
+      const vk = this.vk('funnel'); b.mesh.scale = [1.4 * vk, 1.4 * vk, 1.4 * vk];
+      if (dt > 0) fx.pxr.emit({ position: [b.x, b.y, b.z], velocity: [0, 0, 0], life: 0.12, size: 2, sizeEnd: 1, ramp: [[0.6, 1, 0.95], [0.3, 0.6, 0.6]], emissive: 0.6, hard: true });
     });
   }
 }
