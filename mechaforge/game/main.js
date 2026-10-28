@@ -89,7 +89,7 @@ export class Game {
     g.merge(Geometry.cylinder(1.9, 2.1, 0.16, 8, [0.3, 0.31, 0.36]));
     g.merge(Geometry.cylinder(1.65, 1.65, 0.03, 8, [0.4, 0.42, 0.48]), { position: [0, 0.16, 0] });
     for (let i = 0; i < 4; i++) {
-      const a = (i * Math.PI) / 2 + Math.PI / 4;
+      const a = (i * Math.PI) / 2; // 카메라 쪽 정면을 비워 둬서 기둥이 기체를 가리지 않게
       g.merge(Geometry.box(0.24, 2.6, 0.24, [0.36, 0.36, 0.42]), { position: [Math.cos(a) * 3.2, 0, Math.sin(a) * 3.2] });
       g.merge(Geometry.box(0.3, 0.12, 0.3, [0.95, 0.75, 0.2]), { position: [Math.cos(a) * 3.2, 2.6, Math.sin(a) * 3.2] });
       g.merge(Geometry.box(1.2, 0.1, 0.1, [0.4, 0.4, 0.46]), { position: [Math.cos(a) * 2.6, 2.4, Math.sin(a) * 2.6], rotation: [0, -a, 0] });
@@ -491,7 +491,7 @@ export class Game {
     const hangar = this.state === 'hangar';
     const install = this.state === 'install';
     // 줌: 장착 연출이나 오버드라이브로는 바뀌지 않고, 레벨 성장에 따라 아주 천천히만 물러난다
-    const worldShort = hangar ? (h > w ? 4.6 : 7) : clamp(short / 34, 13, 17) * (1 + (p.baseSize - 1) * 0.35);
+    const worldShort = hangar ? (h > w ? 4.6 : 5.6) : clamp(short / 34, 13, 17) * (1 + (p.baseSize - 1) * 0.35);
     const goal = worldShort * (h / short);
     cam.viewHeight = Math.abs(cam.viewHeight - goal) < 0.01 ? goal : damp(cam.viewHeight, goal, hangar ? 5 : 1.2, dt);
     const sinP = Math.sin(cam.pitch);
@@ -499,10 +499,10 @@ export class Game {
     const tr = this.fx.trauma * this.fx.trauma, amp = tr * 0.4;
     const ox = (Math.random() * 2 - 1) * amp, oy = (Math.random() * 2 - 1) * amp;
     const r = cam.right || [1, 0, 0], u = cam.up || [0, 1, 0];
-    // 격납고: 메카를 패널 반대편으로
-    const lift = hangar ? (h > w ? -cam.viewHeight * 0.3 : 0) : 0;
-    const side = hangar && w > h ? cam.viewHeight * (w / h) * 0.16 : 0;
-    const ty = damp(cam.target[1], hangar ? 1.4 : install ? 1.2 : 0.8, 4, dt);
+    // 격납고: 메카를 판(왼쪽, 화면 폭의 hangarInset 만큼)이 가리지 않은 공간 가운데로
+    const lift = hangar ? (h > w ? -cam.viewHeight * 0.36 : 0) : 0;
+    const side = hangar && w > h ? cam.viewHeight * (w / h) * (this.hangarInset ?? 0.32) / 2 : 0;
+    const ty = damp(cam.target[1], hangar ? 0.95 : install ? 1.2 : 0.8, 4, dt);
     cam.target = [p.x + r[0] * (ox - side) + u[0] * (oy + lift), ty + u[1] * oy, p.z + r[2] * (ox - side) + u[2] * (oy + lift)];
   }
 

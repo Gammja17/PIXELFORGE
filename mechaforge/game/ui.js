@@ -461,7 +461,9 @@ function start() {
       const [lo, hi] = range[i], k = (v) => Math.max(4, Math.min(100, 15 + 85 * ((v - lo) / (hi - lo || 1))));
       const v = get(cur), w = pv ? get(pv) : v;
       const cls = pv && w > v + 1e-6 ? 'up' : pv && w < v - 1e-6 ? 'down' : '';
-      return `<div class="sbar"><span>${name}</span><i><em class="${cls}" style="width:${k(w)}%"></em></i><b class="${cls}">${fmtv(w, pv || cur)}</b></div>`;
+      // 바뀌면: 겹치는 만큼은 평소 색, 늘거나 줄어드는 몫만 초록/빨강 칸으로
+      const base = Math.min(k(v), k(w)), bar = cls ? `<em style="width:${base}%"></em><em class="d ${cls}" style="left:${base}%;width:${Math.max(3, Math.abs(k(w) - k(v)))}%"></em>` : `<em style="width:${k(w)}%"></em>`;
+      return `<div class="sbar${cls ? ' ch' : ''}"><span>${name}</span><i>${bar}</i><b class="${cls}">${fmtv(w, pv || cur)}${cls === 'up' ? '▲' : cls === 'down' ? '▼' : ''}</b></div>`;
     }).join('');
   }
   // ---- 부위 이름표: 기체 오른쪽에 세로로 늘어놓고 선으로 연결 ----
@@ -473,14 +475,21 @@ function start() {
   ];
   const v3add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
   const callEls = {};
+  let hangRect = null; // 격납고 판 위치 (화면 크기나 탭이 바뀌면 다시 잰다)
+  addEventListener('resize', () => { hangRect = null; });
   function drawCallouts(g) {
     const m = g.player.mech, dpr = g.engine.dpr;
     if (!m) return;
     const P = (pt) => { const s = g.project(pt); return s ? [s[0] / dpr, s[1] / dpr] : null; };
-    const c0 = P([0, 0, 0]), c1 = P([0, 1, 0]);
-    if (!c0 || !c1) return;
-    const unit = Math.abs(c0[1] - c1[1]);
-    const th = $('turnhint'); th.style.left = `${Math.round(c0[0])}px`; th.style.top = `${Math.round(c0[1] - unit * 2.5)}px`;
+    const c0 = P([0, 0, 0]);
+    if (!c0) return;
+    // 카메라가 기체를 판 오른쪽 남은 공간 가운데로 옮길 수 있게 판이 가린 몫을 알려 준다
+    if (!hangRect && !$('hangar').hidden) hangRect = $('hangar').querySelector('.modal').getBoundingClientRect();
+    g.hangarInset = hangRect ? Math.min(0.6, hangRect.right / innerWidth) : 0;
+    // 돌려 보기 안내: 발밑과 받침 고리(반지름 2) 앞쪽 끝 사이. 세로 화면이면 아래쪽 판에 가리지 않게 (turnhint 는 zoom 이 걸려 있어서 px 를 uiz 로 나눈다)
+    let foot = c0[1];
+    for (let i = 0; i < 8; i++) { const r = P([Math.cos(i * Math.PI / 4) * 2.1, 0, Math.sin(i * Math.PI / 4) * 2.1]); if (r) foot = Math.max(foot, r[1]); }
+    const th = $('turnhint'); th.style.left = `${Math.round(c0[0] / uiz)}px`; th.style.top = `${Math.round(Math.min(c0[1] + (foot - c0[1]) * 0.5, (hangRect && innerHeight > innerWidth ? hangRect.top : innerHeight) - 36 * uiz) / uiz)}px`;
   }
   function setTab(key) { tab = key; renderHangar(); }
 
@@ -509,7 +518,18 @@ function start() {
     cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
   }
 
+  // 다시 그려도 부품 목록의 스크롤 위치는 그대로, 탭을 바꾸면 고른 부품이 보이게 가운데로
+  let shownTab = null;
   function renderHangar() {
+    const box = $('opts'), same = tab === shownTab, top = box.scrollTop;
+    buildHangar();
+    hangRect = null;
+    if (same) { box.scrollTop = top; return; }
+    shownTab = tab;
+    const on = box.querySelector('[aria-pressed="true"]');
+    box.scrollTop = on ? Math.max(0, on.offsetTop - (box.clientHeight - on.offsetHeight) / 2) : 0;
+  }
+  function buildHangar() {
     const sel = game.selection;
     renderRecord();
     const set = (k, v) => { game.setSelection({ ...game.selection, [k]: v }); renderHangar(); };
@@ -558,7 +578,7 @@ function start() {
         const el = opt(A.name, cur === id, () => {
           if (locked) { showA(id); ui.toast(`${A.unlock.text}하면 열려요`); return; }
           set('arch', id);
-        }, pixURL(A.icon, 5), null, (on) => showA(on ? id : cur), locked ? `<span class="chip">${LOCK_SVG}${A.unlock.chip}</span>` : `<span class="chip">${A.rule}</span>`);
+        }, pixURL(A.icon, 5), null, (on) => showA(on ? id : cur), locked ? `<span class="chip">${LOCK_SVG}${A.unlock.chip}</span>` : `<span class="chip rule">${A.rule}</span>`);
         if (locked) el.classList.add('locked', 'reward');
         box.appendChild(el);
       }
@@ -639,9 +659,6 @@ function start() {
       if (locked) { el.classList.add('locked', price ? 'buy' : 'reward'); if (M.scrap < price) el.classList.add('cant'); el.title = `${T.table[id].name}: ${price ? `고철 ${price}으로 해금` : '업적 보상'}`; }
       box.appendChild(el);
     }
-    // 폰 가로(한 줄 스크롤)일 때 고른 부품이 보이게 가운데로
-    const on = box.querySelector('[aria-pressed="true"]');
-    if (on && box.scrollWidth > box.clientWidth) box.scrollLeft = on.offsetLeft - (box.clientWidth - on.offsetWidth) / 2;
     showDesc(sel[T.key]);
     renderStats(null);
   }
@@ -669,12 +686,6 @@ function start() {
   renderHangar();
   $('dots').hidden = coarse;
   $('launch').addEventListener('click', () => game.startRun());
-  // 한 줄 부품 목록: 마우스 휠을 가로 스크롤로
-  $('opts').addEventListener('wheel', (e) => {
-    const box = $('opts');
-    if (box.scrollWidth <= box.clientWidth || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
-    e.preventDefault(); box.scrollLeft += e.deltaY;
-  }, { passive: false });
   $('odcall').addEventListener('click', () => { game.btn.overdrive = true; $('view').focus(); });
 
   // ---- 소리 ----

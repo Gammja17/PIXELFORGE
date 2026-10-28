@@ -3,9 +3,6 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="메카를 조립해 떼거리를 쓸어버리는 도트 로그라이트. 방마다 보상을 고르고, 적 정예의 부품을 뜯어 내 기체에 단다.">
-<meta name="theme-color" content="#0b0b12">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10' shape-rendering='crispEdges'%3E%3Crect width='10' height='10' fill='%230b0b12'/%3E%3Crect x='2' y='2' width='6' height='5' fill='%23e8e4f0'/%3E%3Crect x='3' y='4' width='4' height='1' fill='%2338e0ff'/%3E%3Crect x='4' y='0' width='2' height='2' fill='%23ffb21e'/%3E%3Crect x='1' y='7' width='8' height='2' fill='%235a8dff'/%3E%3C/svg%3E">
 <title>MechaForge</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <style>
@@ -201,7 +198,6 @@
   .callout b { font-size: 12px; white-space: nowrap; }
   .callout:hover b, .callout.on b { color: var(--accent); }
   #view.grab { cursor: grab; } #view.grabbing { cursor: grabbing; }
-  #turnhint { position: fixed; transform: translateX(-50%); font-size: calc(13px * var(--uiz)); font-weight: 700; color: var(--muted); pointer-events: none; text-shadow: 0 1px 0 #000, 0 0 4px #000; white-space: nowrap; }
 
   /* 문 위 보상 표지 (ui.js 가 화면 크기만큼 scale 로 키움) */
   #doors { position: fixed; inset: 0; pointer-events: none; }
@@ -274,99 +270,120 @@
   .mini:active { box-shadow: inset 0 0 0 2px #07070a, inset -2px -2px 0 2px #4a4c58, inset 2px 2px 0 2px #15161c; }
   .sndbtn { flex: none !important; min-width: 0 !important; }
 
-  /* ---- 격납고 ---- */
-  #hangar { place-items: center start; pointer-events: none; }
-  #hangar .modal { pointer-events: auto; max-width: 460px; max-height: 100%; overflow-y: auto; gap: 8px; scrollbar-width: thin; border-image-source: var(--plate); }
-  .hhead { display: flex; align-items: center; gap: 6px; }
-  .logo { margin: 0; flex: 1 1 auto; font-family: var(--font-tech); font-weight: 800; font-size: 24px; line-height: 1; letter-spacing: .06em; text-shadow: 0 2px 0 #000; white-space: nowrap; }
+  /* ---- 격납고 (v8): 왼쪽 판 하나에 탭 → 부품 격자(세로 스크롤) → 이름/설명 → 능력치 → 출격.
+     판은 화면 폭의 40% 안팎, 높이는 화면 가득. 기체는 남은 오른쪽 공간 가운데 (main.js 카메라가 판 폭을 읽는다) */
+  :root { --hpw: clamp(372px, calc(40vw / var(--uiz)), 440px); }
+  .ui-vshort { --hpw: clamp(372px, 47vw, 420px); }
+  #hangar { place-items: stretch start; pointer-events: none; }
+  #hangar .modal { pointer-events: auto; width: var(--hpw); max-width: none; min-height: 0; display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; overflow-y: auto; scrollbar-width: thin; position: relative;
+    border: 1px solid #3a4158; border-image: none; background: rgba(9, 11, 17, .88); box-shadow: 0 0 0 1px #000, 0 4px 0 rgba(0, 0, 0, .4); }
+  .hhead { display: flex; align-items: center; gap: 8px; }
+  .logo { margin: 0; flex: 1 1 auto; font-family: var(--font-tech); font-weight: 800; font-size: 24px; line-height: 1; text-shadow: 0 2px 0 #000; white-space: nowrap; }
   .logo span { color: var(--accent); }
-  #scrapline { font-size: 12px; font-weight: 800; color: var(--accent); white-space: nowrap; margin-right: 4px; text-shadow: 0 2px 0 #000; }
-  .sub { margin: -2px 0 0; font-size: 12px; color: var(--muted); }
-  #tabs { display: grid; grid-template-columns: repeat(9, 1fr); gap: 2px; }
-  .tab { border-width: 4px; border-image: var(--inset) var(--isl) fill / 4px repeat; padding: 3px 0 4px; display: grid; justify-items: center; align-content: start; gap: 2px; min-width: 0; margin: 0; }
-  .tab:hover { filter: brightness(1.25); }
-  .tab img { width: 30px; height: 30px; }
-  .tab .sw { width: 22px; height: 22px; margin: 4px; display: block; box-shadow: 0 0 0 2px #07070a, 0 0 0 4px #4b4e5a; }
-  .tab span { font-size: 12px; font-weight: 700; line-height: 1.15; color: var(--muted); white-space: nowrap; text-shadow: 0 1px 0 #000; }
-  .tab[aria-selected="true"] { border-image-source: var(--inset-lit); background: rgba(255, 201, 61, .1); }
+  #scrapline { font-size: 12px; font-weight: 800; color: var(--accent); white-space: nowrap; padding: 4px 8px 5px; background: rgba(255, 201, 61, .1); box-shadow: inset 0 0 0 1px rgba(255, 201, 61, .45); }
+  /* 설정 (소리/흔들림): 판 밖, 화면 오른쪽 위 */
+  #hangtools { position: fixed; top: calc(var(--sat) + 10px); right: calc(var(--sar) + 10px); display: flex; gap: 4px; zoom: var(--uiz); pointer-events: auto; }
+  #hangar .mini { height: 28px; background: rgba(9, 11, 17, .82); box-shadow: inset 0 0 0 1px #3a4158; color: #d8dae6; }
+  #hangar .mini:hover { box-shadow: inset 0 0 0 1px #6a7392; color: #fff; filter: none; }
+  /* 탭: 윗줄 = 기체 부위 6칸, 아랫줄 = 출격 설정 3칸 (넓게, 그림 옆에 이름) */
+  #tabs { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
+  #hangar .tab { border: 1px solid #2b3145; border-image: none; background: rgba(255, 255, 255, .03); padding: 5px 0 4px; display: grid; justify-items: center; align-content: start; gap: 4px; min-width: 0; margin: 0; }
+  #hangar .tab:hover { border-color: #59627e; background: rgba(255, 255, 255, .07); filter: none; }
+  .tab img { width: 32px; height: 32px; }
+  .tab .sw { width: 24px; height: 24px; margin: 4px; display: block; box-shadow: 0 0 0 1px #000, 0 0 0 2px #59627e; }
+  .tab span { font-size: 12px; font-weight: 700; line-height: 1.15; color: #b9bfd2; white-space: nowrap; text-shadow: 0 1px 0 #000; }
+  #hangar .tab:nth-child(n+7) { grid-column: span 2; grid-auto-flow: column; justify-content: center; align-items: center; gap: 8px; padding: 3px 0; }
+  .tab:nth-child(n+7) img { width: 24px; height: 24px; }
+  #hangar .tab[aria-selected="true"] { border-color: var(--accent); background: rgba(255, 201, 61, .16); box-shadow: inset 0 -3px 0 var(--accent); }
   .tab[aria-selected="true"] span { color: var(--accent); }
-  #tabbody { display: grid; gap: 6px; padding: 4px 6px 6px; }
-  /* 고른 부품 설명: 이름 한 줄 + 설명 */
-  #tabdesc { display: grid; gap: 2px; min-height: 52px; align-content: start; }
-  #tabdesc b { font-size: 12px; font-weight: 800; color: var(--accent); }
-  #tabdesc span { font-size: 12px; line-height: 1.4; color: var(--text); }
-  .opts { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 4px; position: relative; }
-  .opt { border-width: 4px; border-image: var(--inset) var(--isl) fill / 4px repeat; padding: 4px 3px 5px; display: grid; grid-template-rows: auto 1fr; justify-items: center; align-content: start; gap: 3px; min-width: 0; position: relative; }
-  .opt:hover { filter: brightness(1.25); }
+  /* 부품 격자: 줄바꿈, 세로로만 스크롤 */
+  #opts { flex: 1 1 0; min-height: 96px; display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); align-content: start; gap: 6px; overflow-x: hidden; overflow-y: auto; padding: 2px 4px 2px 0; margin-right: -4px; position: relative; scrollbar-width: thin; scrollbar-color: #4a5168 transparent; }
+  #hangar .opt { border: 1px solid #2b3145; border-image: none; background: rgba(255, 255, 255, .035); padding: 5px 3px 4px; display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; position: relative; }
+  #hangar .opt:hover { border-color: #59627e; background: rgba(255, 255, 255, .08); filter: none; }
   .opt img { width: 44px; height: 44px; }
-  .opt b { font-size: 12px; font-weight: 700; line-height: 1.2; text-align: center; color: var(--text); word-break: keep-all; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-  .opt .sw { width: 30px; height: 30px; margin: 7px 0; display: block; box-shadow: 0 0 0 2px #07070a, 0 0 0 4px #4b4e5a; }
-  .opt[aria-pressed="true"] { border-image-source: var(--inset-lit); background: rgba(255, 201, 61, .12); }
+  .opt b { font-size: 12px; font-weight: 700; line-height: 1.25; text-align: center; color: #e8e9f0; word-break: keep-all; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .opt .sw { width: 34px; height: 34px; margin: 7px 0; display: block; box-shadow: 0 0 0 1px #000, 0 0 0 2px #59627e; }
+  /* 고른 것: 호박색 테두리 + 오른쪽 위 삼각 표시 */
+  #hangar .opt[aria-pressed="true"] { border-color: var(--accent); background: rgba(255, 201, 61, .15); box-shadow: inset 0 0 0 1px var(--accent); }
+  #hangar .opt[aria-pressed="true"]::after { content: ""; position: absolute; right: 0; top: 0; width: 10px; height: 10px; background: var(--accent); clip-path: polygon(0 0, 100% 0, 100% 100%); }
   .opt[aria-pressed="true"] b { color: var(--accent); }
-  .opt.locked img, .opt.locked .sw { filter: grayscale(1) brightness(.45); }
-  .opt.locked b { color: var(--muted); }
-  /* 잠김 가격표 / 단계 표시 (그림 위 왼쪽 위) */
-  .opt .chip { position: absolute; left: 2px; top: 2px; display: flex; align-items: center; gap: 2px; font-family: var(--font-tech); font-size: 12px; font-weight: 800; line-height: 1; padding: 2px 4px 3px; background: #15161c; color: var(--accent); box-shadow: 0 0 0 1px #000, inset 0 -2px 0 rgba(0,0,0,.4); }
-  .opt .chip svg { width: 9px; height: 10px; }
-  .opt.cant .chip { color: var(--hp); }
-  .opt.reward .chip { color: var(--pink); }
-  .opt .chip.on { background: var(--xp); color: #0d0d11; }
+  /* 잠김: 실루엣이어도 형태가 보이게 밝게, 점선 테두리 */
+  #hangar .opt.locked { border-style: dashed; border-color: #3d4560; background: rgba(0, 0, 0, .25); }
+  .opt.locked img { filter: grayscale(1) brightness(1.15) contrast(.85); opacity: .7; }
+  .opt.locked .sw { filter: saturate(.55) brightness(.8); }
+  .opt.locked b { color: #a3a9bd; }
+  /* 칩: 칸 아래쪽 띠 (가격, 단계, 계열 규칙) */
+  .opt .chip { margin-top: auto; align-self: stretch; display: flex; align-items: center; justify-content: center; gap: 3px; font-family: var(--font-tech); font-size: 12px; font-weight: 800; line-height: 1; padding: 3px 2px 4px; white-space: nowrap; overflow: hidden; background: #171a25; color: var(--accent); box-shadow: inset 0 0 0 1px #2b3145; }
+  .opt .chip svg { width: 9px; height: 10px; flex: none; }
+  .opt.locked .chip { background: var(--accent); color: #241803; box-shadow: none; }
+  .opt.cant .chip { background: #2a1219; color: #ff8593; box-shadow: inset 0 0 0 1px #6b2634; }
+  .opt.reward .chip { background: #2a1430; color: #ff9ad8; box-shadow: inset 0 0 0 1px #6b2a5c; }
+  .opt .chip.on { background: var(--xp); color: #0d0d11; box-shadow: none; }
+  .opt .chip.rule { background: none; color: #8fd8ff; box-shadow: inset 0 0 0 1px #24405a; font-family: var(--font-body); }
   .opt .rlv { display: flex; gap: 2px; } .opt .rlv i { width: 7px; height: 7px; background: #2c2e3a; display: block; box-shadow: 0 0 0 1px #000; } .opt .rlv i.on { background: var(--xp); }
-  .opt.lv { grid-template-rows: auto auto 1fr; }
-  .opt.lv img { width: 28px; height: 28px; }
+  .opt.lv img { width: 32px; height: 32px; }
   #resstats .stat:first-child b { color: var(--accent); }
-  /* 능력치 막대 */
-  #statline { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 16px; padding: 0 2px; }
-  .sbar { display: grid; grid-template-columns: 30px 1fr 48px; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; }
-  .sbar span { color: var(--muted); }
-  .sbar i { height: 10px; background: #0b0f12; position: relative; display: block; box-shadow: 0 0 0 1px #050507, 0 1px 0 1px #4b4e5a; }
-  .sbar i em { position: absolute; inset: 0 auto 0 0; background: linear-gradient(180deg, #fff1a6 0 3px, var(--accent) 3px); transition: width .2s; }
-  .sbar i em.up { background: linear-gradient(180deg, #c9ffd9 0 3px, var(--xp) 3px); } .sbar i em.down { background: linear-gradient(180deg, #ffb3bd 0 3px, var(--hp) 3px); }
-  .sbar b { font-family: var(--font-tech); font-size: 12px; text-align: right; font-weight: 800; color: var(--text); }
-  .sbar b.up { color: var(--xp); } .sbar b.down { color: var(--hp); }
+  /* 고른 (또는 가리킨) 부품: 이름 > 설명 */
+  #tabdesc { display: grid; gap: 4px; min-height: 72px; align-content: start; padding: 8px 2px 0; border-top: 1px solid #262b3c; }
+  #tabdesc b { font-size: 24px; font-weight: 800; line-height: 1.1; color: #fff; text-shadow: 0 2px 0 #000; }
+  #tabdesc span { font-size: 12px; line-height: 1.5; color: #c9cddb; }
+  /* 능력치 막대: 가리키면 바뀌는 만큼을 초록/빨강 칸과 ▲▼ 로 */
+  #statline { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 18px; padding: 0 2px; }
+  .sbar { display: grid; grid-template-columns: 26px 1fr 58px; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; }
+  .sbar span { color: #9ea5ba; }
+  .sbar i { height: 10px; background: #111522; position: relative; display: block; box-shadow: 0 0 0 1px #000, 0 0 0 2px #262b3c; }
+  .sbar i em { position: absolute; top: 0; bottom: 0; left: 0; background: repeating-linear-gradient(90deg, #c9a24a 0 6px, transparent 6px 8px); transition: width .15s, left .15s; }
+  .sbar i em.d { background: repeating-linear-gradient(90deg, var(--xp) 0 6px, transparent 6px 8px); }
+  .sbar i em.d.down { background: repeating-linear-gradient(90deg, var(--hp) 0 6px, transparent 6px 8px); opacity: .85; }
+  .sbar b { font-family: var(--font-tech); font-size: 12px; text-align: right; font-weight: 800; color: #e8e9f0; white-space: nowrap; }
+  .sbar b.up { color: var(--xp); } .sbar b.down { color: #ff7a8a; }
+  .sbar.ch span { color: #fff; }
   #launchrow { display: flex; gap: 6px; position: sticky; bottom: 0; z-index: 1; }
-  #launch { font-size: 24px; min-height: 58px; flex: 1; }
+  #launch { font-size: 24px; min-height: 52px; flex: 1; }
   #launch small { font-size: 12px; margin-left: 6px; }
-  #achbtn { flex: none; padding: 0 12px; font-size: 12px; white-space: nowrap; }
-  .ui-short #hangar .modal { gap: 5px; padding: 4px 6px; }
-  .ui-short .tab img { width: 26px; height: 26px; }
-  .ui-short .tab .sw { width: 20px; height: 20px; margin: 3px; }
-  .ui-short #tabdesc { min-height: 40px; }
+  #hangar .btn:not(.primary) { flex: none; padding: 0 10px; font-size: 12px; white-space: nowrap; min-height: 52px; border: 1px solid #3a4158; border-image: none; background: rgba(255, 255, 255, .04); color: #e8e9f0; }
+  #hangar .btn:not(.primary):hover { border-color: #6a7392; filter: none; }
+  /* 기체 쪽: 돌려 보기 안내는 발밑 (ui.js 가 위치를 잡는다) */
+  #turnhint { position: fixed; transform: translateX(-50%); padding: 3px 10px 4px; font-size: 12px; font-weight: 700; color: #d8dae6; pointer-events: none; white-space: nowrap; zoom: var(--uiz); background: rgba(9, 11, 17, .7); box-shadow: inset 0 0 0 1px #3a4158; text-shadow: 0 1px 0 #000; }
+  /* 낮은 화면: 탭은 9칸 한 줄 */
+  .ui-short #hangar .modal { gap: 7px; padding: 8px 10px; }
+  .ui-short #tabs { grid-template-columns: repeat(9, 1fr); gap: 3px; }
+  .ui-short #hangar .tab, .ui-short #hangar .tab:nth-child(n+7) { grid-column: auto; grid-auto-flow: row; gap: 2px; padding: 4px 0 3px; }
+  .ui-short .tab img, .ui-short .tab:nth-child(n+7) img { width: 26px; height: 26px; }
+  .ui-short .tab .sw { width: 18px; height: 18px; margin: 4px; }
   .ui-short .opt img { width: 40px; height: 40px; }
-  .ui-short .opt .sw { margin: 5px 0; }
-  .ui-short .opt b { min-height: 2.4em; }
+  .ui-short .opt .sw { width: 28px; height: 28px; margin: 6px 0; }
   .ui-short .opt.lv img { width: 26px; height: 26px; }
-  .ui-short #launch { min-height: 50px; font-size: 24px; }
-  .ui-short #statline { gap: 4px 16px; }
-  .ui-short #hangar .sub, .ui-short #hangar .note { display: none; }
-  /* 낮은 화면: 부품은 한 줄로, 옆으로 밀어서 넘긴다 (마우스 휠도 가로로) */
-  .ui-short .opts { grid-auto-flow: column; grid-template-columns: none; grid-auto-columns: 82px; overflow-x: auto; scrollbar-width: thin; padding-bottom: 2px; }
-  .ui-vshort .logo { font-size: 24px; }
+  .ui-short #opts { grid-template-columns: repeat(auto-fill, minmax(62px, 1fr)); gap: 5px; min-height: 84px; }
+  .ui-short #tabdesc { min-height: 64px; padding-top: 6px; }
+  .ui-short #tabdesc span { line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .ui-short #statline { gap: 5px 16px; }
+  .ui-short #launch, .ui-short #hangar .btn:not(.primary) { min-height: 48px; }
+  /* 폰 가로: 더 촘촘하게, 능력치는 3열 */
+  .ui-vshort #hangar { padding-top: calc(var(--sat) + 6px); padding-bottom: calc(var(--sab) + 6px); }
+  .ui-vshort #hangar .modal { gap: 5px; padding: 6px 8px; }
+  .ui-vshort .logo { font-size: 12px; }
   .ui-vshort #tabs { gap: 2px; }
-  .ui-vshort #hangar .modal { gap: 4px; padding: 0 6px; }
-  .ui-vshort .tab img { width: 22px; height: 22px; }
-  .ui-vshort .tab .sw { width: 18px; height: 18px; margin: 3px; }
-  .ui-vshort #tabbody { padding: 2px 4px 4px; gap: 4px; }
-  .ui-vshort #tabdesc { min-height: 32px; }
-  .ui-vshort .tab { padding: 2px 0; }
-  .ui-vshort #tabdesc b { font-size: 12px; } .ui-vshort #tabdesc span { font-size: 12px; line-height: 1.3; }
-  .ui-vshort .opts { grid-auto-columns: 76px; }
-  .ui-touch .opts { scrollbar-width: none; padding-bottom: 0; }
+  .ui-vshort #hangar .tab, .ui-vshort #hangar .tab:nth-child(n+7) { gap: 1px; padding: 3px 0 2px; }
+  .ui-vshort .tab img, .ui-vshort .tab:nth-child(n+7) img { width: 22px; height: 22px; }
+  .ui-vshort .tab .sw { width: 16px; height: 16px; margin: 3px; }
   .ui-vshort .opt img { width: 32px; height: 32px; }
   .ui-vshort .opt.lv img { width: 22px; height: 22px; }
   .ui-vshort .opt .sw { width: 24px; height: 24px; margin: 4px 0; }
+  .ui-vshort #hangar .opt { padding: 4px 3px; gap: 3px; }
+  .ui-vshort #opts { grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); gap: 4px; min-height: 70px; }
+  .ui-vshort #tabdesc { gap: 2px; padding-top: 4px; min-height: 48px; }
+  .ui-vshort #tabdesc b { font-size: 12px; color: var(--accent); }
+  .ui-vshort #tabdesc span { -webkit-line-clamp: 2; line-height: 1.35; }
   .ui-vshort #statline { grid-template-columns: repeat(3, 1fr); gap: 4px 10px; }
-  .ui-vshort .sbar { font-size: 12px; grid-template-columns: 26px 1fr 40px; gap: 4px; } .ui-vshort .sbar b { font-size: 12px; }
-  .ui-vshort #hangar { padding-top: calc(var(--sat) + 6px); padding-bottom: calc(var(--sab) + 6px); }
-  .ui-vshort #launch { min-height: 42px; font-size: 24px; }
-  .ui-vshort #achbtn { font-size: 12px; padding: 0 8px; min-height: 42px; }
+  .ui-vshort .sbar { grid-template-columns: 26px 1fr 40px; gap: 4px; }
+  .ui-vshort .sbar b { font-size: 12px; }
+  .ui-vshort #launch, .ui-vshort #hangar .btn:not(.primary) { min-height: 40px; }
+  .ui-vshort #hangtools { top: calc(var(--sat) + 6px); right: calc(var(--sar) + 6px); }
+  .ui-touch #opts { scrollbar-width: none; }
   .ui-portrait #hangar { place-items: end center; }
-  .ui-portrait #hangar .modal { max-height: 64%; }
-  .ui-tiny .logo { font-size: 24px; }
-  .ui-tiny .sub { display: none; }
-  .ui-tiny #hangar .modal { gap: 6px; }
-  .ui-tiny .tab span { font-size: 12px; }
-  .ui-tiny .hhead { flex-wrap: wrap; }
+  .ui-portrait #hangar .modal { width: 100%; max-height: 62%; }
+  .ui-portrait #opts { flex: 0 1 auto; }
 
   /* 정비 기지 */
   #station .modal { max-width: 660px; max-height: 100%; overflow-y: auto; gap: 10px; }
@@ -611,8 +628,8 @@
     .ui-narrow body #tut, .ui-narrow body #tuttip, .ui-tiny body #tut, .ui-tiny body #tuttip { top: calc(var(--sat) + 206px) !important; }
   }
 
-  /* ==== 격납고 리마스터 (v7): 조종석 프레임으로 통일 ==== */
-  #hangar .modal, #station .modal, #result .modal {
+  /* ==== 정비 기지/결과 리마스터 (v7): 조종석 프레임으로 통일 (격납고는 위 v8 에서 따로) ==== */
+  #station .modal, #result .modal {
     border: 2px solid var(--medge) !important; border-image: none !important;
     background:
       linear-gradient(var(--mk) 0 0) 0 0 / 16px 3px no-repeat, linear-gradient(var(--mk) 0 0) 0 0 / 3px 16px no-repeat,
@@ -623,43 +640,24 @@
       rgba(8, 10, 16, .94) !important;
     box-shadow: 0 4px 0 rgba(0, 0, 0, .5), 0 0 0 1px #000 !important; padding: 12px 14px !important; position: relative;
   }
-  #hangar .modal::before, #station .modal::before { content: "ASSEMBLY BAY  UNIT MF-01"; position: absolute; top: -1px; left: 28px; padding: 0 6px; font-size: 12px; line-height: 14px; color: #0b0d14; background: var(--mk); }
-  #station .modal::before { content: "MAINTENANCE BAY"; }
-  #hangar .logo { margin-top: 6px; }
-  #hangar .sub { color: #aab1c8; }
-  /* 탭, 부품 칸: 무기 슬롯과 같은 모양. 고르면 호박색 테두리 */
-  #hangar .tab, #hangar .opt, #tabbody.screenbox, #station .screenbox {
-    border: 2px solid #2a3042 !important; border-image: none !important; background: #0c0f17 !important;
-  }
-  #hangar .tab { clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px); }
-  #hangar .tab[aria-selected="true"] { border-color: var(--mk) !important; background: rgba(255, 180, 61, .12) !important; box-shadow: inset 0 -3px 0 var(--mk); }
-  #hangar .opt { clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px); }
-  #hangar .opt[aria-pressed="true"] { border-color: var(--mk) !important; background: rgba(255, 180, 61, .14) !important; }
-  #hangar .opt:hover, #hangar .tab:hover { border-color: #5a6584 !important; filter: none; }
-  #tabdesc b { color: var(--mk); }
-  /* 능력치: 칸으로 나뉜 계기판 막대 */
-  .sbar span { color: #aab1c8; }
-  .sbar i { height: 10px; background: #111522; box-shadow: 0 0 0 1px #000, 0 0 0 2px #2a3042; }
-  .sbar i em { background: repeating-linear-gradient(90deg, var(--mk) 0 6px, transparent 6px 8px) !important; }
-  .sbar i em.up { background: repeating-linear-gradient(90deg, var(--xp) 0 6px, transparent 6px 8px) !important; }
-  .sbar i em.down { background: repeating-linear-gradient(90deg, var(--hp) 0 6px, transparent 6px 8px) !important; }
+  #station .modal::before { content: "MAINTENANCE BAY"; position: absolute; top: -1px; left: 28px; padding: 0 6px; font-size: 12px; line-height: 14px; color: #0b0d14; background: var(--mk); }
+  #station .screenbox { border: 2px solid #2a3042 !important; border-image: none !important; background: #0c0f17 !important; }
   /* 버튼: 얇은 강철 테두리 (출격은 노란 경고 줄무늬 그대로) */
-  #hangar .btn:not(.primary), #station .btn:not(.primary), #result .btn:not(.primary), #paused .btn:not(.primary) {
+  #station .btn:not(.primary), #result .btn:not(.primary), #paused .btn:not(.primary) {
     border: 2px solid #3b4357 !important; border-image: none !important; background: #121621 !important; min-height: 42px; color: #fff;
     clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
   }
-  #hangar .btn:not(.primary):hover, #station .btn:not(.primary):hover, #paused .btn:not(.primary):hover { border-color: var(--mk) !important; }
-  .mini { background: #121621 !important; box-shadow: inset 0 0 0 2px #3b4357 !important; color: #fff; }
-  /* 조립대 뷰포트: 기체 쪽 화면 모서리에 브래킷 + 표시 */
-  #bayframe { position: fixed; pointer-events: none; top: calc(var(--sat) + 18px); bottom: calc(var(--sab) + 76px); right: calc(var(--sar) + 18px); left: calc(var(--sal) + 520px); zoom: var(--uiz);
+  #station .btn:not(.primary):hover, #paused .btn:not(.primary):hover { border-color: var(--mk) !important; }
+  /* 조립대 뷰포트: 격납고 판 오른쪽 남은 공간의 모서리에 옅은 브래킷 */
+  #bayframe { --bk: #4a5370; position: fixed; pointer-events: none; top: calc(var(--sat) + 14px); bottom: calc(var(--sab) + 60px); right: calc(var(--sar) + 14px); left: calc(var(--sal) + var(--hpw) + 34px); zoom: var(--uiz);
     background:
-      linear-gradient(var(--mk) 0 0) 0 0 / 28px 3px no-repeat, linear-gradient(var(--mk) 0 0) 0 0 / 3px 28px no-repeat,
-      linear-gradient(var(--mk) 0 0) 100% 0 / 28px 3px no-repeat, linear-gradient(var(--mk) 0 0) 100% 0 / 3px 28px no-repeat,
-      linear-gradient(var(--mk) 0 0) 0 100% / 28px 3px no-repeat, linear-gradient(var(--mk) 0 0) 0 100% / 3px 28px no-repeat,
-      linear-gradient(var(--mk) 0 0) 100% 100% / 28px 3px no-repeat, linear-gradient(var(--mk) 0 0) 100% 100% / 3px 28px no-repeat; }
-  #bayframe span { position: absolute; font-size: 12px; color: var(--mk); text-shadow: 0 2px 0 #000; }
-  #bayframe .tl { top: 8px; left: 12px; } #bayframe .br { bottom: 8px; right: 12px; color: #8d96b3; }
-  .ui-narrow #bayframe { display: none; }
+      linear-gradient(var(--bk) 0 0) 0 0 / 20px 2px no-repeat, linear-gradient(var(--bk) 0 0) 0 0 / 2px 20px no-repeat,
+      linear-gradient(var(--bk) 0 0) 100% 0 / 20px 2px no-repeat, linear-gradient(var(--bk) 0 0) 100% 0 / 2px 20px no-repeat,
+      linear-gradient(var(--bk) 0 0) 0 100% / 20px 2px no-repeat, linear-gradient(var(--bk) 0 0) 0 100% / 2px 20px no-repeat,
+      linear-gradient(var(--bk) 0 0) 100% 100% / 20px 2px no-repeat, linear-gradient(var(--bk) 0 0) 100% 100% / 2px 20px no-repeat; }
+  #bayframe p { position: absolute; margin: 0; line-height: 1.5; font-size: 12px; color: #7d86a3; text-shadow: 0 2px 0 #000; }
+  #bayframe .tl { top: 10px; left: 14px; max-width: calc(100% - 230px); color: #9ea5ba; } #bayframe .br { bottom: 10px; right: 14px; max-width: calc(100% - 28px); text-align: right; }
+  .ui-short #bayframe, .ui-narrow #bayframe { display: none; }
   .rslot .evo { font-size: 12px; line-height: 1; color: #8d96b3; white-space: nowrap; max-width: 62px; overflow: hidden; }
   .rslot.evoready .evo { color: var(--pink); animation: blink .5s steps(2) infinite; }
   .rslot .in { height: 94px; }
@@ -743,23 +741,19 @@
 </div>
 <div id="stick" hidden><div id="knob"></div></div>
 
-<div id="bayframe"><span class="tl">SCAN: UNIT MF-01</span><span class="br">SYSTEM READY</span></div>
+<div id="bayframe"><p class="tl">기체를 조립하고 출격하세요. 구역 9개를 돌파해 타이탄을 쓰러뜨리면 승리.</p><p class="br" id="besttext"></p></div>
 <section id="hangar" class="screen">
-  <div class="modal pix">
+  <div id="hangtools"><button type="button" class="mini sndbtn" id="sndhangar">소리 켜짐</button><button type="button" class="mini sndbtn" id="shakehangar">흔들림 약하게</button></div>
+  <div class="modal">
     <div class="hhead">
       <h1 class="logo">MECHA<span>FORGE</span></h1>
       <span id="scrapline" class="px">고철 0</span>
-      <button type="button" class="mini sndbtn" id="sndhangar">소리 켜짐</button><button type="button" class="mini sndbtn" id="shakehangar">흔들림 약하게</button>
     </div>
-    <p class="sub">기체를 조립하고 출격하세요. 구역 9개를 돌파해 타이탄을 쓰러뜨리면 승리.</p>
     <div id="tabs" role="tablist" aria-label="부위"></div>
-    <div id="tabbody" class="screenbox">
-      <div id="tabdesc"><b></b><span></span></div>
-      <div class="opts" id="opts"></div>
-    </div>
+    <div class="opts" id="opts"></div>
+    <div id="tabdesc"><b></b><span></span></div>
     <div id="statline"></div>
     <div id="launchrow"><button type="button" class="btn" id="achbtn">업적</button><button type="button" class="btn primary" id="launch">출격 ▶</button></div>
-    <p class="note" id="besttext"></p>
   </div>
 </section>
 
@@ -12360,7 +12354,7 @@ class Game {
     g.merge(Geometry.cylinder(1.9, 2.1, 0.16, 8, [0.3, 0.31, 0.36]));
     g.merge(Geometry.cylinder(1.65, 1.65, 0.03, 8, [0.4, 0.42, 0.48]), { position: [0, 0.16, 0] });
     for (let i = 0; i < 4; i++) {
-      const a = (i * Math.PI) / 2 + Math.PI / 4;
+      const a = (i * Math.PI) / 2; // 카메라 쪽 정면을 비워 둬서 기둥이 기체를 가리지 않게
       g.merge(Geometry.box(0.24, 2.6, 0.24, [0.36, 0.36, 0.42]), { position: [Math.cos(a) * 3.2, 0, Math.sin(a) * 3.2] });
       g.merge(Geometry.box(0.3, 0.12, 0.3, [0.95, 0.75, 0.2]), { position: [Math.cos(a) * 3.2, 2.6, Math.sin(a) * 3.2] });
       g.merge(Geometry.box(1.2, 0.1, 0.1, [0.4, 0.4, 0.46]), { position: [Math.cos(a) * 2.6, 2.4, Math.sin(a) * 2.6], rotation: [0, -a, 0] });
@@ -12762,7 +12756,7 @@ class Game {
     const hangar = this.state === 'hangar';
     const install = this.state === 'install';
     // 줌: 장착 연출이나 오버드라이브로는 바뀌지 않고, 레벨 성장에 따라 아주 천천히만 물러난다
-    const worldShort = hangar ? (h > w ? 4.6 : 7) : clamp(short / 34, 13, 17) * (1 + (p.baseSize - 1) * 0.35);
+    const worldShort = hangar ? (h > w ? 4.6 : 5.6) : clamp(short / 34, 13, 17) * (1 + (p.baseSize - 1) * 0.35);
     const goal = worldShort * (h / short);
     cam.viewHeight = Math.abs(cam.viewHeight - goal) < 0.01 ? goal : damp(cam.viewHeight, goal, hangar ? 5 : 1.2, dt);
     const sinP = Math.sin(cam.pitch);
@@ -12770,10 +12764,10 @@ class Game {
     const tr = this.fx.trauma * this.fx.trauma, amp = tr * 0.4;
     const ox = (Math.random() * 2 - 1) * amp, oy = (Math.random() * 2 - 1) * amp;
     const r = cam.right || [1, 0, 0], u = cam.up || [0, 1, 0];
-    // 격납고: 메카를 패널 반대편으로
-    const lift = hangar ? (h > w ? -cam.viewHeight * 0.3 : 0) : 0;
-    const side = hangar && w > h ? cam.viewHeight * (w / h) * 0.16 : 0;
-    const ty = damp(cam.target[1], hangar ? 1.4 : install ? 1.2 : 0.8, 4, dt);
+    // 격납고: 메카를 판(왼쪽, 화면 폭의 hangarInset 만큼)이 가리지 않은 공간 가운데로
+    const lift = hangar ? (h > w ? -cam.viewHeight * 0.36 : 0) : 0;
+    const side = hangar && w > h ? cam.viewHeight * (w / h) * (this.hangarInset ?? 0.32) / 2 : 0;
+    const ty = damp(cam.target[1], hangar ? 0.95 : install ? 1.2 : 0.8, 4, dt);
     cam.target = [p.x + r[0] * (ox - side) + u[0] * (oy + lift), ty + u[1] * oy, p.z + r[2] * (ox - side) + u[2] * (oy + lift)];
   }
 
@@ -13076,7 +13070,8 @@ function start() {
   let uiz = 1;
   const layout = () => {
     const W = innerWidth, H = innerHeight;
-    uiz = Math.round(Math.max(1, Math.min(2.4, W / 800, H / 450)) * 10) / 10;
+    const s = Math.min(W / 800, H / 450);
+    uiz = Math.round(Math.min(1.8, s <= 1 ? 1 : 1 + (s - 1) * 0.55) * 10) / 10;
     const lw = W / uiz, lh = H / uiz, cl = document.documentElement.classList;
     document.documentElement.style.setProperty('--uiz', uiz);
     cl.toggle('ui-short', lh <= 520); cl.toggle('ui-vshort', lh <= 410);
@@ -13497,7 +13492,9 @@ function start() {
       const [lo, hi] = range[i], k = (v) => Math.max(4, Math.min(100, 15 + 85 * ((v - lo) / (hi - lo || 1))));
       const v = get(cur), w = pv ? get(pv) : v;
       const cls = pv && w > v + 1e-6 ? 'up' : pv && w < v - 1e-6 ? 'down' : '';
-      return `<div class="sbar"><span>${name}</span><i><em class="${cls}" style="width:${k(w)}%"></em></i><b class="${cls}">${fmtv(w, pv || cur)}</b></div>`;
+      // 바뀌면: 겹치는 만큼은 평소 색, 늘거나 줄어드는 몫만 초록/빨강 칸으로
+      const base = Math.min(k(v), k(w)), bar = cls ? `<em style="width:${base}%"></em><em class="d ${cls}" style="left:${base}%;width:${Math.max(3, Math.abs(k(w) - k(v)))}%"></em>` : `<em style="width:${k(w)}%"></em>`;
+      return `<div class="sbar${cls ? ' ch' : ''}"><span>${name}</span><i>${bar}</i><b class="${cls}">${fmtv(w, pv || cur)}${cls === 'up' ? '▲' : cls === 'down' ? '▼' : ''}</b></div>`;
     }).join('');
   }
   // ---- 부위 이름표: 기체 오른쪽에 세로로 늘어놓고 선으로 연결 ----
@@ -13509,14 +13506,21 @@ function start() {
   ];
   const v3add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
   const callEls = {};
+  let hangRect = null; // 격납고 판 위치 (화면 크기나 탭이 바뀌면 다시 잰다)
+  addEventListener('resize', () => { hangRect = null; });
   function drawCallouts(g) {
     const m = g.player.mech, dpr = g.engine.dpr;
     if (!m) return;
     const P = (pt) => { const s = g.project(pt); return s ? [s[0] / dpr, s[1] / dpr] : null; };
-    const c0 = P([0, 0, 0]), c1 = P([0, 1, 0]);
-    if (!c0 || !c1) return;
-    const unit = Math.abs(c0[1] - c1[1]);
-    const th = $('turnhint'); th.style.left = `${Math.round(c0[0])}px`; th.style.top = `${Math.round(c0[1] - unit * 2.5)}px`;
+    const c0 = P([0, 0, 0]);
+    if (!c0) return;
+    // 카메라가 기체를 판 오른쪽 남은 공간 가운데로 옮길 수 있게 판이 가린 몫을 알려 준다
+    if (!hangRect && !$('hangar').hidden) hangRect = $('hangar').querySelector('.modal').getBoundingClientRect();
+    g.hangarInset = hangRect ? Math.min(0.6, hangRect.right / innerWidth) : 0;
+    // 돌려 보기 안내: 발밑과 받침 고리(반지름 2) 앞쪽 끝 사이. 세로 화면이면 아래쪽 판에 가리지 않게 (turnhint 는 zoom 이 걸려 있어서 px 를 uiz 로 나눈다)
+    let foot = c0[1];
+    for (let i = 0; i < 8; i++) { const r = P([Math.cos(i * Math.PI / 4) * 2.1, 0, Math.sin(i * Math.PI / 4) * 2.1]); if (r) foot = Math.max(foot, r[1]); }
+    const th = $('turnhint'); th.style.left = `${Math.round(c0[0] / uiz)}px`; th.style.top = `${Math.round(Math.min(c0[1] + (foot - c0[1]) * 0.5, (hangRect && innerHeight > innerWidth ? hangRect.top : innerHeight) - 36 * uiz) / uiz)}px`;
   }
   function setTab(key) { tab = key; renderHangar(); }
 
@@ -13545,7 +13549,18 @@ function start() {
     cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
   }
 
+  // 다시 그려도 부품 목록의 스크롤 위치는 그대로, 탭을 바꾸면 고른 부품이 보이게 가운데로
+  let shownTab = null;
   function renderHangar() {
+    const box = $('opts'), same = tab === shownTab, top = box.scrollTop;
+    buildHangar();
+    hangRect = null;
+    if (same) { box.scrollTop = top; return; }
+    shownTab = tab;
+    const on = box.querySelector('[aria-pressed="true"]');
+    box.scrollTop = on ? Math.max(0, on.offsetTop - (box.clientHeight - on.offsetHeight) / 2) : 0;
+  }
+  function buildHangar() {
     const sel = game.selection;
     renderRecord();
     const set = (k, v) => { game.setSelection({ ...game.selection, [k]: v }); renderHangar(); };
@@ -13594,7 +13609,7 @@ function start() {
         const el = opt(A.name, cur === id, () => {
           if (locked) { showA(id); ui.toast(`${A.unlock.text}하면 열려요`); return; }
           set('arch', id);
-        }, pixURL(A.icon, 5), null, (on) => showA(on ? id : cur), locked ? `<span class="chip">${LOCK_SVG}${A.unlock.chip}</span>` : `<span class="chip">${A.rule}</span>`);
+        }, pixURL(A.icon, 5), null, (on) => showA(on ? id : cur), locked ? `<span class="chip">${LOCK_SVG}${A.unlock.chip}</span>` : `<span class="chip rule">${A.rule}</span>`);
         if (locked) el.classList.add('locked', 'reward');
         box.appendChild(el);
       }
@@ -13675,9 +13690,6 @@ function start() {
       if (locked) { el.classList.add('locked', price ? 'buy' : 'reward'); if (M.scrap < price) el.classList.add('cant'); el.title = `${T.table[id].name}: ${price ? `고철 ${price}으로 해금` : '업적 보상'}`; }
       box.appendChild(el);
     }
-    // 폰 가로(한 줄 스크롤)일 때 고른 부품이 보이게 가운데로
-    const on = box.querySelector('[aria-pressed="true"]');
-    if (on && box.scrollWidth > box.clientWidth) box.scrollLeft = on.offsetLeft - (box.clientWidth - on.offsetWidth) / 2;
     showDesc(sel[T.key]);
     renderStats(null);
   }
@@ -13705,12 +13717,6 @@ function start() {
   renderHangar();
   $('dots').hidden = coarse;
   $('launch').addEventListener('click', () => game.startRun());
-  // 한 줄 부품 목록: 마우스 휠을 가로 스크롤로
-  $('opts').addEventListener('wheel', (e) => {
-    const box = $('opts');
-    if (box.scrollWidth <= box.clientWidth || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
-    e.preventDefault(); box.scrollLeft += e.deltaY;
-  }, { passive: false });
   $('odcall').addEventListener('click', () => { game.btn.overdrive = true; $('view').focus(); });
 
   // ---- 소리 ----
