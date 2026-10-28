@@ -9080,7 +9080,7 @@ class Player {
   get mode() { return this.ups._mode || 'walk'; }
   switchMode(next) {
     const g = this.game, fx = g.fx;
-    if (this.modeCd > 0 || g.state !== 'play') return;
+    if (this.modeCd > 0 || g.state !== 'play' || g.featOn?.('mode') === false) return; // 첫 판: 깊이 3 에서 열림 (tutorial.js)
     next = next || MODE_ORDER[(MODE_ORDER.indexOf(this.mode) + 1) % MODE_ORDER.length];
     this.ups._mode = next; this.refreshStats();
     this.modeCd = 0.6; this.buildFlash = 0.3; this.transformT = 0.35;
@@ -9169,10 +9169,10 @@ class Player {
   }
 
   // ---- 오버드라이브 ----
-  addOd(v) { if (this.odT > 0) return; const was = this.od >= 1; this.od = Math.min(1, this.od + v * (1 + (this.ups._mod || 0) * 0.15)); if (!was && this.od >= 1) { this.game.ui.toast('오버드라이브 준비 완료!'); this.game.sfx.play('ready'); } }
+  addOd(v) { if (this.odT > 0 || this.game.featOn?.('od') === false) return; const was = this.od >= 1; this.od = Math.min(1, this.od + v * (1 + (this.ups._mod || 0) * 0.15)); if (!was && this.od >= 1) { this.game.ui.toast('오버드라이브 준비 완료!'); this.game.sfx.play('ready'); } }
   overdrive() {
     const g = this.game, fx = g.fx;
-    if (this.od < 1 || this.odT > 0) return false;
+    if (this.od < 1 || this.odT > 0 || g.featOn?.('od') === false) return false; // 첫 판: 깊이 2 에서 열림 (tutorial.js)
     this.od = 0; this.odT = 8;
     this.ups._od = 1; this.refreshStats();
     this.invuln = Math.max(this.invuln, 0.8);
@@ -10635,6 +10635,8 @@ const ZONE_GIMMICK = {
 //   8   | 타이탄 + 물량   | 2.00 + 0.05·pw' | 타이탄 공식  | -                   | 타이탄 → MK-II (가장 높은 벽)
 //  물량 상한 2.4. 떼거리 체력 = swarm · pw^(e/2). 중간 보스 체력 = 1500 · mid[0] · pw^mid[1].
 //  bul = 수호자/중간 보스 탄을 고르게 솎아 내고 남기는 비율 (틈이 넓어진다, enemies.shoot)
+//  첫 두 판(game.rookieRun, tutorial.js): 첫 구역은 사막(수호자 = 샌드웜/거미), 첫 방은 섬멸전이나 짧은 방어선(28초),
+//  깊이 2 까지 적 피해 x0.7. 표 자체는 그대로 (ROOKIE)
 const CURVE = [
   //      dens  dPw   dmg   mPw   hp   hpE   swarm mid         haz   troop xp    guard bul
   /* 0 */ [0.7, 0.03, 0.55, 0, 1.0, 0.3, 1.0, [1.2, 0.4], 0, 0, 1.5, 1, 1],
@@ -10647,6 +10649,7 @@ const CURVE = [
   /* 7 */ [1.5, 0.15, 1.7, 0.05, 3.4, 0.76, 2.7, [4.1, 0.7], 1.2, 0.3, 1, 1, 1],
   /* 8 */ [1.6, 0.15, 2.0, 0.05, 3.8, 0.8, 3.0, [4.5, 0.7], 0.6, 0.3, 1, 1, 1],
 ].map(([dens, densPw, dmg, dmgPw, hp, hpExp, swarm, mid, haz, troop, xp, guard, bul]) => ({ dens, densPw, dmg, dmgPw, hp, hpExp, swarm, mid, haz, troop, xp, guard, bul }));
+const ROOKIE = { dmg: 0.7, upTo: 2, survive: 28, zone: 'desert', ops: ['horde', 'survive'] };
 const curveAt = (depth) => CURVE[Math.max(0, Math.min(CURVE.length - 1, depth | 0))];
 
 // 처음 나오는 깊이 (스폰 조건). 위 표의 '새로 나오는 적' 칸과 같다
@@ -10710,6 +10713,7 @@ class Rooms {
   }
 
   get last() { return RUN_ZONES.length - 1; }
+  get rookie() { return !!this.game.rookieRun; } // 첫 두 판 (위 ROOKIE)
   zoneAt(depth) { return this.zones[Math.min(this.zones.length - 1, Math.floor(Math.max(0, depth) / 3))]; }
 
   // ---- 난이도 ----
@@ -10729,6 +10733,7 @@ class Rooms {
       swarmHp: C.swarm * Math.pow(pw, C.hpExp * 0.5),
       dmg: C.dmg + p1 * C.dmgPw,
       dens: Math.min(2.4, C.dens + p1 * C.densPw),
+      ...(this.rookie && d <= ROOKIE.upTo ? { dmg: (C.dmg + p1 * C.dmgPw) * ROOKIE.dmg } : null),
       xp: C.xp, bul: C.bul,
     };
   }
@@ -10737,7 +10742,9 @@ class Rooms {
   guardHp() { return curveAt(this.depth).guard; }
 
   newRun() {
-    this.depth = -1; this.path = []; this.seed = (Math.random() * 1e9) | 0; this.zones = pickZones(this.seed); this.lastLayout = null; this.lastSpecial = null;
+    this.depth = -1; this.path = []; this.seed = (Math.random() * 1e9) | 0; this.zones = pickZones(this.seed);
+    if (this.rookie && this.zones[0] !== ROOKIE.zone) this.zones = [ROOKIE.zone, ...this.zones.filter((z) => z !== ROOKIE.zone)].slice(0, 3);
+    this.lastLayout = null; this.lastSpecial = null;
     // 최종 보스: 첫 출격은 타이탄, 그다음부터 지난번과 다른 보스 (enemies.js FINAL_BOSSES)
     let last = null; try { last = localStorage.getItem('mechaforge.boss'); } catch { /* 무시 */ }
     const runs = this.game.meta?.data?.life?.runs || 0, ids = Object.keys(FINAL_BOSSES).filter((k) => k !== last);
@@ -10783,6 +10790,7 @@ class Rooms {
     const big = boss || reward === 'guardian';
     const combat = ['part', 'system', 'supply', 'xp', 'elite', 'cargo'].includes(reward);
     // 작전 (ops.js): 문에서 정해 온 것, 없으면 여기서 고른다
+    if (this.rookie && depth === 1 && combat && !ROOKIE.ops.includes(op)) op = R.pick(ROOKIE.ops);
     this.op = combat ? (this.force.op || op || pickOp(reward, depth, R, [this.lastOp])) : null;
     this.lastOp = this.op;
     this.hx = big ? 16 : R.range(15, 18); this.hz = big ? 16 : R.range(15, 18);
@@ -10808,7 +10816,7 @@ class Rooms {
     const exits = this.rollExits(depth);
     const farSides = exits.length === 1 ? [R() < 0.5 ? 'W' : 'S'] : ['W', 'S'];
     const taken = [this.op];
-    this.doors = exits.map((rw, i) => { const o = pickOp(rw, depth + 1, R, taken); taken.push(o); return { side: farSides[i], reward: rw, op: o, open: false, fade: 0 }; });
+    this.doors = exits.map((rw, i) => { const o = this.rookie && depth === 0 ? ROOKIE.ops[i % 2] : pickOp(rw, depth + 1, R, taken); taken.push(o); return { side: farSides[i], reward: rw, op: o, open: false, fade: 0 }; });
     // 구역 경계: 문마다 다른 구역으로 이어진다 (경로 분기). 정해 둔 다음 구역 + 아직 안 간 구역 하나
     if ((depth + 1) % 3 === 0 && depth + 1 < this.last && this.doors.length >= 2) {
       const idx = (depth + 1) / 3, used = this.zones.slice(0, idx);
@@ -10893,7 +10901,7 @@ class Rooms {
     this.waves = boss ? [{ boss: true }] : [];
     this.waveT = 1.2;
     // 물량전: 제한 시간 동안 버티며 쓸어버리기
-    this.duration = boss ? 0 : 34 + depth * 5;
+    this.duration = boss ? 0 : this.rookie && depth === 1 ? ROOKIE.survive : 34 + depth * 5;
     this.roomT = 0; this.acc = 0; this.marks = new Set(); this.bossOn = false; this.guardOn = false; this.waitMid = false; this.told = false;
     this.midAt = [];
     if (reward === 'guardian') { this.duration = 0; this.waveT = 1.5; }
@@ -11232,7 +11240,7 @@ class Rooms {
   }
 }
 
-return { ZONES, RUN_ZONES, REWARDS, SPECIALS, ZONE_GIMMICK, CURVE, curveAt, FIRST, FACTIONS, pickZones, Rooms };
+return { ZONES, RUN_ZONES, REWARDS, SPECIALS, ZONE_GIMMICK, CURVE, ROOKIE, curveAt, FIRST, FACTIONS, pickZones, Rooms };
 })();
 
 __m["game/install.js"] = (() => {
@@ -12018,35 +12026,45 @@ __m["game/tutorial.js"] = (() => {
 // 첫 실행 튜토리얼 + 처음 겪는 일마다 한 번만 뜨는 팁. DOM/CSS 는 여기서 직접 만든다 (page.html 은 고치지 않음)
 //
 //  첫 출격(또는 격납고 '튜토리얼' 버튼): 출격 지점 방에서 문을 닫아 두고 단계별 훈련
-//    이동 → 조준+공격 → 대시 → 경험치 → 카드 → 특수기 → 변형 → 오버드라이브 → 문 개방
+//    이동 → 공격 → 대시 → 성장(결정 줍기 + 카드) → 특수기 (→ 변형 → 오버드라이브: 이미 열린 경우만) → 문 개방
 //    단계 중에는 고철 벌레만 천천히 나오고, 체력은 절반 밑으로 안 떨어진다
 //  평소 플레이: 노획 부품, 부품 상자, 중간 보스, 출구 문, 진화 카드, 오버드라이브 충전을 처음 볼 때 팁
 //
+//  기능 단계적 해금 (처음 하는 사람은 조작을 줄인다): 오버드라이브는 깊이 2(첫 수호자), 변형은 깊이 3 에 들어설 때
+//  '새 기능' 알림과 함께 열린다. 격납고 고급 탭(계열/파일럿/위협/연구)은 첫 출격을 마치면 (ui.js 가 game.featOn('hangar') 를 본다).
+//  진행 기록이 있던 저장은 처음부터 전부 열림. 세 번째 출격부터는 못 본 기능도 전부 연다.
+//  첫 두 판(rookie)은 rooms.js 가 첫 구역과 첫 방 작전을 쉬운 것으로 고르고 깊이 2 까지 적 피해를 줄인다
+//
 //  rooms / pickups / enemies / player / weapons 파일은 고치지 않고 인스턴스 메서드를 감싸기만 한다 (runhooks.js 와 같은 방식)
-//  저장: store 'tutorial' (끝냈거나 건너뜀), store 'tips' ({ id: 1 })
+//  저장: store 'tutorial' (끝냈거나 건너뜀), store 'tips' ({ id: 1 }), store 'feat' ({ od, mode, hangar: 1 = 열림 })
 
 const wrap = (obj, name, fn) => { const orig = obj[name].bind(obj); obj[name] = (...a) => fn(orig, ...a); };
 const $ = (id) => document.getElementById(id);
 
-// keys: 키보드/마우스, touch: 폰 버튼, btn: 반짝일 터치 버튼 id
+// keys: 키보드/마우스, touch: 폰 버튼, btn: 반짝일 터치 버튼 id, feat: 그 기능이 열려 있을 때만 나오는 단계
 const STEPS = [
-  { id: 'move', title: '이동', text: '기체를 움직여 보세요', keys: ['W', 'A', 'S', 'D'], touch: '왼쪽 화면 드래그', need: 10 },
-  { id: 'attack', title: '조준 + 공격', text: '고철 벌레 5마리 처치', keys: ['J'], mouse: '마우스로 조준 + 왼쪽 클릭', touch: '공격 버튼 (자동 조준)', btn: 'atkbtn', need: 5 },
-  { id: 'dash', title: '대시', text: '대시하는 순간은 무적! 2번 대시', keys: ['Space', 'Shift'], touch: '대시 버튼', btn: 'dashbtn', need: 2 },
-  { id: 'xp', title: '경험치', text: '초록 결정에 다가가서 줍기', keys: [], touch: '', need: 5 },
-  { id: 'card', title: '레벨 업', text: '카드 1장을 골라 기체 강화', keys: ['1', '2', '3'], mouse: '카드 클릭', touch: '카드 터치' },
-  { id: 'special', title: '특수기', text: '한 방 큰 기술! 써 보세요', keys: ['K'], mouse: '오른쪽 클릭', touch: '특수 버튼', btn: 'spbtn' },
-  { id: 'mode', title: '변형', text: '보행, 비행, 저격, 섬멸 모드 전환', keys: ['E', 'Tab'], touch: '초록 변형 버튼', btn: 'modebtn' },
-  { id: 'od', title: '오버드라이브', text: '게이지 가득! 8초간 거대화 + 피해 감소', keys: ['Q', 'L'], touch: 'OD 버튼', btn: 'odbtn' },
+  { id: 'move', title: '이동', text: '기체를 움직여 보세요', keys: ['W', 'A', 'S', 'D'], touch: '왼쪽 화면 드래그', need: 8 },
+  { id: 'attack', title: '공격', text: '고철 벌레 5마리 처치', keys: ['J'], mouse: '마우스로 조준 + 왼쪽 클릭', touch: '공격 버튼 (자동 조준)', btn: 'atkbtn', need: 5 },
+  { id: 'dash', title: '대시', text: '대시하는 순간은 무적. 2번 써 보세요', keys: ['Space', 'Shift'], touch: '대시 버튼', btn: 'dashbtn', need: 2 },
+  { id: 'grow', title: '성장', text: '초록 결정을 주우면 레벨 업. 카드 1장 고르기', keys: ['1', '2', '3'], mouse: '카드 클릭', touch: '카드 터치', need: 5 },
+  { id: 'special', title: '특수기', text: '큰 한 방. 다시 차면 또 쓸 수 있어요', keys: ['K'], mouse: '오른쪽 클릭', touch: '특수 버튼', btn: 'spbtn' },
+  { id: 'mode', feat: 'mode', title: '변형', text: '보행, 비행, 저격, 섬멸 모드 전환', keys: ['E', 'Tab'], touch: '초록 변형 버튼', btn: 'modebtn' },
+  { id: 'od', feat: 'od', title: '오버드라이브', text: '게이지 가득! 8초간 거대화 + 피해 감소', keys: ['Q'], touch: 'OD 버튼', btn: 'odbtn' },
 ];
+const CARD = { title: '레벨 업!', text: '카드 1장을 골라 기체 강화', keys: ['1', '2', '3'], mouse: '카드 클릭', touch: '카드 터치' };
 const TIPS = {
   salvage: { title: '부품 노획!', text: '빛기둥 속 부품에 다가가면 바로 장착' },
   crate: { title: '부품 상자!', text: '주우면 부품 카드 3장 중 하나 선택' },
   mid: { title: '중간 보스 등장!', text: '쓰러뜨려야 방이 끝나요', warn: true },
   door: { title: '출구 선택', text: '문 위 표지 = 다음 방 보상. 원하는 문으로 들어가세요' },
   evo: { title: '진화 카드!', text: '최대 레벨 무기 + 맞는 부품 = 진화. 강력해요' },
-  od: { title: '오버드라이브 준비!', text: '8초간 거대화 + 피해 감소', keys: ['Q', 'L'], touch: 'OD 버튼' },
+  od: { title: '오버드라이브 준비!', text: '8초간 거대화 + 피해 감소', keys: ['Q'], touch: 'OD 버튼' },
+  // 새 기능 해금 알림 (feat 이 열리는 순간)
+  newOd: { tag: 'NEW', title: '새 기능: 오버드라이브', text: '게이지 가득! 지금 눌러 보세요. 8초간 거대화 + 피해 감소', keys: ['Q'], touch: 'OD 버튼', btn: 'odbtn', t: 7 },
+  newMode: { tag: 'NEW', title: '새 기능: 변형', text: '보행 → 비행 → 저격 → 섬멸. 누를 때마다 모드가 바뀌어요', keys: ['E'], touch: '초록 변형 버튼', btn: 'modebtn', t: 7 },
 };
+// 기능 → 열리는 깊이, 잠겨 있을 때 숨기는 HUD
+const FEATS = { od: { depth: 2, tip: 'newOd' }, mode: { depth: 3, tip: 'newMode' } };
 
 const CSS = `
 #tut, #tuttip { position: fixed; left: var(--tut-x, 50%); transform: translateX(-50%); z-index: 40; pointer-events: none; color: var(--paper, #ece8df);
@@ -12093,12 +12111,37 @@ const CSS = `
 #tuttip.compact.low { top: calc(var(--sat, 0px) + 2px) !important; bottom: auto; }
 #tuttip.compact.low .tk { display: none; }
 #tuttip.compact b { font-size: 12px; } #tuttip.compact p { font-size: 12px; } #tuttip.compact .tk { font-size: 12px; }
+#tuttip.new .tg { background: var(--accent, #ffc93d); }
+/* 아직 안 열린 기능: 자리는 그대로 두고 감춘다 (HUD 배치가 흔들리지 않게) */
+body.lock-od #odline, body.lock-od #odbtn, body.lock-od #odcall, body.lock-mode #modeline, body.lock-mode #modebtn { visibility: hidden !important; }
 
 `;
 
 function installTutorial(game, store) {
   const g = game, p = g.player, en = g.enemies, rooms = g.rooms;
   const tips = store.get('tips', {});
+  const life = () => g.meta.data.life;
+  // 기능 해금 상태. 처음 켤 때 진행 기록(런, 고철, 최고 기록)이 있으면 전부 열린 채로 시작
+  let feat = store.get('feat', null);
+  if (!feat) {
+    const L = life(), old = L.runs > 0 || L.wins > 0 || g.meta.data.scrap > 0 || store.get('best2', { depth: 0 }).depth > 0;
+    feat = old ? { od: 1, mode: 1, hangar: 1 } : {};
+    store.set('feat', feat);
+  }
+  g.featOn = (id) => !!feat[id] || (id === 'hangar' && life().runs > 0);
+  // 첫 두 판은 초반을 쉽게 (rooms.js 가 본다). startRun 바로 전에 정한다
+  g.rookieRun = false;
+  const applyLocks = () => { for (const id in FEATS) document.body.classList.toggle('lock-' + id, !feat[id]); };
+  function unlock(id, quiet = false) {
+    if (feat[id]) return;
+    feat[id] = 1; store.set('feat', feat);
+    applyLocks();
+    if (id === 'od') { tips.od = 1; store.set('tips', tips); p.od = 1; } // 열리자마자 한 번 써 보게 게이지를 채워 준다
+    if (quiet || !FEATS[id]) return;
+    tipQ = tipQ.filter((t) => t !== 'od');
+    tipQ.unshift(FEATS[id].tip);
+    g.sfx.play('ready');
+  }
   let tut = null;        // 진행 중인 튜토리얼 { i, t, n, ... }
   let replay = false;    // 격납고 버튼으로 다시 보기
   let tipQ = [], tipT = 0, tipNow = null, frameN = 0;
@@ -12133,26 +12176,26 @@ function installTutorial(game, store) {
   const glow = (id) => { for (const b of document.querySelectorAll('.tut-glow')) b.classList.remove('tut-glow'); if (id) { $(id)?.classList.add('tut-glow'); $(SLOT[id])?.classList.add('tut-glow'); } };
   function show(S, i) {
     panel.classList.remove('done', 'low', 'pop'); void panel.offsetWidth; panel.classList.add('pop');
-    q('.ts').textContent = `훈련 ${i + 1}/${STEPS.length}`;
+    q('.ts').textContent = `훈련 ${i + 1}/${tut.steps.length}`;
     q('.tt').textContent = S.title; q('p').textContent = S.text;
     q('.tk').innerHTML = keyLine(S);
     q('.tb').hidden = !S.need; q('.tb i').style.width = '0%';
     glow(g.touch ? S.btn : null);
   }
   function begin() {
-    tut = { i: -1, t: 0, n: 0, spawnT: 0, cardDone: false, lastX: p.x, lastZ: p.z };
+    // 아직 안 열린 기능(변형, 오버드라이브)은 훈련에서 빼고, 열리는 순간 따로 알려 준다
+    tut = { steps: STEPS.filter((S) => !S.feat || feat[S.feat]), i: -1, t: 0, n: 0, spawnT: 0, cardDone: false, lastX: p.x, lastZ: p.z };
     rooms.phase = 'tut'; // 'clear' 가 아니면 출격 지점 문이 열리지 않는다
     layout();
     next();
   }
   function next() {
     tut.i++; tut.t = 0; tut.n = 0;
-    const S = STEPS[tut.i];
+    const S = tut.steps[tut.i];
     if (!S) { finish(false); return; }
-    if (S.id === 'card' && tut.cardDone) { next(); return; } // 이미 레벨 업으로 카드를 골랐으면 넘어감
+    if (S.id === 'grow' && tut.cardDone) { next(); return; } // 벌레를 잡다가 이미 레벨 업 카드를 골랐으면 넘어감
     tut.kills = g.stats.kills; tut.dash = p.dashId; tut.mode = p.mode; tut.special = false;
-    if (S.id === 'xp') dropGems(6);
-    if (S.id === 'card' && g.pendingLevels <= 0) g.addXp(g.xpNeed - g.xp + 0.01);
+    if (S.id === 'grow') dropGems(S.need);
     if (S.id === 'od') p.od = 1;
     show(S, tut.i);
     g.sfx.play('ready');
@@ -12165,18 +12208,20 @@ function installTutorial(game, store) {
     if (g.state === 'hangar') { panel.hidden = true; return; }
     if (rooms.phase === 'tut') { rooms.phase = 'clear'; en.detonateAll(); }
     if (skipped) { panel.hidden = true; return; }
-    tips.od = 1; store.set('tips', tips); // 훈련에서 이미 배움
+    if (feat.od) { tips.od = 1; store.set('tips', tips); } // 훈련에서 이미 배움
     panel.classList.remove('pop'); void panel.offsetWidth; panel.classList.add('done', 'pop');
-    q('.ts').textContent = 'TRAINING CLEAR'; q('.tt').textContent = '훈련 완료!'; q('p').textContent = '살아남아 고철을 모으고 기체를 키우세요';
+    q('.ts').textContent = 'TRAINING CLEAR'; q('.tt').textContent = '훈련 완료!'; q('p').textContent = '문을 지나 적을 쓸어버리고 기체를 키우세요';
     q('.tk').innerHTML = ''; q('.tb').hidden = true; q('.tx').hidden = true;
     g.sfx.play('clear');
     setTimeout(() => { if (!tut) panel.hidden = true; q('.tx').hidden = false; }, 2600);
   }
+  // 경험치 결정: n 개를 모두 주우면 딱 레벨 업 하는 양
   function dropGems(n) {
+    const v = Math.max(0.5, (g.xpNeed - g.xp) / (n * (p.stats.xpMul || 1)) + 0.05);
     for (let k = 0; k < n; k++) {
       const a = (k / n) * Math.PI * 2 + Math.random() * 0.4, r = 3.6 + Math.random() * 1.2;
       const x = Math.max(-rooms.hx + 1.5, Math.min(rooms.hx - 1.5, p.x + Math.cos(a) * r)), z = Math.max(-rooms.hz + 1.5, Math.min(rooms.hz - 1.5, p.z + Math.sin(a) * r));
-      g.pickups.gem(x, z, 1);
+      g.pickups.gem(x, z, v);
     }
   }
   // 연습 상대: 고철 벌레를 천천히, 몇 마리만
@@ -12188,7 +12233,7 @@ function installTutorial(game, store) {
     if (pt) en.pack('mite', pt[0], pt[1], 2 + (Math.random() < 0.5 ? 1 : 0), 1.2);
   }
   function step(dt) {
-    const S = STEPS[tut.i];
+    const S = tut.steps[tut.i];
     if (!S) return;
     tut.t += dt;
     // 안전 장치: 체력 절반 밑으로 안 떨어짐
@@ -12202,12 +12247,11 @@ function installTutorial(game, store) {
       k = (g.stats.kills - tut.kills) / S.need;
     } else if (S.id === 'dash') {
       k = (p.dashId - tut.dash) / S.need;
-    } else if (S.id === 'xp') {
-      k = tut.n / S.need;
-      if (!g.pickups.gems.length && k < 1) dropGems(S.need - tut.n);
-      if (tut.t > 8) for (const gem of g.pickups.gems) gem.pull = true; // 못 찾으면 끌어당겨 줌
-    } else if (S.id === 'card') {
-      k = tut.cardDone ? 1 : 0;
+    } else if (S.id === 'grow') {
+      // 결정 줍기 → 레벨 업 카드 → 고르면 끝. 다 주웠는데 모자라면 채워 준다
+      k = tut.cardDone ? 1 : Math.min(0.9, (tut.n / S.need) * 0.9);
+      if (!tut.cardDone && !g.pickups.gems.length && g.pendingLevels <= 0) { if (tut.n >= S.need) g.addXp(g.xpNeed - g.xp + 0.01); else dropGems(S.need - tut.n); }
+      if (tut.t > 6) for (const gem of g.pickups.gems) gem.pull = true; // 못 찾으면 끌어당겨 줌
     } else if (S.id === 'special') {
       spawnMites(dt, 4);
       k = tut.special ? 1 : 0;
@@ -12232,9 +12276,10 @@ function installTutorial(game, store) {
   }
   function showTip(id) {
     const T = TIPS[id];
-    tipNow = id; tipT = 4.5;
-    tipEl.className = 'pix dark' + (T.warn ? ' warn' : '') + (g.state === 'levelup' ? ' low' : '') + (panel.classList.contains('compact') ? ' compact' : '');
-    tipEl.innerHTML = `<span class="tg">TIP</span><b>${T.title}</b><p>${T.text}</p>${T.keys || T.touch ? `<div class="tk">${keyLine(T)}</div>` : ''}`;
+    tipNow = id; tipT = T.t || 4.5;
+    if (T.btn) glow(T.btn); // 새 기능: 그 버튼/슬롯을 반짝여서 어디 있는지 보여 준다
+    tipEl.className = 'pix dark' + (T.warn ? ' warn' : '') + (T.tag === 'NEW' ? ' new' : '') + (g.state === 'levelup' ? ' low' : '') + (panel.classList.contains('compact') ? ' compact' : '');
+    tipEl.innerHTML = `<span class="tg">${T.tag || 'TIP'}</span><b>${T.title}</b><p>${T.text}</p>${T.keys || T.touch ? `<div class="tk">${keyLine(T)}</div>` : ''}`;
     tipEl.hidden = false;
     tipEl.style.animation = 'none'; void tipEl.offsetWidth; tipEl.style.animation = '';
   }
@@ -12265,13 +12310,22 @@ function installTutorial(game, store) {
 
   // ---- 게임에 걸기 ----
   wrap(g, 'startRun', (orig, ...a) => {
+    g.rookieRun = life().runs < 2;
     orig(...a);
-    tipQ = []; tipNow = null; tipEl.hidden = true; panel.hidden = true;
+    tipQ = []; tipNow = null; tipEl.hidden = true; panel.hidden = true; glow(null);
+    if (life().runs >= 2) for (const id in FEATS) unlock(id); // 세 번째 출격부터는 아직 못 본 기능도 전부
     if (replay || !store.get('tutorial', 0)) begin();
   });
-  wrap(g, 'toHangar', (orig, ...a) => { tut = null; replay = false; glow(null); panel.hidden = tipEl.hidden = true; tipQ = []; tipNow = null; orig(...a); });
+  wrap(g, 'toHangar', (orig, ...a) => {
+    tut = null; replay = false; glow(null); panel.hidden = tipEl.hidden = true; tipQ = []; tipNow = null;
+    orig(...a);
+    // 첫 출격을 마치고 돌아오면 격납고 고급 탭이 열린다
+    if (!feat.hangar && life().runs > 0) { feat.hangar = 1; store.set('feat', feat); g.ui.toast('격납고 새 탭 열림: 계열, 파일럿, 위협, 연구'); }
+  });
+  // 깊이에 맞춰 기능 해금 (방에 들어선 순간)
+  wrap(rooms, 'enter', (orig, ...a) => { orig(...a); for (const id in FEATS) if (!feat[id] && rooms.depth >= FEATS[id].depth) unlock(id); });
   wrap(rooms, 'update', (orig, dt) => { orig(dt); if (tut && g.state === 'play') step(dt); });
-  wrap(g, 'addXp', (orig, v) => { orig(v); if (tut && STEPS[tut.i]?.id === 'xp') tut.n++; });
+  wrap(g, 'addXp', (orig, v) => { orig(v); if (tut && tut.steps[tut.i]?.id === 'grow') tut.n++; });
   wrap(g, 'pick', (orig, i) => { const ok = g.state === 'levelup' && g.choices?.[i]; orig(i); if (tut && ok) tut.cardDone = true; });
   wrap(g.weapons, 'special', (orig, ...a) => { const r = orig(...a); if (tut) tut.special = true; return r; });
   wrap(g, 'offerCards', (orig, ...a) => { orig(...a); if (g.choices?.some((c) => c.kind === 'evolve' || c.isEvo)) tip('evo'); });
@@ -12291,8 +12345,8 @@ function installTutorial(game, store) {
       const card = g.state === 'levelup';
       if (card !== panel.classList.contains('low')) {
         panel.classList.toggle('low', card);
-        if (card) { const ci = STEPS.findIndex((s) => s.id === 'card'), S = STEPS[ci]; q('.ts').textContent = `훈련 ${ci + 1}/${STEPS.length}`; q('.tt').textContent = S.title; q('p').textContent = S.text; q('.tk').innerHTML = keyLine(S); q('.tb').hidden = true; glow(null); }
-        else show(STEPS[tut.i], tut.i);
+        if (card) { q('.tt').textContent = CARD.title; q('p').textContent = CARD.text; q('.tk').innerHTML = keyLine(CARD); q('.tb').hidden = true; glow(null); }
+        else if (tut.steps[tut.i]) show(tut.steps[tut.i], tut.i);
       }
     }
     replayBtn.hidden = g.state !== 'hangar';
@@ -12308,7 +12362,7 @@ function installTutorial(game, store) {
       if (tipNow === 'evo' && (tipT -= dt) <= 0) tipNow = null;
       return;
     }
-    if (tipNow && (tipT -= dt) <= 0) tipNow = null;
+    if (tipNow && (tipT -= dt) <= 0) { if (TIPS[tipNow].btn) glow(null); tipNow = null; }
     if (!tipNow && tipQ.length && panel.hidden) showTip(tipQ.shift());
     tipEl.hidden = !tipNow;
   });
@@ -12316,10 +12370,12 @@ function installTutorial(game, store) {
   // 테스트용: game.tutorial.reset() 후 출격하면 처음부터
   g.tutorial = {
     get active() { return !!tut; },
-    get step() { return tut ? STEPS[tut.i]?.id : null; },
+    get step() { return tut ? tut.steps[tut.i]?.id : null; },
     reset() { store.set('tutorial', 0); store.set('tips', {}); for (const k in tips) delete tips[k]; },
     skip() { finish(true); },
+    feat, // 해금 상태 (읽기용). 새로 시작하는 사람으로 보려면 localStorage 를 지우고 다시 불러오기
   };
+  applyLocks();
 }
 
 return { installTutorial };
@@ -14229,7 +14285,10 @@ function start() {
     { key: 'threat', label: '위협', table: THREATS, ids: Object.keys(THREATS), threat: true },
     { key: 'research', label: '연구', table: RESEARCH, ids: Object.keys(RESEARCH), research: true },
   ];
-  let tab = 'arch', confirmKey = null;
+  // 첫 출격 전에는 고를 게 적게: 고급 탭은 첫 출격을 마치면 열린다 (tutorial.js game.featOn)
+  const ADV_TABS = { arch: '기체 계열마다 시작 장비와 규칙이 달라요', pilot: '파일럿마다 장점과 단점이 있어요', threat: '적을 강하게 만들고 고철을 더 받는 설정', research: '모은 고철로 기체를 영구 강화해요' };
+  const tabLocked = (key) => !!ADV_TABS[key] && game.featOn?.('hangar') === false;
+  let tab = tabLocked('arch') ? 'weapon' : 'arch', confirmKey = null;
   // 업적 보상으로만 열리는 것: 어느 업적인지
   const achFor = (kind, id) => ACHIEVEMENTS.find((a) => a.reward.kind === kind && a.reward.id === id);
   const pips = (max, lv) => Array.from({ length: max }, (_, i) => `<i class="${i < lv ? 'on' : ''}"></i>`).join('');
@@ -14341,13 +14400,14 @@ function start() {
       const id = sel[T.key], M = game.meta;
       const face = (img, text) => { b.innerHTML = `${img}<span>${T.label}</span>`; b.setAttribute('aria-label', `${T.label}: ${text}`); b.title = `${T.label}: ${text}`; };
       const im = (src) => `<img class="px-img" alt="" src="${src}">`;
-      if (T.arch) face(im(pixURL(ARCHETYPES[sel.arch || 'striker'].icon, 4)), ARCHETYPES[sel.arch || 'striker'].name);
+      if (tabLocked(T.key)) { face(im(pixURL('lock', 4)), '잠김: 첫 출격을 마치면 열려요'); b.classList.add('locked'); b.style.opacity = '.45'; }
+      else if (T.arch) face(im(pixURL(ARCHETYPES[sel.arch || 'striker'].icon, 4)), ARCHETYPES[sel.arch || 'striker'].name);
       else if (T.research) face(im(pixURL('power', 4)), `고철 ${M.scrap}`);
       else if (T.pilot) face(im(pixURL(PILOTS[M.pilot].icon, 4)), PILOTS[M.pilot].name);
       else if (T.threat) face(im(pixURL(M.threatOpen ? 'elite' : 'lock', 4)), M.threatOpen ? `${M.threat}점` : '잠김');
       else if (T.key === 'paint') face(`<i class="sw" style="background:${swatch(id)}"></i>`, PAINTS[id].name);
       else face(im(thumb(T.key, id)), T.table[id].name);
-      b.addEventListener('click', () => setTab(T.key));
+      b.addEventListener('click', () => { if (tabLocked(T.key)) ui.toast(`${T.label} 탭은 첫 출격을 마치면 열려요`); setTab(T.key); });
       tabs.appendChild(b);
     }
     const T = TABS.find((t) => t.key === tab), box = $('opts');
@@ -14356,6 +14416,7 @@ function start() {
     const M = game.meta;
     $('scrapline').textContent = `고철 ${M.scrap}`;
     const desc = (title, text) => { $('tabdesc').firstChild.textContent = title; $('tabdesc').lastChild.textContent = text; };
+    if (tabLocked(T.key)) { desc(`${T.label}: 잠김`, `첫 출격을 마치면 열려요 (쓰러져도 괜찮아요). ${ADV_TABS[T.key]}.`); renderStats(null); return; }
     const lockText = (kind, id) => { const a = achFor(kind, id); return a ? `잠김: 업적 '${a.name}' (${a.desc}) 보상.` : `잠김: 고철 ${M.price(kind, id)}으로 해금.`; };
     const showDesc = (id) => {
       if (T.research) { const lv = M.level(id), R = RESEARCH[id]; desc(R.name, `${R.desc}. ${lv >= R.max ? '완료' : `다음 단계 고철 ${researchCost(id, lv)}`}`); return; }

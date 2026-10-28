@@ -134,7 +134,7 @@ export class Player {
   get mode() { return this.ups._mode || 'walk'; }
   switchMode(next) {
     const g = this.game, fx = g.fx;
-    if (this.modeCd > 0 || g.state !== 'play') return;
+    if (this.modeCd > 0 || g.state !== 'play' || g.featOn?.('mode') === false) return; // 첫 판: 깊이 3 에서 열림 (tutorial.js)
     next = next || MODE_ORDER[(MODE_ORDER.indexOf(this.mode) + 1) % MODE_ORDER.length];
     this.ups._mode = next; this.refreshStats();
     this.modeCd = 0.6; this.buildFlash = 0.3; this.transformT = 0.35;
@@ -223,10 +223,10 @@ export class Player {
   }
 
   // ---- 오버드라이브 ----
-  addOd(v) { if (this.odT > 0) return; const was = this.od >= 1; this.od = Math.min(1, this.od + v * (1 + (this.ups._mod || 0) * 0.15)); if (!was && this.od >= 1) { this.game.ui.toast('오버드라이브 준비 완료!'); this.game.sfx.play('ready'); } }
+  addOd(v) { if (this.odT > 0 || this.game.featOn?.('od') === false) return; const was = this.od >= 1; this.od = Math.min(1, this.od + v * (1 + (this.ups._mod || 0) * 0.15)); if (!was && this.od >= 1) { this.game.ui.toast('오버드라이브 준비 완료!'); this.game.sfx.play('ready'); } }
   overdrive() {
     const g = this.game, fx = g.fx;
-    if (this.od < 1 || this.odT > 0) return false;
+    if (this.od < 1 || this.odT > 0 || g.featOn?.('od') === false) return false; // 첫 판: 깊이 2 에서 열림 (tutorial.js)
     this.od = 0; this.odT = 8;
     this.ups._od = 1; this.refreshStats();
     this.invuln = Math.max(this.invuln, 0.8);
