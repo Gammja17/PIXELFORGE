@@ -97,6 +97,8 @@ export const ZONE_GIMMICK = {
 //   8   | 타이탄 + 물량   | 2.00 + 0.05·pw' | 타이탄 공식  | -                   | 타이탄 → MK-II (가장 높은 벽)
 //  물량 상한 2.4. 떼거리 체력 = swarm · pw^(e/2). 중간 보스 체력 = 1500 · mid[0] · pw^mid[1].
 //  bul = 수호자/중간 보스 탄을 고르게 솎아 내고 남기는 비율 (틈이 넓어진다, enemies.shoot)
+//  첫 두 판(game.rookieRun, tutorial.js): 첫 구역은 사막(수호자 = 샌드웜/거미), 첫 방은 섬멸전이나 짧은 방어선(28초),
+//  깊이 2 까지 적 피해 x0.7. 표 자체는 그대로 (ROOKIE)
 export const CURVE = [
   //      dens  dPw   dmg   mPw   hp   hpE   swarm mid         haz   troop xp    guard bul
   /* 0 */ [0.7, 0.03, 0.55, 0, 1.0, 0.3, 1.0, [1.2, 0.4], 0, 0, 1.5, 1, 1],
@@ -109,6 +111,7 @@ export const CURVE = [
   /* 7 */ [1.5, 0.15, 1.7, 0.05, 3.4, 0.76, 2.7, [4.1, 0.7], 1.2, 0.3, 1, 1, 1],
   /* 8 */ [1.6, 0.15, 2.0, 0.05, 3.8, 0.8, 3.0, [4.5, 0.7], 0.6, 0.3, 1, 1, 1],
 ].map(([dens, densPw, dmg, dmgPw, hp, hpExp, swarm, mid, haz, troop, xp, guard, bul]) => ({ dens, densPw, dmg, dmgPw, hp, hpExp, swarm, mid, haz, troop, xp, guard, bul }));
+export const ROOKIE = { dmg: 0.7, upTo: 2, survive: 28, zone: 'desert', ops: ['horde', 'survive'] };
 export const curveAt = (depth) => CURVE[Math.max(0, Math.min(CURVE.length - 1, depth | 0))];
 
 // 처음 나오는 깊이 (스폰 조건). 위 표의 '새로 나오는 적' 칸과 같다
@@ -172,6 +175,7 @@ export class Rooms {
   }
 
   get last() { return RUN_ZONES.length - 1; }
+  get rookie() { return !!this.game.rookieRun; } // 첫 두 판 (위 ROOKIE)
   zoneAt(depth) { return this.zones[Math.min(this.zones.length - 1, Math.floor(Math.max(0, depth) / 3))]; }
 
   // ---- 난이도 ----
@@ -191,6 +195,7 @@ export class Rooms {
       swarmHp: C.swarm * Math.pow(pw, C.hpExp * 0.5),
       dmg: C.dmg + p1 * C.dmgPw,
       dens: Math.min(2.4, C.dens + p1 * C.densPw),
+      ...(this.rookie && d <= ROOKIE.upTo ? { dmg: (C.dmg + p1 * C.dmgPw) * ROOKIE.dmg } : null),
       xp: C.xp, bul: C.bul,
     };
   }
@@ -199,7 +204,9 @@ export class Rooms {
   guardHp() { return curveAt(this.depth).guard; }
 
   newRun() {
-    this.depth = -1; this.path = []; this.seed = (Math.random() * 1e9) | 0; this.zones = pickZones(this.seed); this.lastLayout = null; this.lastSpecial = null;
+    this.depth = -1; this.path = []; this.seed = (Math.random() * 1e9) | 0; this.zones = pickZones(this.seed);
+    if (this.rookie && this.zones[0] !== ROOKIE.zone) this.zones = [ROOKIE.zone, ...this.zones.filter((z) => z !== ROOKIE.zone)].slice(0, 3);
+    this.lastLayout = null; this.lastSpecial = null;
     // 최종 보스: 첫 출격은 타이탄, 그다음부터 지난번과 다른 보스 (enemies.js FINAL_BOSSES)
     let last = null; try { last = localStorage.getItem('mechaforge.boss'); } catch { /* 무시 */ }
     const runs = this.game.meta?.data?.life?.runs || 0, ids = Object.keys(FINAL_BOSSES).filter((k) => k !== last);
@@ -245,6 +252,7 @@ export class Rooms {
     const big = boss || reward === 'guardian';
     const combat = ['part', 'system', 'supply', 'xp', 'elite', 'cargo'].includes(reward);
     // 작전 (ops.js): 문에서 정해 온 것, 없으면 여기서 고른다
+    if (this.rookie && depth === 1 && combat && !ROOKIE.ops.includes(op)) op = R.pick(ROOKIE.ops);
     this.op = combat ? (this.force.op || op || pickOp(reward, depth, R, [this.lastOp])) : null;
     this.lastOp = this.op;
     this.hx = big ? 16 : R.range(15, 18); this.hz = big ? 16 : R.range(15, 18);
@@ -270,7 +278,7 @@ export class Rooms {
     const exits = this.rollExits(depth);
     const farSides = exits.length === 1 ? [R() < 0.5 ? 'W' : 'S'] : ['W', 'S'];
     const taken = [this.op];
-    this.doors = exits.map((rw, i) => { const o = pickOp(rw, depth + 1, R, taken); taken.push(o); return { side: farSides[i], reward: rw, op: o, open: false, fade: 0 }; });
+    this.doors = exits.map((rw, i) => { const o = this.rookie && depth === 0 ? ROOKIE.ops[i % 2] : pickOp(rw, depth + 1, R, taken); taken.push(o); return { side: farSides[i], reward: rw, op: o, open: false, fade: 0 }; });
     // 구역 경계: 문마다 다른 구역으로 이어진다 (경로 분기). 정해 둔 다음 구역 + 아직 안 간 구역 하나
     if ((depth + 1) % 3 === 0 && depth + 1 < this.last && this.doors.length >= 2) {
       const idx = (depth + 1) / 3, used = this.zones.slice(0, idx);
@@ -355,7 +363,7 @@ export class Rooms {
     this.waves = boss ? [{ boss: true }] : [];
     this.waveT = 1.2;
     // 물량전: 제한 시간 동안 버티며 쓸어버리기
-    this.duration = boss ? 0 : 34 + depth * 5;
+    this.duration = boss ? 0 : this.rookie && depth === 1 ? ROOKIE.survive : 34 + depth * 5;
     this.roomT = 0; this.acc = 0; this.marks = new Set(); this.bossOn = false; this.guardOn = false; this.waitMid = false; this.told = false;
     this.midAt = [];
     if (reward === 'guardian') { this.duration = 0; this.waveT = 1.5; }

@@ -444,7 +444,10 @@ function start() {
     { key: 'threat', label: '위협', table: THREATS, ids: Object.keys(THREATS), threat: true },
     { key: 'research', label: '연구', table: RESEARCH, ids: Object.keys(RESEARCH), research: true },
   ];
-  let tab = 'arch', confirmKey = null;
+  // 첫 출격 전에는 고를 게 적게: 고급 탭은 첫 출격을 마치면 열린다 (tutorial.js game.featOn)
+  const ADV_TABS = { arch: '기체 계열마다 시작 장비와 규칙이 달라요', pilot: '파일럿마다 장점과 단점이 있어요', threat: '적을 강하게 만들고 고철을 더 받는 설정', research: '모은 고철로 기체를 영구 강화해요' };
+  const tabLocked = (key) => !!ADV_TABS[key] && game.featOn?.('hangar') === false;
+  let tab = tabLocked('arch') ? 'weapon' : 'arch', confirmKey = null;
   // 업적 보상으로만 열리는 것: 어느 업적인지
   const achFor = (kind, id) => ACHIEVEMENTS.find((a) => a.reward.kind === kind && a.reward.id === id);
   const pips = (max, lv) => Array.from({ length: max }, (_, i) => `<i class="${i < lv ? 'on' : ''}"></i>`).join('');
@@ -556,13 +559,14 @@ function start() {
       const id = sel[T.key], M = game.meta;
       const face = (img, text) => { b.innerHTML = `${img}<span>${T.label}</span>`; b.setAttribute('aria-label', `${T.label}: ${text}`); b.title = `${T.label}: ${text}`; };
       const im = (src) => `<img class="px-img" alt="" src="${src}">`;
-      if (T.arch) face(im(pixURL(ARCHETYPES[sel.arch || 'striker'].icon, 4)), ARCHETYPES[sel.arch || 'striker'].name);
+      if (tabLocked(T.key)) { face(im(pixURL('lock', 4)), '잠김: 첫 출격을 마치면 열려요'); b.classList.add('locked'); b.style.opacity = '.45'; }
+      else if (T.arch) face(im(pixURL(ARCHETYPES[sel.arch || 'striker'].icon, 4)), ARCHETYPES[sel.arch || 'striker'].name);
       else if (T.research) face(im(pixURL('power', 4)), `고철 ${M.scrap}`);
       else if (T.pilot) face(im(pixURL(PILOTS[M.pilot].icon, 4)), PILOTS[M.pilot].name);
       else if (T.threat) face(im(pixURL(M.threatOpen ? 'elite' : 'lock', 4)), M.threatOpen ? `${M.threat}점` : '잠김');
       else if (T.key === 'paint') face(`<i class="sw" style="background:${swatch(id)}"></i>`, PAINTS[id].name);
       else face(im(thumb(T.key, id)), T.table[id].name);
-      b.addEventListener('click', () => setTab(T.key));
+      b.addEventListener('click', () => { if (tabLocked(T.key)) ui.toast(`${T.label} 탭은 첫 출격을 마치면 열려요`); setTab(T.key); });
       tabs.appendChild(b);
     }
     const T = TABS.find((t) => t.key === tab), box = $('opts');
@@ -571,6 +575,7 @@ function start() {
     const M = game.meta;
     $('scrapline').textContent = `고철 ${M.scrap}`;
     const desc = (title, text) => { $('tabdesc').firstChild.textContent = title; $('tabdesc').lastChild.textContent = text; };
+    if (tabLocked(T.key)) { desc(`${T.label}: 잠김`, `첫 출격을 마치면 열려요 (쓰러져도 괜찮아요). ${ADV_TABS[T.key]}.`); renderStats(null); return; }
     const lockText = (kind, id) => { const a = achFor(kind, id); return a ? `잠김: 업적 '${a.name}' (${a.desc}) 보상.` : `잠김: 고철 ${M.price(kind, id)}으로 해금.`; };
     const showDesc = (id) => {
       if (T.research) { const lv = M.level(id), R = RESEARCH[id]; desc(R.name, `${R.desc}. ${lv >= R.max ? '완료' : `다음 단계 고철 ${researchCost(id, lv)}`}`); return; }
