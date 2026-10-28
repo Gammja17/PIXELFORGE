@@ -474,6 +474,8 @@
   .stat span { font-size: 12px; font-weight: 700; color: var(--muted); white-space: nowrap; }
   .stat b { font-family: var(--font-tech); font-size: 24px; color: var(--cyan); font-weight: 800; text-shadow: 0 0 6px rgba(95,224,255,.35); }
   #resparts { white-space: pre-line; font-size: 12px; line-height: 1.6; color: var(--text); margin: 0; }
+  /* 플레이테스트: 기록 복사 + 설문 (telemetry.js) */
+  #restest .btn { min-height: 32px !important; font-size: 12px; color: var(--muted) !important; display: flex; align-items: center; justify-content: center; text-decoration: none; }
   /* 무기별 초당 피해 */
   #resdps { display: grid; gap: 4px; }
   #resdps:empty, #resach:empty { display: none; }
@@ -868,6 +870,7 @@
     <div id="resach"></div>
     <p id="resparts"></p>
     <div class="btns"><button type="button" class="btn primary" id="retry">다시 출격</button><button type="button" class="btn" id="tohangar">격납고로</button></div>
+    <div class="btns" id="restest"><button type="button" class="btn" id="rescopy">테스트 기록 복사</button><a class="btn" id="ressurvey" target="_blank" rel="noopener" hidden>설문 열기</a></div>
   </div>
 </section>
 
