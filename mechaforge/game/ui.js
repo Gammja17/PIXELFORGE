@@ -475,8 +475,11 @@ function start() {
   ];
   const v3add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
   const callEls = {};
-  let hangRect = null; // 격납고 판 위치 (화면 크기나 탭이 바뀌면 다시 잰다)
-  addEventListener('resize', () => { hangRect = null; });
+  // 격납고 배율: 다른 화면(uiz)보다 덜 키운다 (1600x900 → 1.3). page.html 의 --hz
+  let hz = 1, hangRect = null; // 격납고 판 위치 (화면 크기나 탭이 바뀌면 다시 잰다)
+  const hangLayout = () => { hz = Math.max(1, Math.round(uiz * 0.8 * 10) / 10); document.documentElement.style.setProperty('--hz', hz); hangRect = null; };
+  hangLayout();
+  addEventListener('resize', hangLayout);
   function drawCallouts(g) {
     const m = g.player.mech, dpr = g.engine.dpr;
     if (!m) return;
@@ -486,10 +489,10 @@ function start() {
     // 카메라가 기체를 판 오른쪽 남은 공간 가운데로 옮길 수 있게 판이 가린 몫을 알려 준다
     if (!hangRect && !$('hangar').hidden) hangRect = $('hangar').querySelector('.modal').getBoundingClientRect();
     g.hangarInset = hangRect ? Math.min(0.6, hangRect.right / innerWidth) : 0;
-    // 돌려 보기 안내: 발밑과 받침 고리(반지름 2) 앞쪽 끝 사이. 세로 화면이면 아래쪽 판에 가리지 않게 (turnhint 는 zoom 이 걸려 있어서 px 를 uiz 로 나눈다)
+    // 돌려 보기 안내: 발밑과 받침 고리(반지름 2) 앞쪽 끝 사이. 세로 화면이면 아래쪽 판에 가리지 않게 (turnhint 는 zoom 이 걸려 있어서 px 를 hz 로 나눈다)
     let foot = c0[1];
     for (let i = 0; i < 8; i++) { const r = P([Math.cos(i * Math.PI / 4) * 2.1, 0, Math.sin(i * Math.PI / 4) * 2.1]); if (r) foot = Math.max(foot, r[1]); }
-    const th = $('turnhint'); th.style.left = `${Math.round(c0[0] / uiz)}px`; th.style.top = `${Math.round(Math.min(c0[1] + (foot - c0[1]) * 0.5, (hangRect && innerHeight > innerWidth ? hangRect.top : innerHeight) - 36 * uiz) / uiz)}px`;
+    const th = $('turnhint'); th.style.left = `${Math.round(c0[0] / hz)}px`; th.style.top = `${Math.round(Math.min(c0[1] + (foot - c0[1]) * 0.5, (hangRect && innerHeight > innerWidth ? hangRect.top : innerHeight) - 36 * hz) / hz)}px`;
   }
   function setTab(key) { tab = key; renderHangar(); }
 
@@ -524,6 +527,8 @@ function start() {
     const box = $('opts'), same = tab === shownTab, top = box.scrollTop;
     buildHangar();
     hangRect = null;
+    // 칸에는 이름 글자를 안 보이니 title/aria-label 로
+    for (const b of box.querySelectorAll('.opt')) { const n = b.querySelector('b')?.textContent; if (n) { b.setAttribute('aria-label', n); if (!b.title) b.title = n; } }
     if (same) { box.scrollTop = top; return; }
     shownTab = tab;
     const on = box.querySelector('[aria-pressed="true"]');

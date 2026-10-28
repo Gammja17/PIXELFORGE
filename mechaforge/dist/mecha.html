@@ -272,9 +272,13 @@
 
   /* ---- 격납고 (v8): 왼쪽 판 하나에 탭 → 부품 격자(세로 스크롤) → 이름/설명 → 능력치 → 출격.
      판은 화면 폭의 40% 안팎, 높이는 화면 가득. 기체는 남은 오른쪽 공간 가운데 (main.js 카메라가 판 폭을 읽는다) */
-  :root { --hpw: clamp(372px, calc(40vw / var(--uiz)), 440px); }
+  /* 격납고는 다른 화면보다 덜 키운다 (--hz, ui.js 가 넣음): 글자가 화면에 비해 너무 커 보이지 않게 */
+  :root { --hpw: clamp(372px, calc(40vw / var(--hz, var(--uiz))), 480px); }
+  #hangar > .modal, #hangtools, #turnhint, #bayframe { zoom: var(--hz, var(--uiz)) !important; }
   .ui-vshort { --hpw: clamp(372px, 47vw, 420px); }
-  #hangar { place-items: stretch start; pointer-events: none; }
+  /* 판 높이는 화면 가득이되 너무 길어지지 않게 (빈칸이 커지지 않게), 세로 가운데 */
+  #hangar { place-items: center start; pointer-events: none; }
+  #hangar > .modal { height: 100%; max-height: 520px; }
   #hangar .modal { pointer-events: auto; width: var(--hpw); max-width: none; min-height: 0; display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; overflow-y: auto; scrollbar-width: thin; position: relative;
     border: 1px solid #3a4158; border-image: none; background: rgba(9, 11, 17, .88); box-shadow: 0 0 0 1px #000, 0 4px 0 rgba(0, 0, 0, .4); }
   .hhead { display: flex; align-items: center; gap: 8px; }
@@ -301,7 +305,8 @@
   #hangar .opt { border: 1px solid #2b3145; border-image: none; background: rgba(255, 255, 255, .035); padding: 5px 3px 4px; display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; position: relative; }
   #hangar .opt:hover { border-color: #59627e; background: rgba(255, 255, 255, .08); filter: none; }
   .opt img { width: 44px; height: 44px; }
-  .opt b { font-size: 12px; font-weight: 700; line-height: 1.25; text-align: center; color: #e8e9f0; word-break: keep-all; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  /* 칸에는 그림만 (이름은 가리키거나 고르면 아래 설명 칸에, 칸의 title/aria-label 에도) */
+  .opt b { display: none; }
   .opt .sw { width: 34px; height: 34px; margin: 7px 0; display: block; box-shadow: 0 0 0 1px #000, 0 0 0 2px #59627e; }
   /* 고른 것: 호박색 테두리 + 오른쪽 위 삼각 표시 */
   #hangar .opt[aria-pressed="true"] { border-color: var(--accent); background: rgba(255, 201, 61, .15); box-shadow: inset 0 0 0 1px var(--accent); }
@@ -319,13 +324,13 @@
   .opt.cant .chip { background: #2a1219; color: #ff8593; box-shadow: inset 0 0 0 1px #6b2634; }
   .opt.reward .chip { background: #2a1430; color: #ff9ad8; box-shadow: inset 0 0 0 1px #6b2a5c; }
   .opt .chip.on { background: var(--xp); color: #0d0d11; box-shadow: none; }
-  .opt .chip.rule { background: none; color: #8fd8ff; box-shadow: inset 0 0 0 1px #24405a; font-family: var(--font-body); }
+  .opt .chip.rule { display: none; }
   .opt .rlv { display: flex; gap: 2px; } .opt .rlv i { width: 7px; height: 7px; background: #2c2e3a; display: block; box-shadow: 0 0 0 1px #000; } .opt .rlv i.on { background: var(--xp); }
   .opt.lv img { width: 32px; height: 32px; }
   #resstats .stat:first-child b { color: var(--accent); }
   /* 고른 (또는 가리킨) 부품: 이름 > 설명 */
-  #tabdesc { display: grid; gap: 4px; min-height: 72px; align-content: start; padding: 8px 2px 0; border-top: 1px solid #262b3c; }
-  #tabdesc b { font-size: 24px; font-weight: 800; line-height: 1.1; color: #fff; text-shadow: 0 2px 0 #000; }
+  #tabdesc { display: grid; gap: 4px; min-height: 64px; align-content: start; padding: 8px 2px 0; border-top: 1px solid #262b3c; }
+  #tabdesc b { font-size: 12px; font-weight: 800; line-height: 1.3; color: var(--accent); text-shadow: 0 1px 0 #000; }
   #tabdesc span { font-size: 12px; line-height: 1.5; color: #c9cddb; }
   /* 능력치 막대: 가리키면 바뀌는 만큼을 초록/빨강 칸과 ▲▼ 로 */
   #statline { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 18px; padding: 0 2px; }
@@ -355,7 +360,7 @@
   .ui-short .opt .sw { width: 28px; height: 28px; margin: 6px 0; }
   .ui-short .opt.lv img { width: 26px; height: 26px; }
   .ui-short #opts { grid-template-columns: repeat(auto-fill, minmax(62px, 1fr)); gap: 5px; min-height: 84px; }
-  .ui-short #tabdesc { min-height: 64px; padding-top: 6px; }
+  .ui-short #tabdesc { min-height: 56px; padding-top: 6px; }
   .ui-short #tabdesc span { line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   .ui-short #statline { gap: 5px 16px; }
   .ui-short #launch, .ui-short #hangar .btn:not(.primary) { min-height: 48px; }
@@ -373,7 +378,6 @@
   .ui-vshort #hangar .opt { padding: 4px 3px; gap: 3px; }
   .ui-vshort #opts { grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); gap: 4px; min-height: 70px; }
   .ui-vshort #tabdesc { gap: 2px; padding-top: 4px; min-height: 48px; }
-  .ui-vshort #tabdesc b { font-size: 12px; color: var(--accent); }
   .ui-vshort #tabdesc span { -webkit-line-clamp: 2; line-height: 1.35; }
   .ui-vshort #statline { grid-template-columns: repeat(3, 1fr); gap: 4px 10px; }
   .ui-vshort .sbar { grid-template-columns: 26px 1fr 40px; gap: 4px; }
@@ -382,7 +386,7 @@
   .ui-vshort #hangtools { top: calc(var(--sat) + 6px); right: calc(var(--sar) + 6px); }
   .ui-touch #opts { scrollbar-width: none; }
   .ui-portrait #hangar { place-items: end center; }
-  .ui-portrait #hangar .modal { width: 100%; max-height: 62%; }
+  .ui-portrait #hangar .modal { width: 100%; height: auto; max-height: 62%; }
   .ui-portrait #opts { flex: 0 1 auto; }
 
   /* 정비 기지 */
@@ -741,7 +745,7 @@
 </div>
 <div id="stick" hidden><div id="knob"></div></div>
 
-<div id="bayframe"><p class="tl">기체를 조립하고 출격하세요. 구역 9개를 돌파해 타이탄을 쓰러뜨리면 승리.</p><p class="br" id="besttext"></p></div>
+<div id="bayframe"><p class="br" id="besttext"></p></div>
 <section id="hangar" class="screen">
   <div id="hangtools"><button type="button" class="mini sndbtn" id="sndhangar">소리 켜짐</button><button type="button" class="mini sndbtn" id="shakehangar">흔들림 약하게</button></div>
   <div class="modal">
@@ -13506,8 +13510,11 @@ function start() {
   ];
   const v3add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
   const callEls = {};
-  let hangRect = null; // 격납고 판 위치 (화면 크기나 탭이 바뀌면 다시 잰다)
-  addEventListener('resize', () => { hangRect = null; });
+  // 격납고 배율: 다른 화면(uiz)보다 덜 키운다 (1600x900 → 1.3). page.html 의 --hz
+  let hz = 1, hangRect = null; // 격납고 판 위치 (화면 크기나 탭이 바뀌면 다시 잰다)
+  const hangLayout = () => { hz = Math.max(1, Math.round(uiz * 0.8 * 10) / 10); document.documentElement.style.setProperty('--hz', hz); hangRect = null; };
+  hangLayout();
+  addEventListener('resize', hangLayout);
   function drawCallouts(g) {
     const m = g.player.mech, dpr = g.engine.dpr;
     if (!m) return;
@@ -13517,10 +13524,10 @@ function start() {
     // 카메라가 기체를 판 오른쪽 남은 공간 가운데로 옮길 수 있게 판이 가린 몫을 알려 준다
     if (!hangRect && !$('hangar').hidden) hangRect = $('hangar').querySelector('.modal').getBoundingClientRect();
     g.hangarInset = hangRect ? Math.min(0.6, hangRect.right / innerWidth) : 0;
-    // 돌려 보기 안내: 발밑과 받침 고리(반지름 2) 앞쪽 끝 사이. 세로 화면이면 아래쪽 판에 가리지 않게 (turnhint 는 zoom 이 걸려 있어서 px 를 uiz 로 나눈다)
+    // 돌려 보기 안내: 발밑과 받침 고리(반지름 2) 앞쪽 끝 사이. 세로 화면이면 아래쪽 판에 가리지 않게 (turnhint 는 zoom 이 걸려 있어서 px 를 hz 로 나눈다)
     let foot = c0[1];
     for (let i = 0; i < 8; i++) { const r = P([Math.cos(i * Math.PI / 4) * 2.1, 0, Math.sin(i * Math.PI / 4) * 2.1]); if (r) foot = Math.max(foot, r[1]); }
-    const th = $('turnhint'); th.style.left = `${Math.round(c0[0] / uiz)}px`; th.style.top = `${Math.round(Math.min(c0[1] + (foot - c0[1]) * 0.5, (hangRect && innerHeight > innerWidth ? hangRect.top : innerHeight) - 36 * uiz) / uiz)}px`;
+    const th = $('turnhint'); th.style.left = `${Math.round(c0[0] / hz)}px`; th.style.top = `${Math.round(Math.min(c0[1] + (foot - c0[1]) * 0.5, (hangRect && innerHeight > innerWidth ? hangRect.top : innerHeight) - 36 * hz) / hz)}px`;
   }
   function setTab(key) { tab = key; renderHangar(); }
 
@@ -13555,6 +13562,8 @@ function start() {
     const box = $('opts'), same = tab === shownTab, top = box.scrollTop;
     buildHangar();
     hangRect = null;
+    // 칸에는 이름 글자를 안 보이니 title/aria-label 로
+    for (const b of box.querySelectorAll('.opt')) { const n = b.querySelector('b')?.textContent; if (n) { b.setAttribute('aria-label', n); if (!b.title) b.title = n; } }
     if (same) { box.scrollTop = top; return; }
     shownTab = tab;
     const on = box.querySelector('[aria-pressed="true"]');
