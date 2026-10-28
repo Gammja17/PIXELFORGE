@@ -57,7 +57,7 @@ const CSS = `
 #tuttip b { font-family: var(--font-tech, monospace), var(--font-body, sans-serif); font-size: 24px; font-weight: 800; color: var(--accent, #ffc93d); text-shadow: 0 2px 0 #000; }
 #tuttip.warn b { color: var(--hp, #ff4d5e); }
 #tutbtn { white-space: nowrap; }
-#pad button.tut-glow { animation: tutglow .5s steps(2) infinite; }
+#pad button.tut-glow, #skills .tut-glow { animation: tutglow .5s steps(2) infinite; }
 @keyframes tutglow { 50% { box-shadow: 0 0 0 4px var(--accent, #ffc93d), 0 0 18px 6px var(--accent, #ffc93d); } }
 @media (pointer: coarse) { #tuttip { bottom: auto; top: var(--tut-top, calc(var(--sat, 0px) + 84px)); } }
 /* 낮은 화면 (폰 가로): 맨 위 HUD 사이 빈칸에 한 덩어리로. 제목 줄에 단계와 건너뛰기 */
@@ -111,7 +111,9 @@ export function installTutorial(game, store) {
   else { Object.assign(replayBtn.style, { position: 'fixed', left: '12px', bottom: '12px', zIndex: 30 }); ($('hangar') || document.body).appendChild(replayBtn); }
 
   // ---- 튜토리얼 진행 ----
-  const glow = (id) => { for (const b of document.querySelectorAll('#pad .tut-glow')) b.classList.remove('tut-glow'); if (id) $(id)?.classList.add('tut-glow'); };
+  // 터치 버튼과 같은 역할의 데스크톱 스킬 슬롯도 같이 반짝임
+  const SLOT = { dashbtn: 'dashline', spbtn: 'spline', modebtn: 'modeline', odbtn: 'odline' };
+  const glow = (id) => { for (const b of document.querySelectorAll('.tut-glow')) b.classList.remove('tut-glow'); if (id) { $(id)?.classList.add('tut-glow'); $(SLOT[id])?.classList.add('tut-glow'); } };
   function show(S, i) {
     panel.classList.remove('done', 'low', 'pop'); void panel.offsetWidth; panel.classList.add('pop');
     q('.ts').textContent = `훈련 ${i + 1}/${STEPS.length}`;
@@ -226,6 +228,11 @@ export function installTutorial(game, store) {
     const box = (id) => { const el = $(id); return el && !el.hidden && el.offsetParent ? el.getBoundingClientRect() : null; };
     const st = document.body.style, compact = innerHeight < 520;
     panel.classList.toggle('compact', compact); tipEl.classList.toggle('compact', compact);
+    // 데스크톱: 아래 줄(무기 슬롯, 스킬 슬롯, 오버드라이브 안내) 바로 위. 패널은 zoom(--uiz) 이 걸려 있어서 화면 px 를 zoom 으로 나눈다
+    const z = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--uiz')) || 1;
+    let bot = innerHeight;
+    for (const id of ['rack', 'skills', 'odcall']) { const el = $(id); if (el && !el.hidden && el.getClientRects().length) bot = Math.min(bot, el.getBoundingClientRect().top); } // 고정 위치라 offsetParent 가 없다
+    if (bot < innerHeight) st.setProperty('--tut-bot', `${Math.round((innerHeight - bot + 10) / z)}px`); else st.removeProperty('--tut-bot');
     const hp = box('hpbox'), side = box('side'), xp = box('xprow');
     if (compact && hp && side && side.left - hp.right > 280) {
       st.setProperty('--tut-top', `${Math.round((xp?.bottom || 0) + 4)}px`);

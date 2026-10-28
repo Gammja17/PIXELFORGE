@@ -51,7 +51,7 @@
   .ui-touch kbd.k { display: none; }
 
   /* 화면 크기에 맞춰 통째로 키우는 UI 덩어리 */
-  #hud, #hint, #toast, #banner, #combo, #cutin, #skip, #dots, #odcall, #pad, .screen > .modal { zoom: var(--uiz); }
+  #hud, #skills, #toast, #banner, #combo, #cutin, #skip, #dots, #odcall, #pad, .screen > .modal { zoom: var(--uiz); }
 
   /* ---- 철판 ---- */
   .pix, .btn, .tab, .opt, .track, .screenbox {
@@ -208,11 +208,6 @@
   .dots-label { padding: 0 6px 0 2px; }
   #dots button { width: 36px; height: 36px; min-height: 0; padding: 0; font-size: 12px; line-height: 1; overflow: visible; }
   #dot-val { min-width: 34px; text-align: center; font-size: 12px; color: var(--accent); }
-  #hint { position: fixed; right: calc(var(--sar) + 8px); bottom: calc(var(--sab) + 8px); margin: 0; padding: 0 2px; font-size: 12px; font-weight: 700; color: var(--text); pointer-events: none; white-space: nowrap; }
-  #hint kbd.k { font-size: 12px; margin-right: 2px; }
-  #hint .sep { color: var(--dim); margin: 0 5px; }
-  #hint .od { color: #ffb066; }
-  #hint .od kbd.k { background: var(--od); color: #2b1004; box-shadow: inset 0 -2px 0 #8a3a00, 0 0 0 1px #000; }
 
   /* 터치 버튼: 도트로 찍은 둥근 철 버튼 */
   #pad { position: fixed; right: calc(var(--sar) + 14px); bottom: calc(var(--sab) + 14px); width: 222px; height: 198px; pointer-events: none; }
@@ -509,7 +504,6 @@
   .ui-portrait #spbtn { right: 100px; width: 68px; height: 68px; }
   .ui-portrait #dashbtn { bottom: 104px; width: 64px; height: 64px; right: 14px; }
   .ui-portrait #odbtn { right: 92px; bottom: 80px; width: 80px; height: 80px; }
-  .ui-narrow #hint { display: none; }
   .ui-tiny #hudrow { flex-wrap: wrap; }
   .ui-tiny #hpbox { width: auto; flex: 1 1 220px; }
   .ui-tiny #mid { order: 3; flex-basis: 100%; }
@@ -572,8 +566,6 @@
   #xplv { font-size: 12px; color: #a6ffc2; }
   #dots.play { display: none !important; }
   body.paused #dots.play { display: flex !important; }
-  #hint .sep { display: inline-block; width: 10px; }
-  #hint.pix { padding: 6px 12px; }
   /* 튜토리얼 안내/팁: 가운데 아래(알림 자리)와 겹치지 않게 왼쪽 위, 상태판 아래로 */
   body #tut, body #tuttip { left: calc(var(--sal) + 12px) !important; right: auto !important; transform: none !important; top: calc(var(--sat) + 84px) !important; bottom: auto !important; max-width: 340px !important; }
   body.paused #tut, body.paused #tuttip { display: none !important; }
@@ -679,6 +671,77 @@
   #intro .drop { color: #8ff0ff; }
   #intro.boss { --mk: #ffb43d; width: 260px; }
   @media (pointer: coarse) { #intro { bottom: calc(var(--sab) + 200px); width: 220px; } #intro b { font-size: 12px; } }
+
+  /* ==== 전투 HUD (v9): 체력은 늘 왼쪽 위 큰 막대, 대시/특수기/변형/오버드라이브는 오른쪽 아래 스킬 슬롯 (무기 슬롯 맞은편).
+     조작 안내줄과 상태판 접기는 없앰. 튜토리얼/팁은 아래 줄 바로 위 가운데 (기체와 문 표지를 안 가리게) ==== */
+  #hpbox { width: 268px; padding: 6px 8px !important; display: flex; align-items: center; gap: 6px; }
+  #hpline { flex: 1; min-width: 0; }
+  #hpbar { height: 28px; }
+  #hptext { font-size: 24px; }
+  #shieldpip { flex: none; font-size: 12px; line-height: 1; color: #0d0d11; background: var(--cyan); padding: 3px 4px; box-shadow: 0 0 0 1px #000; }
+  #shieldpip.off { background: #2a2c36; color: var(--dim); }
+  #hpbox.low { --mk: var(--hp); }
+
+  #skills { position: fixed; right: calc(var(--sar) + 10px); bottom: calc(var(--sab) + 10px); display: flex; gap: 6px; align-items: flex-end; pointer-events: none; }
+  .sk { --sc: var(--paper); position: relative; width: 62px; height: 62px; box-sizing: border-box; padding-top: 6px; display: grid; justify-items: center; align-content: center; gap: 3px;
+    border: 2px solid var(--medge); background: repeating-linear-gradient(0deg, rgba(255, 255, 255, .03) 0 1px, transparent 1px 3px), rgba(8, 10, 16, .88);
+    box-shadow: 0 3px 0 rgba(0, 0, 0, .5); text-shadow: 0 2px 0 #000; color: #fff; overflow: visible; }
+  .sk > svg { width: 24px; height: 24px; display: block; color: var(--sc); filter: drop-shadow(0 2px 0 #000); }
+  .sk > span { font-size: 12px; line-height: 1; white-space: nowrap; max-width: 58px; overflow: hidden; }
+  .sk > kbd.k { position: absolute; left: -2px; top: -9px; font-size: 12px; z-index: 2; }
+  .sk .cd { position: absolute; left: 0; right: 0; top: 0; height: 0; background: rgba(0, 0, 0, .68); pointer-events: none; }
+  .sk.ready { border-color: var(--sc); }
+  .sk.ready > span { color: var(--sc); }
+  #dashline { --sc: var(--cyan); }
+  #pipwrap { display: flex; gap: 3px; }
+  #pipwrap .pip { width: 12px; height: 6px; box-shadow: 0 0 0 1px #000; }
+  #pipwrap .pip i { background: var(--cyan); }
+  #spline { --sc: var(--pink); width: 84px; }
+  #spline > span { max-width: 80px; }
+  #modeline { --sc: var(--xp); width: 62px; justify-content: initial; }
+  #modename { font-size: 12px; line-height: 1; color: var(--sc); white-space: nowrap; }
+  #modeline > span { color: #8d96b3; }
+  #modeline.fly { --sc: var(--cyan); } #modeline.snipe { --sc: var(--hp); } #modeline.storm { --sc: var(--od); }
+  #odline { --sc: var(--od); width: 96px; }
+  #odline > span:first-of-type { max-width: 92px; color: #ffc89a; }
+  #odpip { position: absolute; left: 4px; right: 4px; bottom: 4px; height: 4px; background: #1d2130; box-shadow: 0 0 0 1px #000; animation: none !important; }
+  #odpip i { position: absolute; inset: 0 auto 0 0; background: var(--od); }
+  #odkey { position: absolute; right: 4px; top: 4px; min-width: 0; font-size: 12px; line-height: 1; color: #ffc89a; }
+  #odline.full { animation: odslot .5s steps(2) infinite; }
+  #odline.full kbd.k { background: var(--od); color: #2b1004; box-shadow: inset 0 -2px 0 #8a3a00, 0 0 0 1px #000; }
+  #odline.full > span, #odline.full #odkey { color: var(--od); }
+  #odline.on #odpip i { background: #ffe0b8; }
+  @keyframes odslot { 50% { border-color: var(--od); box-shadow: 0 3px 0 rgba(0, 0, 0, .5), 0 0 14px 2px rgba(255, 138, 42, .85); } }
+  #skills .tut-glow { animation: tutglow .5s steps(2) infinite; }
+  /* 낮은 화면: 무기 슬롯 6칸과 나란히 들어가게 좁게 */
+  .ui-short .sk { width: 54px; } .ui-short #spline { width: 72px; } .ui-short #spline > span { max-width: 68px; } .ui-short #odline { width: 84px; } .ui-short #odline > span:first-of-type { max-width: 80px; }
+
+  /* 오버드라이브 준비 / 알림: 아래 줄(무기·스킬 슬롯) 위 가운데 */
+  #odcall { bottom: calc(var(--sab) + 114px); gap: 8px; padding: 0 12px; font-size: 24px; }
+  #odcall kbd { font-size: 24px; padding: 0 8px 2px; }
+  #toast { bottom: calc(var(--sab) + 160px); }
+  #skip { bottom: calc(var(--sab) + 114px); }
+  /* 적 소개 카드: 스킬 슬롯 위로 */
+  #intro { bottom: calc(var(--sab) + 84px); }
+  /* 튜토리얼/팁: 데스크톱은 아래 줄 위 가운데. 위치(--tut-bot)는 tutorial.js 가 아래 줄 높이로 정한다 */
+  @media (pointer: fine) {
+    body #tut, body #tuttip { left: 50% !important; transform: translateX(-50%) !important; top: auto !important; bottom: var(--tut-bot, calc(var(--sab) + 120px)) !important; max-width: min(520px, calc((100vw - 32px) / var(--uiz, 1))) !important; zoom: var(--uiz, 1); }
+    body #tut { padding: 2px 10px 4px !important; gap: 2px !important; }
+    body #tut .th { gap: 8px; }
+    body #tut b.tt, body #tuttip b { font-size: 24px !important; line-height: 1 !important; }
+    body #tut p, body #tuttip p, body #tut .tk, body #tuttip .tk, body #tut .ts, body #tut .tx { font-size: 12px !important; }
+    body #tut .tx { min-height: 24px !important; }
+    body #tut kbd, body #tuttip kbd { font-size: 12px !important; padding: 0 5px 2px !important; }
+    body #tut .tb { height: 4px; }
+  }
+  /* 폰: 체력 상자가 늘 떠 있으니 그 아래로 한 칸씩 */
+  @media (pointer: coarse) {
+    #hpbox { width: 200px; padding: 3px 6px !important; }
+    #hpbar { height: 22px; }
+    #hptext { font-size: 12px; }
+    #rack { top: calc(var(--sat) + 84px); }
+    body #tut, body #tuttip { top: calc(var(--sat) + 148px) !important; }
+  }
 </style>
 
 <canvas id="view" tabindex="0" aria-label="메카포지 전투 화면"></canvas>
@@ -691,15 +754,9 @@
 <div id="hud" hidden>
   <div id="xprow"><span id="xplv" class="px">LV 1</span><div id="xpbar" class="track"><div id="xpfill"></div></div></div>
   <div id="hudrow">
-    <button type="button" id="hudfold" class="pix dark" aria-label="상태판 펼치기">상태 ▶</button>
     <div id="hpbox" class="pix">
       <div id="hpline"><img id="hpicon" class="px-img" alt="체력"><div id="hpbar" class="track"><div id="hplag"></div><div id="hpfill"></div><span id="hptext" class="px">100 / 100</span></div></div>
-      <div id="ablrow">
-        <div class="hrow" id="dashline"><kbd class="k">SPACE</kbd><span>대시</span><span id="pipwrap"></span><span id="shieldpip" class="px" hidden>방어막</span></div>
-        <div class="hrow" id="modeline"><kbd class="k">E</kbd><b id="modename">보행 모드</b></div>
-      </div>
-      <div class="hrow" id="spline"><kbd class="k">K</kbd><span id="spname">특수기</span><span class="pip bar" id="sppip"><i></i></span></div>
-      <div class="hrow" id="odline"><kbd class="k">Q</kbd><span>오버드라이브</span><span class="pip bar" id="odpip"><i></i></span><span id="odkey" class="px">0%</span></div>
+      <span id="shieldpip" hidden>방어막</span>
     </div>
     <div id="mid"><div id="roombox" class="pix"><div id="roomname">사막 폐허</div><div id="roomop" hidden></div><div id="roompath" class="screenbox"></div><div id="roomtime" class="track" hidden><i></i></div><div id="chipline">정비 포인트 0</div></div></div>
     <div id="side">
@@ -712,6 +769,12 @@
   <div id="boss" class="pix" hidden><div id="bossname">타이탄</div><div id="bossbar" class="track"><div id="bossfill"></div></div></div>
 </div>
 
+<div id="skills" hidden>
+  <div class="sk" id="dashline"><kbd class="k">SPACE</kbd><svg viewBox="0 0 9 9" shape-rendering="crispEdges" aria-hidden="true"><path fill="currentColor" d="M1 2h1v1h1v1h1v1H3v1H2v1H1zM5 2h1v1h1v1h1v1H7v1H6v1H5z"/></svg><span>대시</span><span id="pipwrap"></span></div>
+  <div class="sk" id="spline"><kbd class="k">K</kbd><svg viewBox="0 0 9 9" shape-rendering="crispEdges" aria-hidden="true"><path fill="currentColor" d="M4 0h1v3h1V2h1v1H6v1h3v1H6v1h1v1H6V6H5v3H4V6H3v1H2V6h1V5H0V4h3V3H2V2h1v1h1z"/></svg><span id="spname">특수기</span><i class="cd" id="sppip"></i></div>
+  <div class="sk" id="modeline"><kbd class="k">E</kbd><b id="modename">보행</b><span>변형</span></div>
+  <div class="sk" id="odline"><kbd class="k">Q</kbd><svg viewBox="0 0 9 9" shape-rendering="crispEdges" aria-hidden="true"><path fill="currentColor" d="M5 0h2v1H6v2h2v1H7v1H6v1H5v1H4v1H3V8h1V6H2V5h1V4h1V3h1z"/></svg><span>오버드라이브</span><span id="odkey">0%</span><span id="odpip"><i></i></span></div>
+</div>
 <div id="rack" hidden></div>
 <div id="intro" hidden></div>
 <div id="banner" class="pix dark" hidden></div>
@@ -727,7 +790,6 @@
   <output id="dot-val" class="px" aria-live="polite">×4</output>
   <button type="button" class="btn" id="dot-plus" aria-label="도트 크게">+</button>
 </div>
-<p id="hint" class="pix" hidden><kbd class="k">WASD</kbd>이동<span class="sep"></span><kbd class="k">J</kbd><kbd class="k">클릭</kbd>공격<span class="sep"></span><kbd class="k">K</kbd><kbd class="k">우클릭</kbd>특수기<span class="sep"></span><kbd class="k">SPACE</kbd>대시<span class="sep"></span><kbd class="k">E</kbd>변형<span class="sep"></span><span class="od"><kbd class="k">Q</kbd>오버드라이브</span></p>
 <div id="pad" hidden>
   <button type="button" id="dashbtn"><svg viewBox="0 0 9 9" shape-rendering="crispEdges" aria-hidden="true"><path fill="currentColor" d="M1 2h1v1h1v1h1v1H3v1H2v1H1zM5 2h1v1h1v1h1v1H7v1H6v1H5z"/></svg>대시</button>
   <button type="button" id="spbtn"><svg viewBox="0 0 9 9" shape-rendering="crispEdges" aria-hidden="true"><path fill="currentColor" d="M4 0h1v3h1V2h1v1H6v1h3v1H6v1h1v1H6V6H5v3H4V6H3v1H2V6h1V5H0V4h3V3H2V2h1v1h1z"/></svg><span>특수</span><i></i></button>
@@ -11823,7 +11885,7 @@ const CSS = `
 #tuttip b { font-family: var(--font-tech, monospace), var(--font-body, sans-serif); font-size: 24px; font-weight: 800; color: var(--accent, #ffc93d); text-shadow: 0 2px 0 #000; }
 #tuttip.warn b { color: var(--hp, #ff4d5e); }
 #tutbtn { white-space: nowrap; }
-#pad button.tut-glow { animation: tutglow .5s steps(2) infinite; }
+#pad button.tut-glow, #skills .tut-glow { animation: tutglow .5s steps(2) infinite; }
 @keyframes tutglow { 50% { box-shadow: 0 0 0 4px var(--accent, #ffc93d), 0 0 18px 6px var(--accent, #ffc93d); } }
 @media (pointer: coarse) { #tuttip { bottom: auto; top: var(--tut-top, calc(var(--sat, 0px) + 84px)); } }
 /* 낮은 화면 (폰 가로): 맨 위 HUD 사이 빈칸에 한 덩어리로. 제목 줄에 단계와 건너뛰기 */
@@ -11877,7 +11939,9 @@ function installTutorial(game, store) {
   else { Object.assign(replayBtn.style, { position: 'fixed', left: '12px', bottom: '12px', zIndex: 30 }); ($('hangar') || document.body).appendChild(replayBtn); }
 
   // ---- 튜토리얼 진행 ----
-  const glow = (id) => { for (const b of document.querySelectorAll('#pad .tut-glow')) b.classList.remove('tut-glow'); if (id) $(id)?.classList.add('tut-glow'); };
+  // 터치 버튼과 같은 역할의 데스크톱 스킬 슬롯도 같이 반짝임
+  const SLOT = { dashbtn: 'dashline', spbtn: 'spline', modebtn: 'modeline', odbtn: 'odline' };
+  const glow = (id) => { for (const b of document.querySelectorAll('.tut-glow')) b.classList.remove('tut-glow'); if (id) { $(id)?.classList.add('tut-glow'); $(SLOT[id])?.classList.add('tut-glow'); } };
   function show(S, i) {
     panel.classList.remove('done', 'low', 'pop'); void panel.offsetWidth; panel.classList.add('pop');
     q('.ts').textContent = `훈련 ${i + 1}/${STEPS.length}`;
@@ -11992,6 +12056,11 @@ function installTutorial(game, store) {
     const box = (id) => { const el = $(id); return el && !el.hidden && el.offsetParent ? el.getBoundingClientRect() : null; };
     const st = document.body.style, compact = innerHeight < 520;
     panel.classList.toggle('compact', compact); tipEl.classList.toggle('compact', compact);
+    // 데스크톱: 아래 줄(무기 슬롯, 스킬 슬롯, 오버드라이브 안내) 바로 위. 패널은 zoom(--uiz) 이 걸려 있어서 화면 px 를 zoom 으로 나눈다
+    const z = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--uiz')) || 1;
+    let bot = innerHeight;
+    for (const id of ['rack', 'skills', 'odcall']) { const el = $(id); if (el && !el.hidden && el.getClientRects().length) bot = Math.min(bot, el.getBoundingClientRect().top); } // 고정 위치라 offsetParent 가 없다
+    if (bot < innerHeight) st.setProperty('--tut-bot', `${Math.round((innerHeight - bot + 10) / z)}px`); else st.removeProperty('--tut-bot');
     const hp = box('hpbox'), side = box('side'), xp = box('xprow');
     if (compact && hp && side && side.left - hp.right > 280) {
       st.setProperty('--tut-top', `${Math.round((xp?.bottom || 0) + 4)}px`);
@@ -13112,7 +13181,6 @@ function start() {
     },
     roomInfo(rooms) {
       // 조작 안내 막대는 처음 두 방까지만 (그 뒤엔 화면만 가림)
-      if (!coarse && game.state !== 'hangar') $('hint').hidden = rooms.depth > 1;
       const Z = ZONES[rooms.zone];
       const O = OPS[rooms.op];
       $('roomname').innerHTML = `${Z.name} <span style="color:var(--accent)">${rooms.reward === 'start' ? '출격 지점' : REWARDS[rooms.reward]?.name || ''}</span>`;
@@ -13132,11 +13200,11 @@ function start() {
     onStart() {
       for (const id of ['hangar', 'result', 'paused', 'levelup', 'achv', 'bayframe']) $(id).hidden = true;
       $('hud').hidden = false; $('boss').hidden = true;
-      $('pad').hidden = !coarse; $('hint').hidden = coarse; $('dots').hidden = coarse; $('dots').classList.add('play');
+      $('pad').hidden = !coarse; $('skills').hidden = coarse; $('dots').hidden = coarse; $('dots').classList.add('play');
       $('view').focus();
     },
     onHangar() {
-      for (const id of ['hud', 'result', 'paused', 'levelup', 'pad', 'hint', 'banner', 'skip', 'combo', 'cutin', 'station']) $(id).hidden = true;
+      for (const id of ['hud', 'result', 'paused', 'levelup', 'pad', 'skills', 'banner', 'skip', 'combo', 'cutin', 'station']) $(id).hidden = true;
       $('hangar').hidden = false; $('bayframe').hidden = false; $('dots').hidden = coarse; $('dots').classList.remove('play');
       for (const el of doorEls.values()) el.remove();
       doorEls.clear();
@@ -13197,7 +13265,7 @@ function start() {
       if (fresh.length) { try { localStorage.setItem('mechaforge.archSeen', JSON.stringify([...seen, ...fresh])); } catch { /* 무시 */ } $('resach').innerHTML += fresh.map((id) => `<div class="achnew"><img class="px-img" alt="" src="${pixURL(ARCHETYPES[id].icon, 3)}"><div><b>새 기체 계열: ${ARCHETYPES[id].name}</b><small>${ARCHETYPES[id].rule}. 격납고 계열 탭에서 고를 수 있어요</small></div></div>`).join(''); }
       $('resparts').textContent = `${AR ? `${AR.name} 계열, ` : ''}파일럿 ${P.role} ${P.name}, 고철 ×${s.scrapMul.toFixed(1)}${s.bonus ? `, 위협 신기록 보너스 +${s.bonus}` : ''}\n보유 고철 ${s.total}. 격납고에서 새 부품과 연구를 해금할 수 있어요.\n무장: ${s.weapons.join(', ')}${s.modules.length ? `\n부품: ${s.modules.join(', ')}` : ''}`;
       $('result').hidden = false;
-      $('pad').hidden = true; $('banner').hidden = true;
+      $('pad').hidden = true; $('skills').hidden = true; $('banner').hidden = true;
       setTimeout(() => $('retry').focus(), 50);
     },
     // Enter 출격: 업적 창이 열려 있거나 방금 Enter 로 닫았으면 무시
@@ -13226,8 +13294,14 @@ function start() {
       const dt = 1 / 60;
       if (bannerT > 0 && (bannerT -= dt) <= 0) $('banner').hidden = true;
       // 배너는 HUD(보스 체력 막대 포함) 밑으로. banner 는 zoom 이 걸려 있어서 px 를 uiz 로 나눈다
-      if (bannerT > 0) { const hb = $('hud').hidden ? 0 : $('hud').getBoundingClientRect().bottom; $('banner').style.top = `${Math.max(innerHeight * 0.2, hb + 10) / uiz}px`; }
+      if (bannerT > 0) { const hb = $('hud').hidden ? 0 : $('hud').getBoundingClientRect().bottom; $('banner').style.top = `${Math.max(innerHeight * 0.24, hb + 12) / uiz}px`; }
       if (toastT > 0 && (toastT -= dt) <= 0) $('toast').hidden = true;
+      // 알림은 아래 줄(무기/스킬 슬롯, 오버드라이브 안내, 튜토리얼/팁) 위에 쌓는다. 없으면 CSS 기본 자리
+      if (toastT > 0) {
+        let b = innerHeight;
+        for (const id of ['rack', 'skills', 'odcall', 'tut', 'tuttip']) { const el = $(id); if (el && !el.hidden && el.getClientRects().length) b = Math.min(b, el.getBoundingClientRect().top); }
+        $('toast').style.bottom = b < innerHeight ? `${(innerHeight - b + 8) / uiz}px` : '';
+      }
       $('skip').hidden = g.state !== 'install';
       const s = g.engine.input.stick;
       $('stick').hidden = !s.active || g.state !== 'play';
@@ -13254,11 +13328,11 @@ function start() {
       $('hpfill').style.width = hpW; $('hplag').style.width = hpW;
       $('xpfill').style.width = `${Math.min(1, g.xp / g.xpNeed) * 100}%`;
       const sp = g.weapons.specialT / p.stats.specialCd;
-      $('sppip').firstChild.style.width = `${(1 - sp) * 100}%`;
+      $('sppip').style.height = `${Math.max(0, sp) * 100}%`;
       $('spline').classList.toggle('ready', sp <= 0);
       $('spbtn').querySelector('i').style.height = `${sp * 100}%`;
       const md = p.mode;
-      if ($('modeline').dataset.m !== md) { $('modeline').dataset.m = md; $('modeline').className = 'hrow ' + md; $('modename').textContent = MODES[md].name; $('modebtnlbl').textContent = MODES[md].name.split(' ')[0]; }
+      if ($('modeline').dataset.m !== md) { $('modeline').dataset.m = md; $('modeline').className = 'sk ' + md; $('modename').textContent = MODES[md].name.split(' ')[0]; $('modebtnlbl').textContent = MODES[md].name.split(' ')[0]; }
       const odOn = p.odT > 0, odFull = p.od >= 1 && !odOn;
       $('odpip').firstChild.style.width = `${(odOn ? p.odT / 8 : p.od) * 100}%`;
       $('odline').classList.toggle('full', odFull); $('odline').classList.toggle('on', odOn);
@@ -13282,7 +13356,8 @@ function start() {
       if (wrap.children.length !== p.stats.dashCharges) wrap.innerHTML = '<span class="pip"><i></i></span>'.repeat(p.stats.dashCharges);
       [...wrap.children].forEach((el, i) => { el.firstChild.style.width = i < p.charges ? '100%' : i === p.charges ? `${(p.chargeT / p.stats.dashCd) * 100}%` : '0%'; el.classList.toggle('full', i < p.charges); });
       $('shieldpip').hidden = !p.stats.shieldCd;
-      $('shieldpip').style.opacity = p.shieldReady ? 1 : 0.3;
+      $('shieldpip').classList.toggle('off', !p.shieldReady);
+      $('dashline').classList.toggle('ready', p.charges > 0);
     },
   };
 
@@ -13386,6 +13461,8 @@ function start() {
     const seen = new Set();
     // 표지가 HUD(위쪽 패널) 밑으로만 오게: HUD 아래 끝을 위쪽 한계로
     const hudB = show && !$('hud').hidden ? $('hud').getBoundingClientRect().bottom : 0;
+    // 배너(출구 개방 등)가 떠 있는 동안 겹치는 표지는 옅게 (자리를 옮기면 기체를 가린다)
+    const bn = show && !$('banner').hidden ? $('banner').getBoundingClientRect() : null;
     if (show) for (const d of R.doors) {
       const far = d.side === 'W' || d.side === 'S';
       const s = g.project([d.x, far ? 3.8 : 1.8, d.z]);
@@ -13411,7 +13488,9 @@ function start() {
       el.classList.toggle('edge', edge);
       el.dataset.dir = edge ? (Math.abs(cy - y) > Math.abs(cx - x) ? (y < cy ? '▲' : '▼') : (x < cx ? '◀' : '▶')) : '';
       el.style.transform = `translate(${Math.round(cx)}px, ${Math.round(cy)}px) scale(${uiz}) translate(-50%, -100%)`;
-      el.style.opacity = d.open ? 1 : 0.55;
+      const ew = el.offsetWidth * uiz, eh = el.offsetHeight * uiz;
+      const under = bn && cx + ew / 2 > bn.left && cx - ew / 2 < bn.right && cy > bn.top && cy - eh < bn.bottom;
+      el.style.opacity = under ? 0.15 : d.open ? 1 : 0.55;
     }
     for (const [k, el] of doorEls) if (!seen.has(k)) { el.remove(); doorEls.delete(k); }
   }
@@ -13734,15 +13813,6 @@ function start() {
   let lastHover = null;
   document.addEventListener('click', (e) => { const b = e.target.closest?.('button'); if (b && !b.closest('#pad') && !b.classList.contains('card')) game.sfx.play(b.id === 'launch' ? 'select' : 'click'); }, true);
   document.addEventListener('pointerover', (e) => { const b = e.target.closest?.('.opt, .tab, .card'); if (b && e.pointerType === 'mouse' && b !== lastHover) { lastHover = b; game.sfx.play('hover'); } });
-
-  // ---- 상태판 접기 (기본: 접힘. 체력은 기체 발밑에 보인다) ----
-  {
-    let folded = true;
-    try { folded = localStorage.getItem('mf-hudfold') !== '0'; } catch { /* 무시 */ }
-    const apply = () => { $('hud').classList.toggle('folded', folded); $('hudfold').textContent = folded ? '상태 ▶' : '◀'; };
-    $('hudfold').addEventListener('click', () => { folded = !folded; apply(); try { localStorage.setItem('mf-hudfold', folded ? '1' : '0'); } catch { /* 무시 */ } });
-    apply();
-  }
 
   // ---- 버튼 ----
   $('strepair').addEventListener('click', () => { game.stationAct('repair'); renderStation(); });

@@ -85,7 +85,6 @@ function start() {
     },
     roomInfo(rooms) {
       // 조작 안내 막대는 처음 두 방까지만 (그 뒤엔 화면만 가림)
-      if (!coarse && game.state !== 'hangar') $('hint').hidden = rooms.depth > 1;
       const Z = ZONES[rooms.zone];
       const O = OPS[rooms.op];
       $('roomname').innerHTML = `${Z.name} <span style="color:var(--accent)">${rooms.reward === 'start' ? '출격 지점' : REWARDS[rooms.reward]?.name || ''}</span>`;
@@ -105,11 +104,11 @@ function start() {
     onStart() {
       for (const id of ['hangar', 'result', 'paused', 'levelup', 'achv', 'bayframe']) $(id).hidden = true;
       $('hud').hidden = false; $('boss').hidden = true;
-      $('pad').hidden = !coarse; $('hint').hidden = coarse; $('dots').hidden = coarse; $('dots').classList.add('play');
+      $('pad').hidden = !coarse; $('skills').hidden = coarse; $('dots').hidden = coarse; $('dots').classList.add('play');
       $('view').focus();
     },
     onHangar() {
-      for (const id of ['hud', 'result', 'paused', 'levelup', 'pad', 'hint', 'banner', 'skip', 'combo', 'cutin', 'station']) $(id).hidden = true;
+      for (const id of ['hud', 'result', 'paused', 'levelup', 'pad', 'skills', 'banner', 'skip', 'combo', 'cutin', 'station']) $(id).hidden = true;
       $('hangar').hidden = false; $('bayframe').hidden = false; $('dots').hidden = coarse; $('dots').classList.remove('play');
       for (const el of doorEls.values()) el.remove();
       doorEls.clear();
@@ -170,7 +169,7 @@ function start() {
       if (fresh.length) { try { localStorage.setItem('mechaforge.archSeen', JSON.stringify([...seen, ...fresh])); } catch { /* 무시 */ } $('resach').innerHTML += fresh.map((id) => `<div class="achnew"><img class="px-img" alt="" src="${pixURL(ARCHETYPES[id].icon, 3)}"><div><b>새 기체 계열: ${ARCHETYPES[id].name}</b><small>${ARCHETYPES[id].rule}. 격납고 계열 탭에서 고를 수 있어요</small></div></div>`).join(''); }
       $('resparts').textContent = `${AR ? `${AR.name} 계열, ` : ''}파일럿 ${P.role} ${P.name}, 고철 ×${s.scrapMul.toFixed(1)}${s.bonus ? `, 위협 신기록 보너스 +${s.bonus}` : ''}\n보유 고철 ${s.total}. 격납고에서 새 부품과 연구를 해금할 수 있어요.\n무장: ${s.weapons.join(', ')}${s.modules.length ? `\n부품: ${s.modules.join(', ')}` : ''}`;
       $('result').hidden = false;
-      $('pad').hidden = true; $('banner').hidden = true;
+      $('pad').hidden = true; $('skills').hidden = true; $('banner').hidden = true;
       setTimeout(() => $('retry').focus(), 50);
     },
     // Enter 출격: 업적 창이 열려 있거나 방금 Enter 로 닫았으면 무시
@@ -199,8 +198,14 @@ function start() {
       const dt = 1 / 60;
       if (bannerT > 0 && (bannerT -= dt) <= 0) $('banner').hidden = true;
       // 배너는 HUD(보스 체력 막대 포함) 밑으로. banner 는 zoom 이 걸려 있어서 px 를 uiz 로 나눈다
-      if (bannerT > 0) { const hb = $('hud').hidden ? 0 : $('hud').getBoundingClientRect().bottom; $('banner').style.top = `${Math.max(innerHeight * 0.2, hb + 10) / uiz}px`; }
+      if (bannerT > 0) { const hb = $('hud').hidden ? 0 : $('hud').getBoundingClientRect().bottom; $('banner').style.top = `${Math.max(innerHeight * 0.24, hb + 12) / uiz}px`; }
       if (toastT > 0 && (toastT -= dt) <= 0) $('toast').hidden = true;
+      // 알림은 아래 줄(무기/스킬 슬롯, 오버드라이브 안내, 튜토리얼/팁) 위에 쌓는다. 없으면 CSS 기본 자리
+      if (toastT > 0) {
+        let b = innerHeight;
+        for (const id of ['rack', 'skills', 'odcall', 'tut', 'tuttip']) { const el = $(id); if (el && !el.hidden && el.getClientRects().length) b = Math.min(b, el.getBoundingClientRect().top); }
+        $('toast').style.bottom = b < innerHeight ? `${(innerHeight - b + 8) / uiz}px` : '';
+      }
       $('skip').hidden = g.state !== 'install';
       const s = g.engine.input.stick;
       $('stick').hidden = !s.active || g.state !== 'play';
@@ -227,11 +232,11 @@ function start() {
       $('hpfill').style.width = hpW; $('hplag').style.width = hpW;
       $('xpfill').style.width = `${Math.min(1, g.xp / g.xpNeed) * 100}%`;
       const sp = g.weapons.specialT / p.stats.specialCd;
-      $('sppip').firstChild.style.width = `${(1 - sp) * 100}%`;
+      $('sppip').style.height = `${Math.max(0, sp) * 100}%`;
       $('spline').classList.toggle('ready', sp <= 0);
       $('spbtn').querySelector('i').style.height = `${sp * 100}%`;
       const md = p.mode;
-      if ($('modeline').dataset.m !== md) { $('modeline').dataset.m = md; $('modeline').className = 'hrow ' + md; $('modename').textContent = MODES[md].name; $('modebtnlbl').textContent = MODES[md].name.split(' ')[0]; }
+      if ($('modeline').dataset.m !== md) { $('modeline').dataset.m = md; $('modeline').className = 'sk ' + md; $('modename').textContent = MODES[md].name.split(' ')[0]; $('modebtnlbl').textContent = MODES[md].name.split(' ')[0]; }
       const odOn = p.odT > 0, odFull = p.od >= 1 && !odOn;
       $('odpip').firstChild.style.width = `${(odOn ? p.odT / 8 : p.od) * 100}%`;
       $('odline').classList.toggle('full', odFull); $('odline').classList.toggle('on', odOn);
@@ -255,7 +260,8 @@ function start() {
       if (wrap.children.length !== p.stats.dashCharges) wrap.innerHTML = '<span class="pip"><i></i></span>'.repeat(p.stats.dashCharges);
       [...wrap.children].forEach((el, i) => { el.firstChild.style.width = i < p.charges ? '100%' : i === p.charges ? `${(p.chargeT / p.stats.dashCd) * 100}%` : '0%'; el.classList.toggle('full', i < p.charges); });
       $('shieldpip').hidden = !p.stats.shieldCd;
-      $('shieldpip').style.opacity = p.shieldReady ? 1 : 0.3;
+      $('shieldpip').classList.toggle('off', !p.shieldReady);
+      $('dashline').classList.toggle('ready', p.charges > 0);
     },
   };
 
@@ -359,6 +365,8 @@ function start() {
     const seen = new Set();
     // 표지가 HUD(위쪽 패널) 밑으로만 오게: HUD 아래 끝을 위쪽 한계로
     const hudB = show && !$('hud').hidden ? $('hud').getBoundingClientRect().bottom : 0;
+    // 배너(출구 개방 등)가 떠 있는 동안 겹치는 표지는 옅게 (자리를 옮기면 기체를 가린다)
+    const bn = show && !$('banner').hidden ? $('banner').getBoundingClientRect() : null;
     if (show) for (const d of R.doors) {
       const far = d.side === 'W' || d.side === 'S';
       const s = g.project([d.x, far ? 3.8 : 1.8, d.z]);
@@ -384,7 +392,9 @@ function start() {
       el.classList.toggle('edge', edge);
       el.dataset.dir = edge ? (Math.abs(cy - y) > Math.abs(cx - x) ? (y < cy ? '▲' : '▼') : (x < cx ? '◀' : '▶')) : '';
       el.style.transform = `translate(${Math.round(cx)}px, ${Math.round(cy)}px) scale(${uiz}) translate(-50%, -100%)`;
-      el.style.opacity = d.open ? 1 : 0.55;
+      const ew = el.offsetWidth * uiz, eh = el.offsetHeight * uiz;
+      const under = bn && cx + ew / 2 > bn.left && cx - ew / 2 < bn.right && cy > bn.top && cy - eh < bn.bottom;
+      el.style.opacity = under ? 0.15 : d.open ? 1 : 0.55;
     }
     for (const [k, el] of doorEls) if (!seen.has(k)) { el.remove(); doorEls.delete(k); }
   }
@@ -707,15 +717,6 @@ function start() {
   let lastHover = null;
   document.addEventListener('click', (e) => { const b = e.target.closest?.('button'); if (b && !b.closest('#pad') && !b.classList.contains('card')) game.sfx.play(b.id === 'launch' ? 'select' : 'click'); }, true);
   document.addEventListener('pointerover', (e) => { const b = e.target.closest?.('.opt, .tab, .card'); if (b && e.pointerType === 'mouse' && b !== lastHover) { lastHover = b; game.sfx.play('hover'); } });
-
-  // ---- 상태판 접기 (기본: 접힘. 체력은 기체 발밑에 보인다) ----
-  {
-    let folded = true;
-    try { folded = localStorage.getItem('mf-hudfold') !== '0'; } catch { /* 무시 */ }
-    const apply = () => { $('hud').classList.toggle('folded', folded); $('hudfold').textContent = folded ? '상태 ▶' : '◀'; };
-    $('hudfold').addEventListener('click', () => { folded = !folded; apply(); try { localStorage.setItem('mf-hudfold', folded ? '1' : '0'); } catch { /* 무시 */ } });
-    apply();
-  }
 
   // ---- 버튼 ----
   $('strepair').addEventListener('click', () => { game.stationAct('repair'); renderStation(); });
