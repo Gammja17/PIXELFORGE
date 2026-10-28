@@ -39,7 +39,8 @@ function start() {
   let uiz = 1;
   const layout = () => {
     const W = innerWidth, H = innerHeight;
-    uiz = Math.round(Math.max(1, Math.min(2.4, W / 800, H / 450)) * 10) / 10;
+    const s = Math.min(W / 800, H / 450);
+    uiz = Math.round(Math.min(1.8, s <= 1 ? 1 : 1 + (s - 1) * 0.55) * 10) / 10;
     const lw = W / uiz, lh = H / uiz, cl = document.documentElement.classList;
     document.documentElement.style.setProperty('--uiz', uiz);
     cl.toggle('ui-short', lh <= 520); cl.toggle('ui-vshort', lh <= 410);
