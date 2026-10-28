@@ -1,4 +1,4 @@
-# Open Realms of Stars 사운드(CC-BY 3.0 / CC0, 출처는 assets/CREDITS.md)를 잘라서 assets/sfx/*.mp3 로 만든다
+# Open Realms of Stars 사운드(CC BY 3.0 / CC BY-SA 3.0 / CC0, 파일별 원작자는 assets/CREDITS.md)를 잘라서 assets/sfx/*.mp3 로 만든다
 #  사용: python3 tools/make-sfx.py <원본 sounds 폴더>
 import subprocess, sys, os
 SRC = sys.argv[1]

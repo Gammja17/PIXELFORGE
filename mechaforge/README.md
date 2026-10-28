@@ -13,13 +13,19 @@
 ## 조작
 | | 데스크톱 | 폰 (가로) |
 |---|---|---|
-| 이동 | WASD | 왼쪽 드래그 |
-| 공격 (콤보/연사) | J, 마우스 왼쪽 | 공격 버튼 (자동 조준) |
+| 이동 | WASD, 방향키 | 왼쪽 드래그 |
+| 조준 | 마우스 커서 (J 로 공격하면 자동 조준) | 자동 조준 |
+| 공격 (콤보/연사) | J, 마우스 왼쪽 | 공격 버튼 |
 | 특수기 | K, 마우스 오른쪽 | 특수 버튼 |
-| 대시 | Space, Shift | 대시 버튼 |
-| 오버드라이브 | L, Q | 게이지가 차면 나타나는 버튼 |
+| 대시 (순간 무적) | Space, Shift | 대시 버튼 |
+| 오버드라이브 | Q, L (게이지가 차면) | 게이지가 차면 나타나는 OD 버튼 |
 | 변형 모드 | E, Tab | 초록 변형 버튼 |
-| 기타 | Esc/P 일시정지, `[` `]` 도트 크기, Enter 출격 | |
+| 레벨 업 카드 | 1, 2, 3 또는 클릭 | 카드 누르기 |
+| 일시정지 | Esc, P | 오른쪽 위 일시정지 버튼 |
+| 격납고 | Enter 출격, A/D·←/→ 또는 드래그로 기체 돌려 보기 | 드래그로 돌려 보기 |
+| 기타 | `[` `]` (또는 `-` `=`) 도트 크기 | |
+
+격납고 오른쪽 위: 소리, 화면 흔들림, **저장 관리**(내보내기/가져오기), **크레딧**. 일시정지 메뉴에도 소리, 흔들림, 크레딧이 있어요.
 
 ## 한 판의 흐름
 1. 격납고: 기체 계열, 머리, 프레임, 다리, 주무장, 도색 선택. 고철로 잠긴 부품 해금, 연구(영구 강화).
@@ -75,7 +81,7 @@
 | `weapons.js` | 무기, 진화(`EVOLUTIONS`), 직접 조작 콤보, 특수기 |
 | `player.js` | 능력치, 성장(크기), 오버드라이브, 비상 재기동 |
 | `upgrades.js` | 카드 뽑기/적용 (진화 포함) |
-| `meta.js` | 고철, 해금 가격, 연구, 위협 선택/최고 기록, 파일럿, 업적 달성 (저장) |
+| `meta.js` | 고철, 해금 가격, 연구, 위협 선택/최고 기록, 파일럿, 업적 달성 (저장), 저장 버전 이전, 내보내기/가져오기 |
 | `progress.js` | 위협 등급, 파일럿, 업적 정의 + `runMods()` (런 규칙 배율) |
 | `runhooks.js` | `game.mods` 를 방/적/회복/능력치에 덧씌우기, 무기별 피해 집계 |
 | `sound.js` + `audio-data.js` | WebAudio 재생 (자동 생성된 에셋 묶음) |
@@ -83,7 +89,13 @@
 | `skin.js` | 도트 강철 판넬 UI 텍스처 생성 |
 | `parts.js`, `icons.js`, `fx.js`, `pickups.js` | 부품 모델, 아이콘, 이펙트, 드롭 |
 
-## 사운드 출처
-모두 CC0. 자세한 목록은 `assets/CREDITS.md`.
-- 효과음: Michel Baradari 외 (Open Realms of Stars 수록, CC BY 3.0 / CC0)
-- 음악: Juhani Junkala, "5 Chiptunes (Action)" (OpenGameArt)
+## 저장
+- 모두 브라우저 localStorage. 키는 `mf-` 또는 `mechaforge.` 로 시작한다: `mf-meta`(고철, 해금, 연구, 업적, 누적 기록. `v` = 형식 버전), `mf-mute`, `mf-shake`, `mechaforge.tutorial`, `.tips`, `.loadout2`, `.best2`, `.archSeen`, `.zones`, `.boss`.
+- 격납고 `저장 관리`: 위 키를 전부 JSON 한 덩어리(`{ game: 'mechaforge', format, metaVersion, saved, keys }`)로 파일 내려받기/클립보드 복사. 가져오기는 파일 선택이나 붙여넣기 → 형식·버전 검증 → 요약 보고 확인 → 덮어쓰고 새로 고침.
+- 형식을 바꾸면 `meta.js` 의 `META_VERSION` 을 올리고 `migrateMeta()` 에 단계를 붙인다. 버전 필드가 없는 옛 저장(v0)은 불러올 때 자동으로 v1 로 이전된다.
+
+## 에셋 출처 / 라이선스
+게임 안 `크레딧` 버튼과 `assets/CREDITS.md`(효과음 파일별 원작자 표) 참고.
+- 효과음: Open Realms of Stars(https://github.com/tuomount/Open-Realms-of-Stars) 수록 원본을 잘라 씀. Michel Baradari, Lee Barkovich, Tim Mortimer, Little Robot Sound Factory, colmmullally, Erokia, Tuomo Untinen 등 **CC BY 3.0**(저작자 표시 의무), 기관총(mg1~3)은 Michael Klier **CC BY-SA 3.0**, 나머지 Bart, Joth, NenadSimic, BLACK LODGE GAMES, Rubberduck 등 CC0. 승리/패배 징글은 Kenney "Music Jingles"(CC0).
+- 음악: Juhani Junkala, "5 Chiptunes (Action)" (OpenGameArt, CC0)
+- 글꼴: Galmuri11 Bold (quiple, SIL OFL 1.1)

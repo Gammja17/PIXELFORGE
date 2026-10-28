@@ -7,7 +7,7 @@ import { computeStats, MODES, STAT_UPS } from './player.js';
 import { ZONES, REWARDS, FACTIONS, ZONE_GIMMICK } from './rooms.js';
 import { OPS } from './ops.js';
 import { pixURL } from './icons.js';
-import { RESEARCH, researchCost } from './meta.js';
+import { RESEARCH, researchCost, exportSave, parseSave, applySave, saveSummary } from './meta.js';
 import { THREATS, PILOTS, ACHIEVEMENTS, REWARD_PAINTS, runMods, threatScrapMul, rewardText } from './progress.js';
 import { SETS, setProgress, setOf } from './sets.js';
 import { applySkin } from './skin.js';
@@ -102,13 +102,13 @@ function start() {
       doorEls.clear();
     },
     onStart() {
-      for (const id of ['hangar', 'result', 'paused', 'levelup', 'achv', 'bayframe']) $(id).hidden = true;
+      for (const id of ['hangar', 'result', 'paused', 'levelup', 'achv', 'credits', 'savebox', 'bayframe']) $(id).hidden = true;
       $('hud').hidden = false; $('boss').hidden = true;
       $('pad').hidden = !coarse; $('skills').hidden = coarse; $('dots').hidden = coarse; $('dots').classList.add('play');
       $('view').focus();
     },
     onHangar() {
-      for (const id of ['hud', 'result', 'paused', 'levelup', 'pad', 'skills', 'banner', 'skip', 'combo', 'cutin', 'station']) $(id).hidden = true;
+      for (const id of ['hud', 'result', 'paused', 'credits', 'levelup', 'pad', 'skills', 'banner', 'skip', 'combo', 'cutin', 'station']) $(id).hidden = true;
       $('hangar').hidden = false; $('bayframe').hidden = false; $('dots').hidden = coarse; $('dots').classList.remove('play');
       for (const el of doorEls.values()) el.remove();
       doorEls.clear();
@@ -142,6 +142,7 @@ function start() {
     closeLevelUp() { $('levelup').hidden = true; $('pad').hidden = !coarse; $('view').focus(); },
     pause(v) {
       $('paused').hidden = !v;
+      if (!v) $('credits').hidden = true; // 일시정지에서 연 크레딧은 같이 닫는다
       document.body.classList.toggle('paused', !!v);
       if (v) $('pausebuild').dataset.chips = game.chips || 0;
       if (!v) $('view').focus();
@@ -173,7 +174,7 @@ function start() {
       setTimeout(() => $('retry').focus(), 50);
     },
     // Enter 출격: 업적 창이 열려 있거나 방금 Enter 로 닫았으면 무시
-    launch() { if ($('achv').hidden && performance.now() - achClosedAt > 300) game.startRun(); },
+    launch() { if (['achv', 'credits', 'savebox'].every((id) => $(id).hidden) && performance.now() - achClosedAt > 300) game.startRun(); },
     comboMilestone(m) { const c = $('combo'); c.classList.remove('pop'); void c.offsetWidth; c.classList.add('pop', 'big'); setTimeout(() => c.classList.remove('big'), 600); ui.toast(`${m} 연속 처치!`); },
     comboEnd() { $('combo').classList.add('fade'); },
     // 컷인: 화면을 가로지르는 띠 + 큰 글자 (진화, 오버드라이브)
@@ -698,6 +699,64 @@ function start() {
   const showAch = (v) => { $('achv').hidden = !v; if (!v) achClosedAt = performance.now(); if (v) { renderAch(); setTimeout(() => $('achclose').focus({ preventScroll: true }), 30); } };
   $('achbtn').addEventListener('click', () => showAch(true));
   $('achclose').addEventListener('click', () => showAch(false));
+
+  // ---- 크레딧 (격납고, 일시정지) ----
+  const showCred = (v) => { $('credits').hidden = !v; if (v) setTimeout(() => $('credclose').focus({ preventScroll: true }), 30); else achClosedAt = performance.now(); };
+  for (const id of ['credhangar', 'credpause']) $(id).addEventListener('click', () => showCred(true));
+  $('credclose').addEventListener('click', () => showCred(false));
+
+  // ---- 저장 관리 (격납고): 내보내기 → 파일/클립보드, 가져오기 → 검증 → 확인 → 덮어쓰고 새로 고침 ----
+  let pendingSave = null;
+  const saveMsg = (t, cls = '') => { $('savemsg').textContent = t; $('savemsg').className = `note ${cls}`; };
+  const sumText = (s) => `고철 ${s.scrap} · 해금 ${s.unlocks} · 업적 ${s.ach}/${s.achTotal}`;
+  const showSave = (v) => {
+    $('savebox').hidden = !v; pendingSave = null; $('saveconfirm').hidden = true; saveMsg('');
+    if (!v) { achClosedAt = performance.now(); return; }
+    game.meta.save();
+    $('savesum').textContent = sumText(saveSummary(game.meta.data));
+    setTimeout(() => $('saveclose').focus({ preventScroll: true }), 30);
+  };
+  $('savehangar').addEventListener('click', () => showSave(true));
+  $('saveclose').addEventListener('click', () => showSave(false));
+  $('savefile').addEventListener('click', () => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(exportSave(), null, 1)], { type: 'application/json' }));
+    const d = new Date(), p2 = (n) => String(n).padStart(2, '0');
+    a.download = `mechaforge-save-${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}.json`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    saveMsg('저장 파일을 내려받았어요. 잘 보관해 두세요.', 'ok');
+  });
+  $('savecopy').addEventListener('click', async () => {
+    const text = JSON.stringify(exportSave());
+    try { await navigator.clipboard.writeText(text); saveMsg('클립보드에 복사했어요. 메모장 같은 곳에 붙여 넣어 보관하세요.', 'ok'); return; } catch { /* 아래 방법으로 */ }
+    const t = $('savetext'); t.value = text; t.select();
+    let ok = false; try { ok = document.execCommand('copy'); } catch { /* 무시 */ }
+    saveMsg(ok ? '클립보드에 복사했어요. 메모장 같은 곳에 붙여 넣어 보관하세요.' : '자동 복사가 막혀 있어요. 위 칸에 든 글을 직접 복사해 두세요.', ok ? 'ok' : 'bad');
+  });
+  const offerSave = (text) => {
+    $('saveconfirm').hidden = true; pendingSave = null;
+    try { pendingSave = parseSave(text); } catch (e) { saveMsg(e.message, 'bad'); return; }
+    const s = pendingSave.summary, when = pendingSave.saved ? new Date(pendingSave.saved).toLocaleString() : '날짜 모름';
+    $('saveconfirmtext').textContent = `이 저장으로 덮어쓸까요? (${when})\n${sumText(s)} · 출격 ${s.runs}회, 승리 ${s.wins}회\n지금 진행(${$('savesum').textContent})은 지워지고 게임이 다시 시작돼요.`;
+    saveMsg(''); $('saveconfirm').hidden = false;
+    setTimeout(() => $('saveno').focus({ preventScroll: true }), 30);
+  };
+  $('loadtext').addEventListener('click', () => offerSave($('savetext').value));
+  $('loadfile').addEventListener('click', () => $('loadinput').click());
+  $('loadinput').addEventListener('change', async (e) => {
+    const f = e.target.files?.[0]; e.target.value = '';
+    if (!f) return;
+    if (f.size > 4e6) { saveMsg('파일이 너무 커요. MechaForge 저장 파일이 맞는지 확인하세요.', 'bad'); return; }
+    offerSave(await f.text());
+  });
+  $('saveno').addEventListener('click', () => { pendingSave = null; $('saveconfirm').hidden = true; saveMsg('가져오기를 취소했어요.'); });
+  $('saveyes').addEventListener('click', () => {
+    if (!pendingSave) return;
+    try { applySave(pendingSave); } catch (e) { saveMsg(e.message, 'bad'); return; }
+    location.reload(); // 메모리에 든 진행이 새 저장을 덮어쓰지 않게 바로 다시 읽는다
+  });
+
   renderHangar();
   $('dots').hidden = coarse;
   $('launch').addEventListener('click', () => game.startRun());
@@ -726,6 +785,12 @@ function start() {
   $('quit').addEventListener('click', () => game.toHangar());
   $('retry').addEventListener('click', () => game.restart());
   $('tohangar').addEventListener('click', () => game.toHangar());
+  // 크레딧/저장 창이 위에 떠 있으면 Esc 는 그 창만 닫는다 (캡처 단계: 엔진 입력과 일시정지 해제까지 안 가게)
+  addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    const open = !$('credits').hidden ? showCred : !$('savebox').hidden ? showSave : null;
+    if (open) { open(false); e.stopImmediatePropagation(); }
+  }, true);
   addEventListener('keydown', (e) => {
     if (game.state === 'levelup' && /^[1-3]$/.test(e.key) && document.activeElement?.tagName === 'BUTTON') game.pick(Number(e.key) - 1);
     if (game.state === 'paused' && (e.key === 'Escape' || e.key === 'p') && document.activeElement?.tagName === 'BUTTON') game.pause(false);
@@ -789,7 +854,7 @@ function start() {
   const setDots = (v) => { engine.pixelScale = Math.max(2, Math.min(12, v)); showDots(); };
   $('dot-minus').addEventListener('click', () => setDots(engine.pixelScale - 1));
   $('dot-plus').addEventListener('click', () => setDots(engine.pixelScale + 1));
-  addEventListener('keydown', (e) => { if (e.key === '[' || e.key === '-') setDots(engine.pixelScale - 1); if (e.key === ']' || e.key === '=') setDots(engine.pixelScale + 1); });
+  addEventListener('keydown', (e) => { if (e.target?.tagName === 'TEXTAREA') return; if (e.key === '['|| e.key === '-') setDots(engine.pixelScale - 1); if (e.key === ']' || e.key === '=') setDots(engine.pixelScale + 1); });
   showDots();
 
   engine.start();
