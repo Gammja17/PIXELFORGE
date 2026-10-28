@@ -1,7 +1,8 @@
 # build.mjs 의 PowerShell 판 (node 가 없는 PC 용). 결과물은 build.mjs 와 같다.
 #   powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1
 #   dist/mecha.html, dist/mecha.artifact.html, index.html
-param([string]$Root = $PSScriptRoot)
+#   -Test: 빌드 후 tools/autotest.ps1 (headless Edge/Chrome 자동 완주). 종료 코드 0 PASS, 1 FAIL, 2 브라우저 없음/시간 초과
+param([string]$Root = $PSScriptRoot, [switch]$Test)
 $ErrorActionPreference = 'Stop'
 $utf8 = [Text.UTF8Encoding]::new($false)
 $ML = [Text.RegularExpressions.RegexOptions]::Multiline
@@ -57,3 +58,8 @@ function Emit($entry, $page, $out, $dev) {
 }
 
 Emit 'game/ui.js' 'game/page.html' 'mecha' 'index.html'
+
+if ($Test) {
+  & (Join-Path $Root 'tools/autotest.ps1') -Page (Join-Path $Root 'dist/mecha.html')
+  exit $LASTEXITCODE
+}

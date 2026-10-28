@@ -22,6 +22,7 @@ import { runMods } from './progress.js';
 import { installRunHooks, NO_MODS } from './runhooks.js';
 import { installTutorial } from './tutorial.js';
 import { installArchetypes, ARCHETYPES, archUnlocked } from './archetypes.js';
+import { installTelemetry } from './telemetry.js';
 
 const store = {
   get(k, d) { try { const v = localStorage.getItem('mechaforge.' + k); return v ? JSON.parse(v) : d; } catch { return d; } },
@@ -80,6 +81,7 @@ export class Game {
     this.setSelection(this.selection);
     this.hangarLighting();
     this.engine.onUpdate = (dt) => this.update(dt);
+    installTelemetry(this, store); // 플레이 기록, F3 성능 표시, ?bench=1, ?autotest=1 (telemetry.js). 맨 바깥에서 감싸도록 마지막에
   }
 
   // ---- 격납고 ----
